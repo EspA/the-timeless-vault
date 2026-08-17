@@ -1,0 +1,14 @@
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.env
+.env.local
+target/
+node_modules/
+dist/
+data/
+*.log
+.mvn/wrapper/maven-wrapper.jar
+apps/web/dist/
+apps/api/src/main/resources/static/app/

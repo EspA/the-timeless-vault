@@ -1,0 +1,10 @@
+.git
+.idea
+.vscode
+node_modules
+target
+data
+.env
+*.log
+apps/web/dist
+apps/api/src/main/resources/static

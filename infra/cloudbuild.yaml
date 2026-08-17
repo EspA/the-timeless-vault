@@ -1,0 +1,36 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/timeless-vault:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/timeless-vault:latest
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/timeless-vault
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - timeless-vault
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/timeless-vault:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated=false
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      - --set-secrets=DATABASE_URL=ttv-database-url:latest,POSTGRES_USER=ttv-db-user:latest,POSTGRES_PASSWORD=ttv-db-password:latest,GOOGLE_CLIENT_ID=ttv-google-client-id:latest,GOOGLE_CLIENT_SECRET=ttv-google-client-secret:latest,AUTH_ALLOWED_EMAILS=ttv-allowed-emails:latest,BRICKECONOMY_API_KEY=ttv-brickeconomy-key:latest,SHOPIFY_ADMIN_TOKEN=ttv-shopify-token:latest,SHOPIFY_SHOP_DOMAIN=ttv-shopify-domain:latest,BRICKLINK_CONSUMER_KEY=ttv-bl-consumer-key:latest,BRICKLINK_CONSUMER_SECRET=ttv-bl-consumer-secret:latest,BRICKLINK_TOKEN=ttv-bl-token:latest,BRICKLINK_TOKEN_SECRET=ttv-bl-token-secret:latest,EBAY_CLIENT_ID=ttv-ebay-client-id:latest,EBAY_CLIENT_SECRET=ttv-ebay-client-secret:latest,EBAY_RU_NAME=ttv-ebay-ru-name:latest,EBAY_REFRESH_TOKEN=ttv-ebay-refresh:latest,EBAY_MERCHANT_LOCATION_KEY=ttv-ebay-location:latest,EBAY_FULFILLMENT_POLICY_ID=ttv-ebay-fulfillment:latest,EBAY_PAYMENT_POLICY_ID=ttv-ebay-payment:latest,EBAY_RETURN_POLICY_ID=ttv-ebay-return:latest,INTERNAL_JOB_TOKEN=ttv-internal-token:latest,ALERT_TO_EMAIL=ttv-alert-email:latest,MAIL_HOST=ttv-mail-host:latest,MAIL_USERNAME=ttv-mail-user:latest,MAIL_PASSWORD=ttv-mail-password:latest
+      - --set-env-vars=GCS_BUCKET=${_GCS_BUCKET},APP_SECURITY_DEV_BYPASS=false,SPRING_PROFILES_ACTIVE=prod
+
+substitutions:
+  _REGION: us-east1
+  _REPO: timeless-vault
+  _CLOUDSQL_INSTANCE: PROJECT:us-east1:timeless-vault
+  _GCS_BUCKET: timeless-vault-photos
+
+options:
+  logging: CLOUD_LOGGING_ONLY

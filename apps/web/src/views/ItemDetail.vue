@@ -1,0 +1,645 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { api, CONDITIONS, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { askConfirm } from "../confirm";
+import RichTextEditor from "../components/RichTextEditor.vue";
+import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
+import EbayStoreCategoryField from "../components/EbayStoreCategoryField.vue";
+
+const route = useRoute();
+const router = useRouter();
+const item = ref<InventoryItem | null>(null);
+const listings = ref<ChannelListing[]>([]);
+const error = ref("");
+const saving = ref(false);
+const justSaved = ref(false);
+let savedTimer: ReturnType<typeof setTimeout> | undefined;
+const platforms = ref(["SHOPIFY", "BRICKLINK", "EBAY"]);
+const publishing = ref(false);
+const showPublishLog = ref(false);
+const showEbayCatalog = ref(false);
+const ebayCatalogLoading = ref(false);
+const ebayCatalog = ref<EbayCatalogPreview | null>(null);
+const pendingPublishKind = ref<"publish" | "retry" | null>(null);
+const activityTitle = ref("Publish log");
+const publishLogs = ref<{ time: string; text: string; kind?: "ok" | "bad" }[]>([]);
+const jobStatus = ref<Record<string, string>>({});
+
+const load = async () => {
+  const id = String(route.params.id);
+  const loaded = await api.get<InventoryItem>(`/api/inventory/${id}`);
+  loaded.shopifyCollectionIds = loaded.shopifyCollectionIds ?? [];
+  item.value = loaded;
+  listings.value = await api.get<ChannelListing[]>(`/api/inventory/${id}/listings`);
+};
+
+onMounted(async () => {
+  try {
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+});
+
+onBeforeUnmount(() => clearTimeout(savedTimer));
+
+watch(
+  () => item.value?.cost,
+  (cost, previous) => {
+    if (!item.value || previous === undefined) return;
+    const generated = numericChannelPricesFromCost(cost);
+    item.value.ebayPrice = generated.ebayPrice;
+    item.value.bricklinkPrice = generated.bricklinkPrice;
+    item.value.shopifyPrice = generated.shopifyPrice;
+  }
+);
+
+watch(
+  () => item.value?.ebayPrice,
+  (price, previous) => {
+    if (!item.value || previous === undefined) return;
+    const offer = minimumOfferFromEbayPrice(price);
+    item.value.minimumOffer = offer === "" ? undefined : Number(offer);
+  }
+);
+
+const save = async () => {
+  if (!item.value) return;
+  item.value = await api.put<InventoryItem>(`/api/inventory/${item.value.id}`, item.value);
+};
+
+const saveChanges = async () => {
+  if (!item.value || saving.value) return;
+  error.value = "";
+  justSaved.value = false;
+  saving.value = true;
+  try {
+    await save();
+    justSaved.value = true;
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => {
+      justSaved.value = false;
+    }, 1800);
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    saving.value = false;
+  }
+};
+
+const upload = async (event: Event) => {
+  const files = (event.target as HTMLInputElement).files;
+  if (!files || !item.value) return;
+  for (const file of Array.from(files)) {
+    const data = new FormData();
+    data.append("file", file);
+    await api.post(`/api/inventory/${item.value.id}/photos`, data);
+  }
+  await load();
+};
+
+const makePrimary = async (photoId: string) => {
+  if (!item.value) return;
+  await api.put(`/api/inventory/${item.value.id}/photos/${photoId}/primary`);
+  await load();
+};
+
+const removePhoto = async (photo: Photo) => {
+  if (!item.value) return;
+  const name = photo.filename || "this photo";
+  if (!(await askConfirm(`Delete ${name} from this item?`, { title: "Delete photo" }))) {
+    return;
+  }
+  error.value = "";
+  try {
+    await api.del(`/api/inventory/${item.value.id}/photos/${photo.id}`);
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+};
+
+const logLine = (text: string, kind?: "ok" | "bad") => {
+  publishLogs.value.push({ time: new Date().toLocaleTimeString(), text, kind });
+};
+
+const waitForJobs = async (ids: string[]) => {
+  const done = new Set(["SUCCESS", "FAILED"]);
+  const started = Date.now();
+  while (Date.now() - started < 120000) {
+    const jobs = await api.get<PublishJob[]>(`/api/inventory/${item.value!.id}/jobs`);
+    const mine = jobs.filter((job) => ids.includes(job.id));
+    for (const job of mine) {
+      if (jobStatus.value[job.id] === job.status) {
+        continue;
+      }
+      jobStatus.value[job.id] = job.status;
+      if (job.status === "RUNNING") {
+        logLine(`${job.platform}: calling API…`);
+      } else if (job.status === "SUCCESS") {
+        logLine(`${job.platform}: published successfully`, "ok");
+      } else if (job.status === "FAILED") {
+        logLine(`${job.platform}: failed${job.error ? ` — ${job.error}` : ""}`, "bad");
+      } else {
+        logLine(`${job.platform}: ${job.status.toLowerCase()}`);
+      }
+    }
+    listings.value = await api.get<ChannelListing[]>(`/api/inventory/${item.value!.id}/listings`);
+    if (mine.length && mine.every((job) => done.has(job.status))) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  logLine("Timed out waiting for publish to finish.", "bad");
+};
+
+const startPublishLog = (summary: string, title = "Publish log") => {
+  publishing.value = true;
+  showPublishLog.value = true;
+  activityTitle.value = title;
+  publishLogs.value = [];
+  jobStatus.value = {};
+  error.value = "";
+  logLine(summary);
+};
+
+const runChannelAction = async (summary: string, action: () => Promise<void>) => {
+  if (!item.value || publishing.value) return;
+  startPublishLog(summary, "Channel log");
+  try {
+    await action();
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+    logLine(`Request failed — ${(e as Error).message}`, "bad");
+  } finally {
+    publishing.value = false;
+  }
+};
+
+const includesEbay = (selected: string[]) => selected.includes("EBAY");
+
+const openEbayCatalogReview = async (kind: "publish" | "retry") => {
+  if (!item.value) return;
+  pendingPublishKind.value = kind;
+  showEbayCatalog.value = true;
+  ebayCatalogLoading.value = true;
+  ebayCatalog.value = null;
+  error.value = "";
+  try {
+    if (kind === "publish") {
+      await save();
+    }
+    ebayCatalog.value = await api.get<EbayCatalogPreview>(`/api/inventory/${item.value.id}/ebay/catalog`);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not load eBay catalog";
+    showEbayCatalog.value = false;
+    pendingPublishKind.value = null;
+  } finally {
+    ebayCatalogLoading.value = false;
+  }
+};
+
+const acceptEbayCatalog = async () => {
+  const kind = pendingPublishKind.value;
+  showEbayCatalog.value = false;
+  pendingPublishKind.value = null;
+  if (kind === "retry") {
+    await runRetry("EBAY");
+    return;
+  }
+  await runPublish(platforms.value);
+};
+
+const rejectEbayCatalog = () => {
+  showEbayCatalog.value = false;
+  ebayCatalog.value = null;
+  pendingPublishKind.value = null;
+};
+
+const joinValues = (values?: string[]) => (values && values.length ? values.join(", ") : "—");
+
+const publish = async () => {
+  if (!item.value || publishing.value || ebayCatalogLoading.value || !platforms.value.length) return;
+  if (includesEbay(platforms.value)) {
+    await openEbayCatalogReview("publish");
+    return;
+  }
+  await runPublish(platforms.value);
+};
+
+const runPublish = async (selected: string[]) => {
+  if (!item.value || publishing.value || !selected.length) return;
+  startPublishLog(`Publishing ${selected.join(", ")}…`);
+  try {
+    await save();
+    logLine("Item saved. Queuing channel jobs…");
+    const jobs = await api.post<PublishJob[]>(`/api/inventory/${item.value.id}/publish`, {
+      platforms: selected,
+    });
+    for (const job of jobs) {
+      jobStatus.value[job.id] = job.status;
+      logLine(`${job.platform}: queued`);
+    }
+    await waitForJobs(jobs.map((job) => job.id));
+    logLine("Publish finished.");
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+    logLine(`Request failed — ${(e as Error).message}`, "bad");
+  } finally {
+    publishing.value = false;
+  }
+};
+
+const retry = async (platform: string) => {
+  if (!item.value || publishing.value || ebayCatalogLoading.value) return;
+  if (platform === "EBAY") {
+    await openEbayCatalogReview("retry");
+    return;
+  }
+  await runRetry(platform);
+};
+
+const runRetry = async (platform: string) => {
+  if (!item.value || publishing.value) return;
+  startPublishLog(`Retrying ${platform}…`);
+  try {
+    const job = await api.post<PublishJob>(`/api/inventory/${item.value.id}/publish/${platform}/retry`);
+    jobStatus.value[job.id] = job.status;
+    logLine(`${job.platform}: queued`);
+    await waitForJobs([job.id]);
+    logLine("Retry finished.");
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+    logLine(`Request failed — ${(e as Error).message}`, "bad");
+  } finally {
+    publishing.value = false;
+  }
+};
+
+const canToggleShopify = (listing: ChannelListing) =>
+  listing.platform === "SHOPIFY" && listing.status === "PUBLISHED" && !!listing.externalId;
+
+const canToggleBricklink = (listing: ChannelListing) =>
+  listing.platform === "BRICKLINK" && listing.status === "PUBLISHED" && !!listing.externalId;
+
+const canToggleEbay = (listing: ChannelListing) =>
+  listing.platform === "EBAY" && listing.status === "PUBLISHED" && !!listing.externalId;
+
+const canDeleteShopify = (listing: ChannelListing) =>
+  listing.platform === "SHOPIFY" && listing.shopifyStatus === "UNLISTED";
+
+const canDeleteBricklink = (listing: ChannelListing) =>
+  listing.platform === "BRICKLINK" && listing.bricklinkStatus === "UNLISTED";
+
+const canDeleteEbay = (listing: ChannelListing) =>
+  listing.platform === "EBAY" && listing.ebayStatus === "UNLISTED";
+
+const toggleShopify = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canToggleShopify(listing)) return;
+  const next = nextVisibilityStatus(listing.shopifyStatus);
+  const action = visibilityActionLabel(listing.shopifyStatus);
+  await runChannelAction(`${action} Shopify…`, async () => {
+    logLine("Calling Shopify…");
+    const updated = await api.put<ChannelListing>(`/api/inventory/${item.value!.id}/listings/shopify/status`, {
+      status: next,
+    });
+    logLine(`Shopify is now ${visibilityStatusLabel(updated.shopifyStatus || next).toLowerCase()}.`, "ok");
+  });
+};
+
+const toggleBricklink = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canToggleBricklink(listing)) return;
+  const next = nextVisibilityStatus(listing.bricklinkStatus);
+  const action = visibilityActionLabel(listing.bricklinkStatus);
+  await runChannelAction(`${action} BrickLink…`, async () => {
+    logLine("Calling BrickLink…");
+    const updated = await api.put<ChannelListing>(`/api/inventory/${item.value!.id}/listings/bricklink/status`, {
+      status: next,
+    });
+    logLine(`BrickLink is now ${visibilityStatusLabel(updated.bricklinkStatus || next).toLowerCase()}.`, "ok");
+  });
+};
+
+const toggleEbay = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canToggleEbay(listing)) return;
+  const next = listing.ebayStatus === "ACTIVE" ? "UNLISTED" : "ACTIVE";
+  const action = visibilityActionLabel(listing.ebayStatus);
+  await runChannelAction(`${action} eBay…`, async () => {
+    logLine("Calling eBay…");
+    const updated = await api.put<ChannelListing>(`/api/inventory/${item.value!.id}/listings/ebay/status`, {
+      status: next,
+    });
+    logLine(`eBay is now ${visibilityStatusLabel(updated.ebayStatus || next).toLowerCase()}.`, "ok");
+  });
+};
+
+const deleteShopifyListing = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canDeleteShopify(listing)) return;
+  if (!(await askConfirm(SHOPIFY_DELETE_CONFIRM, { title: "Delete listing" }))) {
+    return;
+  }
+  await runChannelAction("Deleting Shopify listing…", async () => {
+    logLine("Deleting Shopify product…");
+    await api.del(`/api/inventory/${item.value!.id}/listings/shopify`);
+    logLine("Shopify product deleted.", "ok");
+  });
+};
+
+const deleteBricklinkListing = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canDeleteBricklink(listing)) return;
+  if (!(await askConfirm(BRICKLINK_DELETE_CONFIRM, { title: "Delete listing" }))) {
+    return;
+  }
+  await runChannelAction("Deleting BrickLink listing…", async () => {
+    logLine("Deleting BrickLink inventory item…");
+    await api.del(`/api/inventory/${item.value!.id}/listings/bricklink`);
+    logLine("BrickLink inventory item deleted.", "ok");
+  });
+};
+
+const deleteEbayListing = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canDeleteEbay(listing)) return;
+  if (!(await askConfirm(EBAY_DELETE_CONFIRM, { title: "Delete listing" }))) {
+    return;
+  }
+  await runChannelAction("Deleting eBay listing…", async () => {
+    logLine("Removing eBay listing from this app…");
+    await api.del(`/api/inventory/${item.value!.id}/listings/ebay`);
+    logLine("Local eBay listing removed. Delete it in Seller Hub → Inactive if it is still there.", "ok");
+  });
+};
+
+const remove = async () => {
+  if (!item.value) return;
+  if (!(await askConfirm(`Delete "${item.value.title}" from inventory? This cannot be undone.`, { title: "Delete item" }))) {
+    return;
+  }
+  error.value = "";
+  try {
+    await api.del(`/api/inventory/${item.value.id}`);
+    await router.push("/inventory");
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+};
+</script>
+
+<template>
+  <div v-if="item" class="grid">
+    <div>
+      <p class="muted">{{ item.catalog.setNumber }} · {{ item.sku }}</p>
+      <h1>{{ item.title }}</h1>
+    </div>
+    <p v-if="error" class="error">{{ error }}</p>
+
+    <div class="grid save-fields" :class="{ flash: justSaved }">
+    <div class="card grid">
+      <label>Title <input v-model="item.title" /></label>
+      <label>Description
+        <RichTextEditor v-model="item.description" />
+      </label>
+      <label>Short description (BrickLink)
+        <textarea class="short-description" v-model="item.shortDescription" maxlength="255" rows="2" />
+        <span class="muted">{{ (item.shortDescription || "").length }}/255</span>
+      </label>
+    </div>
+
+    <div class="card grid">
+      <div class="grid three">
+        <label>eBay price (default 45% margin) <input v-model.number="item.ebayPrice" type="number" step="0.01" /></label>
+        <label>BrickLink price (default 40% margin) <input v-model.number="item.bricklinkPrice" type="number" step="0.01" /></label>
+        <label>Shopify price (default 32% margin) <input v-model.number="item.shopifyPrice" type="number" step="0.01" /></label>
+      </div>
+      <div class="grid three">
+        <label>Cost <input v-model.number="item.cost" type="number" step="0.01" /></label>
+        <label>Quantity <input v-model.number="item.quantity" type="number" /></label>
+        <label>eBay Minimum offer (default 90% eBay price) <input v-model.number="item.minimumOffer" type="number" step="0.01" /></label>
+      </div>
+      <div class="grid four">
+        <label>Condition
+          <select v-model="item.condition">
+            <option v-for="c in CONDITIONS" :key="c" :value="c">{{ c }}</option>
+          </select>
+        </label>
+        <label>Shopify Product Type
+          <select v-model="item.itemType">
+            <option>SET</option>
+            <option>POLYBAG</option>
+          </select>
+        </label>
+        <EbayStoreCategoryField v-model="item.ebayStoreCategory" />
+        <ShopifyCollectionsField v-model="item.shopifyCollectionIds" />
+      </div>
+    </div>
+
+    <div class="card grid">
+      <h3>Shipping Dimensions and Weight</h3>
+      <div class="grid five">
+        <label>lbs <input v-model.number="item.packageLbs" type="number" /></label>
+        <label>oz <input v-model.number="item.packageOz" type="number" /></label>
+        <label>L <input v-model.number="item.packageLength" type="number" step="0.1" /></label>
+        <label>W <input v-model.number="item.packageWidth" type="number" /></label>
+        <label>H <input v-model.number="item.packageHeight" type="number" /></label>
+      </div>
+    </div>
+
+    <div class="card grid">
+      <h3>Photos</h3>
+      <input type="file" accept="image/*" multiple @change="upload" />
+      <div class="photos">
+        <div v-for="photo in item.photos" :key="photo.id" class="photo-tile">
+          <img
+            :src="photo.url"
+            :alt="photo.filename || 'Listing photo'"
+            :class="{ primary: photo.primaryForBricklink }"
+            @click="makePrimary(photo.id)"
+          />
+          <button
+            class="photo-delete"
+            type="button"
+            title="Delete photo"
+            @click.stop="removePhoto(photo)"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card grid">
+      <label>Notes <textarea v-model="item.notes" /></label>
+      <div class="save-row">
+        <button
+          class="btn secondary"
+          :class="{ saved: justSaved }"
+          type="button"
+          :disabled="saving"
+          @click="saveChanges"
+        >
+          {{ saving ? "Saving…" : justSaved ? "Saved" : "Save changes" }}
+        </button>
+        <span v-if="justSaved" class="save-note">Changes saved</span>
+        <button class="btn danger" type="button" @click="remove">Delete item</button>
+      </div>
+    </div>
+    </div>
+
+    <div class="card grid">
+      <h3>Listing channels</h3>
+      <label v-for="p in ['SHOPIFY','BRICKLINK','EBAY']" :key="p">
+        <input type="checkbox" :value="p" v-model="platforms" /> {{ p }}
+      </label>
+      <button class="btn gold" type="button" :disabled="publishing || ebayCatalogLoading || !platforms.length" @click="publish">
+        {{ publishing || ebayCatalogLoading ? "Creating listing…" : "Create Listing" }}
+      </button>
+      <table>
+        <thead><tr><th>Channel</th><th>Status</th><th>Link</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="listing in listings" :key="listing.id">
+            <td>{{ listing.platform }}</td>
+            <td>
+              <div class="shopify-status">
+                <span class="badge" :class="{ ok: listing.status === 'PUBLISHED', bad: listing.status === 'FAILED' }">{{ listing.status }}</span>
+                <span
+                  v-if="listing.platform === 'SHOPIFY' && listing.shopifyStatus"
+                  class="badge"
+                  :class="{ ok: listing.shopifyStatus === 'ACTIVE', warn: listing.shopifyStatus === 'UNLISTED' }"
+                >{{ visibilityStatusLabel(listing.shopifyStatus) }}</span>
+                <span
+                  v-if="listing.platform === 'BRICKLINK' && listing.bricklinkStatus"
+                  class="badge"
+                  :class="{ ok: listing.bricklinkStatus === 'ACTIVE', warn: listing.bricklinkStatus === 'UNLISTED' }"
+                >{{ visibilityStatusLabel(listing.bricklinkStatus) }}</span>
+                <span
+                  v-if="listing.platform === 'EBAY' && listing.ebayStatus"
+                  class="badge"
+                  :class="{ ok: listing.ebayStatus === 'ACTIVE', warn: listing.ebayStatus === 'UNLISTED' }"
+                >{{ visibilityStatusLabel(listing.ebayStatus) }}</span>
+              </div>
+            </td>
+            <td>
+              <a v-if="listing.liveUrl" :href="listing.liveUrl" target="_blank" rel="noreferrer">Listing</a>
+              <a v-if="listing.bricklinkPhotoUploadUrl" :href="listing.bricklinkPhotoUploadUrl" target="_blank"> Upload BrickLink photo</a>
+              <div v-if="listing.lastError" class="error">{{ listing.lastError }}</div>
+            </td>
+            <td>
+              <div class="shopify-status">
+                <button
+                  v-if="canToggleShopify(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="toggleShopify(listing)"
+                >
+                  {{ visibilityActionLabel(listing.shopifyStatus) }}
+                </button>
+                <button
+                  v-if="canDeleteShopify(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteShopifyListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button
+                  v-if="canToggleBricklink(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="toggleBricklink(listing)"
+                >
+                  {{ visibilityActionLabel(listing.bricklinkStatus) }}
+                </button>
+                <button
+                  v-if="canDeleteBricklink(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteBricklinkListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button
+                  v-if="canToggleEbay(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="toggleEbay(listing)"
+                >
+                  {{ visibilityActionLabel(listing.ebayStatus) }}
+                </button>
+                <button
+                  v-if="canDeleteEbay(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteEbayListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button class="btn secondary" type="button" :disabled="publishing || ebayCatalogLoading" @click="retry(listing.platform)">Retry</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div v-if="showEbayCatalog" class="modal-backdrop">
+    <div class="modal catalog-preview card grid">
+      <h3>Review eBay catalog</h3>
+      <div v-if="ebayCatalogLoading" class="loading-bar" aria-live="polite" aria-label="Loading eBay catalog">
+        <span></span>
+      </div>
+      <p v-if="ebayCatalogLoading" class="muted">Searching eBay for a catalog product for this set…</p>
+      <template v-else-if="ebayCatalog">
+        <p>
+          <span class="badge" :class="ebayCatalog.catalogMatch ? 'ok' : 'warn'">
+            {{ ebayCatalog.catalogMatch ? "eBay catalog match" : "BrickEconomy fallback" }}
+          </span>
+        </p>
+        <p>{{ ebayCatalog.summary }}</p>
+        <table class="catalog-aspects">
+          <tbody>
+            <tr><th>Set</th><td>{{ ebayCatalog.setNumber }}</td></tr>
+            <tr><th>Title</th><td>{{ ebayCatalog.title }}</td></tr>
+            <tr><th>Condition</th><td>{{ ebayCatalog.condition }}</td></tr>
+            <tr><th>ePID</th><td>{{ ebayCatalog.epid || "—" }}</td></tr>
+            <tr><th>Brand</th><td>{{ ebayCatalog.brand || "LEGO" }}</td></tr>
+            <tr><th>MPN</th><td>{{ ebayCatalog.mpn || "—" }}</td></tr>
+            <tr><th>UPC</th><td>{{ joinValues(ebayCatalog.upc) }}</td></tr>
+            <tr><th>EAN</th><td>{{ joinValues(ebayCatalog.ean) }}</td></tr>
+            <tr v-for="aspect in ebayCatalog.aspects" :key="aspect.name">
+              <th>{{ aspect.name }}</th>
+              <td>{{ joinValues(aspect.values) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+          <button class="btn gold" type="button" @click="acceptEbayCatalog">Continue publishing</button>
+          <button class="btn secondary" type="button" @click="rejectEbayCatalog">Cancel</button>
+        </div>
+      </template>
+    </div>
+  </div>
+  <div v-if="showPublishLog" class="modal-backdrop" @click.self="publishing ? undefined : (showPublishLog = false)">
+    <div class="modal card grid">
+      <h3>{{ activityTitle }}</h3>
+      <div v-if="publishing" class="loading-bar" aria-live="polite" aria-label="Working">
+        <span></span>
+      </div>
+      <p v-if="publishing" class="muted">Waiting for channel APIs to respond…</p>
+      <div class="publish-log">
+        <p v-for="(line, index) in publishLogs" :key="index" :class="line.kind">
+          <span class="muted">{{ line.time }}</span> {{ line.text }}
+        </p>
+      </div>
+      <button class="btn secondary" type="button" :disabled="publishing" @click="showPublishLog = false">Close</button>
+    </div>
+  </div>
+</template>

@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: timeless-vault
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/timeless_vault}
+    username: ${POSTGRES_USER:vault}
+    password: ${POSTGRES_PASSWORD:vault}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 60MB
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  market:
+    local-schedule: ${MARKET_LOCAL_SCHEDULE:false}
+    scan-delay-ms: ${MARKET_SCAN_DELAY_MS:300000}
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  frontend-origin: ${APP_FRONTEND_ORIGIN:http://localhost:5173}
+  allowed-emails: ${AUTH_ALLOWED_EMAILS:}
+  alert-to-email: ${ALERT_TO_EMAIL:}
+  mail-from: ${MAIL_FROM:vault@thetimelessvault.com}
+  internal-job-token: ${INTERNAL_JOB_TOKEN:change-me-internal-job-token}
+  security:
+    dev-bypass: ${APP_SECURITY_DEV_BYPASS:false}
+  storage:
+    gcs-bucket: ${GCS_BUCKET:}
+    gcs-project-id: ${GCS_PROJECT_ID:}
+    local-dir: ${LOCAL_PHOTO_DIR:./data/photos}
+  brickeconomy:
+    api-key: ${BRICKECONOMY_API_KEY:}
+    base-url: ${BRICKECONOMY_BASE_URL:https://www.brickeconomy.com/api/v1}
+    user-agent: ${BRICKECONOMY_USER_AGENT:TheTimelessVault/1.0}
+  shopify:
+    shop-domain: ${SHOPIFY_SHOP_DOMAIN:}
+    admin-token: ${SHOPIFY_ADMIN_TOKEN:}
+    api-version: ${SHOPIFY_API_VERSION:2025-10}
+    category-id: ${SHOPIFY_CATEGORY_ID:}
+    location-name: ${SHOPIFY_LOCATION_NAME:Private Mail Box}
+  bricklink:
+    consumer-key: ${BRICKLINK_CONSUMER_KEY:}
+    consumer-secret: ${BRICKLINK_CONSUMER_SECRET:}
+    token: ${BRICKLINK_TOKEN:}
+    token-secret: ${BRICKLINK_TOKEN_SECRET:}
+    base-url: https://api.bricklink.com/api/store/v1
+  ebay:
+    client-id: ${EBAY_CLIENT_ID:}
+    client-secret: ${EBAY_CLIENT_SECRET:}
+    ru-name: ${EBAY_RU_NAME:}
+    refresh-token: ${EBAY_REFRESH_TOKEN:}
+    env: ${EBAY_ENV:PRODUCTION}
+    marketplace-id: ${EBAY_MARKETPLACE_ID:EBAY_US}
+    category-id: ${EBAY_CATEGORY_ID:19006}
+    merchant-location-key: ${EBAY_MERCHANT_LOCATION_KEY:}
+    fulfillment-policy-id: ${EBAY_FULFILLMENT_POLICY_ID:}
+    payment-policy-id: ${EBAY_PAYMENT_POLICY_ID:}
+    return-policy-id: ${EBAY_RETURN_POLICY_ID:}
+    browse-client-id: ${EBAY_BROWSE_CLIENT_ID:}
+    browse-client-secret: ${EBAY_BROWSE_CLIENT_SECRET:}
