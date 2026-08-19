@@ -34,6 +34,7 @@ type Dashboard = {
   ebayListings: Listing[];
   bricklinkListings: Listing[];
   ebayError?: string;
+  bricklinkError?: string;
 };
 type Sort = { key: string; dir: "asc" | "desc" };
 type EbayFilters = {
@@ -118,8 +119,8 @@ const scan = async (target: "ebay" | "bricklink" | "all") => {
     } else {
       listingTab.value = "ebay";
     }
-    if (dash.value.ebayError) {
-      error.value = dash.value.ebayError;
+    if (dash.value.ebayError || dash.value.bricklinkError) {
+      error.value = [dash.value.ebayError, dash.value.bricklinkError].filter(Boolean).join(" ");
     }
   } catch (e) {
     error.value = (e as Error).message;
@@ -539,6 +540,7 @@ onMounted(async () => {
     <div v-if="dash" class="grid">
       <div class="card grid">
         <p v-if="dash.ebayError" class="error">{{ dash.ebayError }}</p>
+        <p v-if="dash.bricklinkError" class="error">{{ dash.bricklinkError }}</p>
         <div class="grid two">
           <div class="stat">
             <span class="stat-value hero">{{ money(combinedMedian) }}</span>
@@ -675,6 +677,7 @@ onMounted(async () => {
         </div>
         </div>
         <div v-else>
+        <p v-if="dash.bricklinkError" class="error">{{ dash.bricklinkError }}</p>
         <div class="table-scroll">
           <table>
             <thead>
@@ -730,7 +733,7 @@ onMounted(async () => {
                 <td>{{ row.quantity ?? "—" }}</td>
               </tr>
               <tr v-if="!bricklinkSorted.length">
-                <td colspan="7" class="muted">{{ dash.bricklinkListings.length ? "No BrickLink listings match those filters." : "No BrickLink listings in this scan." }}</td>
+                <td colspan="7" class="muted">{{ dash.bricklinkListings.length ? "No BrickLink listings match those filters." : (dash.bricklinkError || "No BrickLink listings in this scan.") }}</td>
               </tr>
             </tbody>
           </table>

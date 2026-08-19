@@ -87,7 +87,8 @@ public class MarketController {
             SnapshotView bricklink,
             List<ListingView> ebayListings,
             List<ListingView> bricklinkListings,
-            String ebayError
+            String ebayError,
+            String bricklinkError
     ) {
     }
 
@@ -103,8 +104,7 @@ public class MarketController {
     ) {
         Platform parsed = parsePlatform(platform);
         if (parsed == null) {
-            marketScanService.scan(catalogId, Platform.EBAY);
-            return toView(marketScanService.scan(catalogId, Platform.BRICKLINK));
+            return toView(marketScanService.scanAll(catalogId));
         }
         return toView(marketScanService.scan(catalogId, parsed));
     }
@@ -139,7 +139,8 @@ public class MarketController {
                         .sorted(Comparator.comparing(MarketListing::getPrice, Comparator.nullsLast(Comparator.naturalOrder())))
                         .map(ListingView::from)
                         .toList(),
-                dashboard.ebayError()
+                dashboard.ebayError(),
+                dashboard.bricklinkError()
         );
     }
 }

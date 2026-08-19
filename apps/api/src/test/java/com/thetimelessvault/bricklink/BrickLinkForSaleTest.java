@@ -16,6 +16,9 @@ class BrickLinkForSaleTest {
     void parsesCatalogItemId() {
         String html = "var _var_item = { idItem: 53788 , type: 'S' , itemno: '10143-1' };";
         assertEquals(53788L, BrickLinkForSale.parseItemId(html));
+        assertEquals(157691L, BrickLinkForSale.parseItemId(
+                "{\"result\":{\"typeList\":[{\"type\":\"S\",\"items\":[{\"idItem\":157691}]}]}}"
+        ));
         assertNull(BrickLinkForSale.parseItemId("<html></html>"));
     }
 

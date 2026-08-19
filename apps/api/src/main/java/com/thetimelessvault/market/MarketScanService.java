@@ -119,12 +119,14 @@ public class MarketScanService {
         CatalogItem catalog = catalogItems.findById(catalogId).orElseThrow();
         SetWatch watch = setWatches.findByCatalogItemId(catalogId).orElse(null);
         String ebayError = null;
+        String bricklinkError = null;
         PlatformScanResult result;
         if (platform == Platform.EBAY) {
             result = scanEbay(catalog, watch, trigger);
             ebayError = result.message();
         } else {
             result = scanBrickLink(catalog, watch, trigger);
+            bricklinkError = result.message();
         }
         scanLogs.save(ScanLog.create(
                 catalog,
@@ -134,7 +136,23 @@ public class MarketScanService {
                 result.listingCount(),
                 result.message()
         ));
-        return dashboard(catalogId, ebayError);
+        return dashboard(catalogId, ebayError, bricklinkError);
+    }
+
+    public MarketDashboard scanAll(UUID catalogId) {
+        MarketDashboard afterEbay = scan(catalogId, Platform.EBAY);
+        MarketDashboard afterBrickLink = scan(catalogId, Platform.BRICKLINK);
+        return new MarketDashboard(
+                afterBrickLink.catalogId(),
+                afterBrickLink.setNumber(),
+                afterBrickLink.name(),
+                afterBrickLink.ebaySnapshot(),
+                afterBrickLink.bricklinkSnapshot(),
+                afterBrickLink.ebayListings(),
+                afterBrickLink.bricklinkListings(),
+                afterEbay.ebayError(),
+                afterBrickLink.bricklinkError()
+        );
     }
 
     public Page<ScanLog> scanLogs(int page, int size) {
@@ -144,10 +162,10 @@ public class MarketScanService {
     }
 
     public MarketDashboard dashboard(UUID catalogId) {
-        return dashboard(catalogId, null);
+        return dashboard(catalogId, null, null);
     }
 
-    private MarketDashboard dashboard(UUID catalogId, String ebayError) {
+    private MarketDashboard dashboard(UUID catalogId, String ebayError, String bricklinkError) {
         CatalogItem catalog = catalogItems.findById(catalogId).orElseThrow();
         var ebaySnap = snapshots.findFirstByCatalogItemIdAndPlatformAndConditionOrderByScannedAtDesc(catalogId, Platform.EBAY, "NEW");
         if (ebaySnap.isEmpty()) {
@@ -160,7 +178,7 @@ public class MarketScanService {
             ebayError = "eBay is not configured.";
         }
         return new MarketDashboard(catalog.getId(), catalog.getSetNumber(), catalog.getName(),
-                ebaySnap.orElse(null), blNew.orElse(null), ebay, bricklink, ebayError);
+                ebaySnap.orElse(null), blNew.orElse(null), ebay, bricklink, ebayError, bricklinkError);
     }
 
     private PlatformScanResult scanEbay(CatalogItem catalog, SetWatch watch, ScanTrigger trigger) {
@@ -293,6 +311,9 @@ public class MarketScanService {
             watch.recordBrickLinkScan(snapshot.getAvgPrice(), snapshot.getScannedAt());
             setWatches.save(watch);
         }
+        if (count == 0) {
+            return PlatformScanResult.ok(count, "BrickLink returned no new sealed lots shipping to the US.");
+        }
         return PlatformScanResult.ok(count, null);
     }
 
@@ -361,7 +382,8 @@ public class MarketScanService {
             MarketSnapshot bricklinkSnapshot,
             List<MarketListing> ebayListings,
             List<MarketListing> bricklinkListings,
-            String ebayError
+            String ebayError,
+            String bricklinkError
     ) {
     }
 

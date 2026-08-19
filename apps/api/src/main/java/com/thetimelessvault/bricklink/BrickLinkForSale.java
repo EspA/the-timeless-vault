@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 
 public final class BrickLinkForSale {
 
-    private static final Pattern ITEM_ID = Pattern.compile("idItem:\\s*(\\d+)");
+    private static final Pattern ITEM_ID = Pattern.compile("idItem[\"']?\\s*:\\s*(\\d+)");
     private static final Pattern USD_PRICE = Pattern.compile("US\\s*\\$\\s*([0-9,]+(?:\\.[0-9]+)?)");
 
     private BrickLinkForSale() {

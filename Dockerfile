@@ -17,5 +17,6 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=api /api/target/api-0.1.0.jar app.jar
 ENV JAVA_OPTS=""
+ENV JAVA_TOOL_OPTIONS="-Djava.net.preferIPv4Stack=true"
 EXPOSE 8080
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

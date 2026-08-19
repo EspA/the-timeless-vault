@@ -9,12 +9,23 @@ import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryDtos;
 import com.thetimelessvault.inventory.InventoryItem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,15 +33,24 @@ import java.util.List;
 public class BrickLinkClient {
 
     static final String DEFAULT_STOCK_ROOM_ID = "A";
+    private static final Logger log = LoggerFactory.getLogger(BrickLinkClient.class);
+    private static final String BROWSER_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
     private final AppProperties.Bricklink config;
     private final ObjectMapper mapper;
     private final RestClient restClient;
+    private final RestClient publicClient;
 
     public BrickLinkClient(AppProperties properties, ObjectMapper mapper) {
+        this(properties, mapper, RestClient.builder().build(), publicRestClient());
+    }
+
+    BrickLinkClient(AppProperties properties, ObjectMapper mapper, RestClient restClient, RestClient publicClient) {
         this.config = properties.getBricklink();
         this.mapper = mapper;
-        this.restClient = RestClient.builder().build();
+        this.restClient = restClient;
+        this.publicClient = publicClient;
     }
 
     public boolean configured() {
@@ -125,15 +145,18 @@ public class BrickLinkClient {
     public List<BrickLinkForSale.Lot> forSaleNewSealedShipsToUsa(String setNumber) {
         Long itemId = publicCatalogItemId(setNumber);
         if (itemId == null) {
-            return List.of();
+            throw new ApiException(HttpStatus.BAD_GATEWAY,
+                    "BrickLink blocked the catalog lookup from this server.");
         }
         List<BrickLinkForSale.Lot> lots = new ArrayList<>();
         int page = 1;
         int total = Integer.MAX_VALUE;
         while (lots.size() < total) {
-            JsonNode root = catalogIfs(itemId, page);
-            if (root.path("returnCode").asInt(-1) != 0) {
-                break;
+            JsonNode root = catalogIfs(itemId, setNumber, page);
+            int returnCode = root.path("returnCode").asInt(-1);
+            if (returnCode != 0) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY,
+                        "BrickLink listing lookup failed (returnCode " + returnCode + ").");
             }
             total = root.path("total_count").asInt(0);
             List<BrickLinkForSale.Lot> pageLots = BrickLinkForSale.parseLots(root, setNumber);
@@ -148,16 +171,22 @@ public class BrickLinkClient {
 
     private Long publicCatalogItemId(String setNumber) {
         for (String candidate : setNumberCandidates(setNumber)) {
-            String html = publicCatalogHtml(candidate);
-            Long itemId = BrickLinkForSale.parseItemId(html);
+            Long itemId = BrickLinkForSale.parseItemId(publicSearchJson(candidate));
             if (itemId != null) {
                 return itemId;
             }
         }
+        for (String candidate : setNumberCandidates(setNumber)) {
+            Long itemId = BrickLinkForSale.parseItemId(publicCatalogHtml(candidate));
+            if (itemId != null) {
+                return itemId;
+            }
+        }
+        log.warn("BrickLink catalog id missing for {}", setNumber);
         return null;
     }
 
-    private JsonNode catalogIfs(long itemId, int page) {
+    private JsonNode catalogIfs(long itemId, String setNumber, int page) {
         String uri = "https://www.bricklink.com/ajax/clone/catalogifs.ajax"
                 + "?itemid=" + itemId
                 + "&color=-1"
@@ -175,14 +204,18 @@ public class BrickLinkClient {
                 + "&rpp=200"
                 + "&pi=" + page;
         try {
-            String raw = restClient.get()
-                    .uri(uri)
-                    .header("User-Agent", "TheTimelessVault/1.0")
-                    .header("Accept", "application/json")
-                    .header("Referer", "https://www.bricklink.com/v2/catalog/catalogitem.page?S=" + itemId)
-                    .retrieve()
-                    .body(String.class);
-            return mapper.readTree(raw == null ? "{}" : raw);
+            String raw = fetchPublic(
+                    uri,
+                    "application/json",
+                    "https://www.bricklink.com/v2/catalog/catalogitem.page?S=" + urlEncode(setNumber)
+            );
+            if (raw == null || !raw.stripLeading().startsWith("{")) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY,
+                        "BrickLink listing lookup was blocked or returned HTML instead of listings.");
+            }
+            return mapper.readTree(raw);
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not read BrickLink listings");
         }
@@ -230,17 +263,71 @@ public class BrickLinkClient {
         return null;
     }
 
+    private String publicSearchJson(String setNumber) {
+        return fetchPublic(
+                "https://www.bricklink.com/ajax/clone/search/searchproduct.ajax?q="
+                        + urlEncode(setNumber)
+                        + "&type=S",
+                "application/json",
+                "https://www.bricklink.com/"
+        );
+    }
+
     private String publicCatalogHtml(String setNumber) {
+        return fetchPublic(
+                "https://www.bricklink.com/v2/catalog/catalogitem.page?S=" + urlEncode(setNumber),
+                "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                "https://www.bricklink.com/"
+        );
+    }
+
+    private String fetchPublic(String uri, String accept, String referer) {
         try {
-            return restClient.get()
-                    .uri("https://www.bricklink.com/v2/catalog/catalogitem.page?S=" + setNumber)
-                    .header("User-Agent", "TheTimelessVault/1.0")
-                    .header("Accept", "text/html")
+            return publicClient.get()
+                    .uri(URI.create(uri))
+                    .header("Accept", accept)
+                    .header("Referer", referer)
+                    .header("Origin", "https://www.bricklink.com")
+                    .header("X-Requested-With", "XMLHttpRequest")
                     .retrieve()
                     .body(String.class);
+        } catch (RestClientResponseException e) {
+            log.warn("BrickLink {} returned {} ({})", uri, e.getStatusCode().value(), preview(e.getResponseBodyAsString()));
+            return null;
         } catch (Exception e) {
+            log.warn("BrickLink {} failed: {}", uri, e.toString());
             return null;
         }
+    }
+
+    private static RestClient publicRestClient() {
+        CookieManager cookies = new CookieManager();
+        cookies.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(20))
+                .cookieHandler(cookies)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        return RestClient.builder()
+                .requestFactory(factory)
+                .defaultHeader("User-Agent", BROWSER_UA)
+                .defaultHeader("Accept-Language", "en-US,en;q=0.9")
+                .build();
+    }
+
+    private static String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String preview(String body) {
+        if (body == null || body.isBlank()) {
+            return "empty";
+        }
+        String compact = body.replaceAll("\\s+", " ").trim();
+        return compact.substring(0, Math.min(compact.length(), 180));
     }
 
     private static InventoryDtos.BrickLinkPackage toPackage(BigDecimal grams, BigDecimal lengthCm, BigDecimal widthCm, BigDecimal heightCm) {
