@@ -174,7 +174,7 @@ public class SettingsController {
     @GetMapping("/ebay/oauth/callback")
     public RedirectView ebayCallback(@RequestParam String code) {
         ebayTokens.exchangeAuthorizationCode(code);
-        return new RedirectView(properties.getFrontendOrigin() + "/settings?ebay=connected");
+        return new RedirectView("/settings?ebay=connected");
     }
 
     @PostMapping("/ebay/oauth/complete")
