@@ -11,6 +11,7 @@ import com.thetimelessvault.inventory.InventoryDtos;
 import com.thetimelessvault.inventory.InventoryItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -42,6 +43,7 @@ public class BrickLinkClient {
     private final RestClient restClient;
     private final RestClient publicClient;
 
+    @Autowired
     public BrickLinkClient(AppProperties properties, ObjectMapper mapper) {
         this(properties, mapper, RestClient.builder().build(), publicRestClient());
     }
