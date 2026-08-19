@@ -9,12 +9,16 @@ import com.thetimelessvault.common.ItemType;
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.common.ThemeMapper;
+import com.thetimelessvault.market.MarketScanLauncher;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
 import com.thetimelessvault.publish.PublishJobRepository;
 import com.thetimelessvault.storage.ObjectStorage;
+import com.thetimelessvault.watch.SetWatchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -34,6 +38,8 @@ public class InventoryService {
     private final PriceGuardRepository priceGuards;
     private final CatalogService catalogService;
     private final ObjectStorage storage;
+    private final SetWatchService setWatches;
+    private final MarketScanLauncher marketScans;
 
     public InventoryService(
             InventoryItemRepository items,
@@ -42,7 +48,9 @@ public class InventoryService {
             PublishJobRepository publishJobs,
             PriceGuardRepository priceGuards,
             CatalogService catalogService,
-            ObjectStorage storage
+            ObjectStorage storage,
+            SetWatchService setWatches,
+            MarketScanLauncher marketScans
     ) {
         this.items = items;
         this.photos = photos;
@@ -51,6 +59,8 @@ public class InventoryService {
         this.priceGuards = priceGuards;
         this.catalogService = catalogService;
         this.storage = storage;
+        this.setWatches = setWatches;
+        this.marketScans = marketScans;
     }
 
     @Transactional
@@ -60,14 +70,32 @@ public class InventoryService {
                 + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT);
         InventoryItem item = InventoryItem.create(catalog, sku);
         applyCreate(item, catalog, request);
-        return items.save(item);
+        InventoryItem saved = items.save(item);
+        if (setWatches.ensureWatch(catalog, false)) {
+            scanWatchAfterCommit(catalog.getId());
+        }
+        return saved;
+    }
+
+    private void scanWatchAfterCommit(UUID catalogId) {
+        Runnable scan = () -> marketScans.scanBothManual(catalogId);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            scan.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                scan.run();
+            }
+        });
     }
 
     @Transactional
     public InventoryItem update(UUID id, InventoryDtos.UpdateRequest request) {
         InventoryItem item = get(id);
         if (request.title() != null) {
-            item.setTitle(request.title());
+            item.setTitle(ThemeMapper.limitTitle(request.title()));
         }
         if (request.description() != null) {
             item.setDescription(com.thetimelessvault.common.DescriptionHtml.sanitize(request.description()));
@@ -104,7 +132,8 @@ public class InventoryService {
             item.setShopifyCollectionIds(String.join(",", request.shopifyCollectionIds()));
         }
         if (request.ebayStoreCategory() != null) {
-            item.setEbayStoreCategory(request.ebayStoreCategory());
+            String category = request.ebayStoreCategory().trim();
+            item.setEbayStoreCategory(category.isEmpty() ? null : category);
         }
         if (request.minimumOffer() != null) {
             item.setMinimumOffer(request.minimumOffer());
@@ -281,9 +310,9 @@ public class InventoryService {
         ItemCondition condition = request.condition() == null ? ItemCondition.NEW_SEALED : request.condition();
         item.setCondition(condition);
         item.setItemType(request.itemType() == null ? ItemType.SET : request.itemType());
-        item.setTitle(request.title() == null || request.title().isBlank()
+        item.setTitle(ThemeMapper.limitTitle(request.title() == null || request.title().isBlank()
                 ? ThemeMapper.suggestedTitle(catalog.getTheme(), catalog.getSetNumber(), catalog.getName(), condition)
-                : request.title());
+                : request.title()));
         item.setDescription(com.thetimelessvault.common.DescriptionHtml.sanitize(request.description()));
         item.setShortDescription(com.thetimelessvault.common.DescriptionHtml.forBrickLink(request.shortDescription()));
         item.setEbayPrice(request.ebayPrice());

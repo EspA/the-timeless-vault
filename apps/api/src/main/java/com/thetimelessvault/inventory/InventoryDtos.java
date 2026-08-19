@@ -69,7 +69,7 @@ public final class InventoryDtos {
 
     public record CreateRequest(
             @NotBlank String setNumber,
-            String title,
+            @Size(max = 80) String title,
             String description,
             @Size(max = 255) String shortDescription,
             @DecimalMin("0.01") BigDecimal price,
@@ -93,7 +93,7 @@ public final class InventoryDtos {
     }
 
     public record UpdateRequest(
-            String title,
+            @Size(max = 80) String title,
             String description,
             @Size(max = 255) String shortDescription,
             @DecimalMin("0.01") BigDecimal price,

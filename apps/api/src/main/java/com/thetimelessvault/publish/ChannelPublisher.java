@@ -9,4 +9,6 @@ public interface ChannelPublisher {
     Platform platform();
 
     PublishResult publish(InventoryItem item, List<String> photoUrls);
+
+    PublishResult update(InventoryItem item, ChannelListing listing, List<String> photoUrls);
 }

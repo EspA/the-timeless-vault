@@ -78,7 +78,10 @@ public class SecurityConfig {
                                 "/market",
                                 "/market/**",
                                 "/scans",
+                                "/scan-logs",
                                 "/alerts",
+                                "/buying-opportunities",
+                                "/listing-logs",
                                 "/settings"
                         ).permitAll()
                         .anyRequest().authenticated()
@@ -149,9 +152,9 @@ public class SecurityConfig {
                 throws ServletException, IOException {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 String email = properties.allowedEmailList().stream().findFirst().orElse("dev@thetimelessvault.com");
-                AppUser user = users.findByEmailIgnoreCase(email).orElseGet(() ->
-                        users.save(AppUser.create("dev-bypass", email, "Local Operator", null))
-                );
+                AppUser user = users.findByEmailIgnoreCase(email)
+                        .or(() -> users.findByGoogleSub("dev-bypass"))
+                        .orElseGet(() -> users.save(AppUser.create("dev-bypass", email, "Local Operator", null)));
                 var auth = new UsernamePasswordAuthenticationToken(user.getEmail(), "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }

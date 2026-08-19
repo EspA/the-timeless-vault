@@ -24,6 +24,7 @@ public class PublishWorker {
     private final ChannelListingRepository listings;
     private final PublishJobRepository jobs;
     private final PriceGuardRepository priceGuards;
+    private final ListingLogService listingLogs;
     private final Map<com.thetimelessvault.common.Platform, ChannelPublisher> publishers;
 
     public PublishWorker(
@@ -31,12 +32,14 @@ public class PublishWorker {
             ChannelListingRepository listings,
             PublishJobRepository jobs,
             PriceGuardRepository priceGuards,
+            ListingLogService listingLogs,
             List<ChannelPublisher> publisherList
     ) {
         this.inventoryService = inventoryService;
         this.listings = listings;
         this.jobs = jobs;
         this.priceGuards = priceGuards;
+        this.listingLogs = listingLogs;
         this.publishers = publisherList.stream().collect(java.util.stream.Collectors.toMap(ChannelPublisher::platform, p -> p));
     }
 
@@ -46,38 +49,73 @@ public class PublishWorker {
         InventoryItem item = inventoryService.get(job.getInventoryItem().getId());
         ChannelListing listing = listings.findByInventoryItemIdAndPlatform(item.getId(), job.getPlatform())
                 .orElseGet(() -> listings.save(ChannelListing.create(item, job.getPlatform())));
+        ListingAction action = job.getAction();
         job.start();
         listing.markPublishing();
         jobs.save(job);
         listings.save(listing);
         try {
             List<String> photos = inventoryService.photoUrls(item);
-            PublishResult result = publishers.get(job.getPlatform()).publish(item, photos);
-            listing.markPublished(result.externalId(), result.liveUrl(), ChannelPrice.amount(item, job.getPlatform()));
-            if (result.bricklinkPhotoUploadUrl() != null) {
-                listing.setBricklinkPhotoUploadUrl(result.bricklinkPhotoUploadUrl());
-            }
-            if (result.shopifyStatus() != null) {
-                listing.setShopifyStatus(result.shopifyStatus());
-            }
-            if (result.bricklinkStatus() != null) {
-                listing.setBricklinkStatus(result.bricklinkStatus());
-            }
-            if (result.ebayStatus() != null) {
-                listing.setEbayStatus(result.ebayStatus());
-            }
+            ChannelPublisher publisher = publishers.get(job.getPlatform());
+            PublishResult result = action == ListingAction.UPDATE
+                    ? publisher.update(item, listing, photos)
+                    : publisher.publish(item, photos);
+            applyResult(listing, result, item, action);
             listings.save(listing);
             priceGuards.findByChannelListingId(listing.getId())
                     .orElseGet(() -> priceGuards.save(PriceGuard.create(listing)));
             job.succeed();
             jobs.save(job);
+            listingLogs.record(
+                    item,
+                    job.getPlatform(),
+                    action,
+                    ListingLogStatus.SUCCESS,
+                    successNote(action, result, listing)
+            );
         } catch (Exception e) {
-            log.warn("Publish failed for {} on {}", item.getSku(), job.getPlatform(), e);
+            log.warn("{} failed for {} on {}", action, item.getSku(), job.getPlatform(), e);
             String message = e instanceof ApiException api ? api.getMessage() : e.getMessage();
-            listing.markFailed(message);
+            if (action == ListingAction.UPDATE) {
+                listing.markUpdateFailed(message);
+            } else {
+                listing.markFailed(message);
+            }
             listings.save(listing);
             job.fail(message);
             jobs.save(job);
+            listingLogs.record(item, job.getPlatform(), action, ListingLogStatus.FAILED, message);
         }
+    }
+
+    private void applyResult(ChannelListing listing, PublishResult result, InventoryItem item, ListingAction action) {
+        var price = ChannelPrice.amount(item, listing.getPlatform());
+        if (action == ListingAction.UPDATE) {
+            listing.markUpdated(result.externalId(), result.liveUrl(), price);
+        } else {
+            listing.markPublished(result.externalId(), result.liveUrl(), price);
+        }
+        if (result.bricklinkPhotoUploadUrl() != null) {
+            listing.setBricklinkPhotoUploadUrl(result.bricklinkPhotoUploadUrl());
+        }
+        if (result.shopifyStatus() != null) {
+            listing.setShopifyStatus(result.shopifyStatus());
+        }
+        if (result.bricklinkStatus() != null) {
+            listing.setBricklinkStatus(result.bricklinkStatus());
+        }
+        if (result.ebayStatus() != null) {
+            listing.setEbayStatus(result.ebayStatus());
+        }
+    }
+
+    private static String successNote(ListingAction action, PublishResult result, ChannelListing listing) {
+        if (action == ListingAction.UPDATE) {
+            String url = result.liveUrl() != null && !result.liveUrl().isBlank()
+                    ? result.liveUrl()
+                    : listing.getLiveUrl();
+            return url != null && !url.isBlank() ? "Listing updated · " + url : "Listing updated";
+        }
+        return result.liveUrl() != null && !result.liveUrl().isBlank() ? result.liveUrl() : "Listing created";
     }
 }

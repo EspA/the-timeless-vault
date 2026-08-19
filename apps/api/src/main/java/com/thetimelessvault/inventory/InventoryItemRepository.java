@@ -1,7 +1,9 @@
 package com.thetimelessvault.inventory;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,4 +18,9 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
     Optional<InventoryItem> findWithCatalogById(UUID id);
 
     List<InventoryItem> findByCatalogItemId(UUID catalogItemId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update InventoryItem i set i.ebayStoreCategory = null "
+            + "where i.ebayStoreCategory = :name or i.ebayStoreCategory like concat(:name, '/%')")
+    int clearEbayStoreCategory(@Param("name") String name);
 }

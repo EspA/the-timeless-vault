@@ -58,25 +58,37 @@ public final class ThemeMapper {
         return "Other";
     }
 
+    public static final int TITLE_MAX_LENGTH = 80;
+
     public static String suggestedTitle(String theme, String setNumber, String name, ItemCondition condition) {
         String number = displaySetNumber(setNumber);
         String themePart = theme == null || theme.isBlank() ? "" : " " + theme.trim();
         String namePart = name == null || name.isBlank() ? "" : " " + name.trim();
         String title = ("LEGO " + number + themePart + namePart).replaceAll(" +", " ").trim();
         if (condition == ItemCondition.NEW_SEALED) {
-            return title + " (New Sealed In Box)";
+            title = title + " (New Sealed In Box)";
         }
-        return title;
+        return limitTitle(title);
+    }
+
+    public static String limitTitle(String title) {
+        if (title == null) {
+            return null;
+        }
+        String trimmed = title.trim();
+        return trimmed.length() <= TITLE_MAX_LENGTH ? trimmed : trimmed.substring(0, TITLE_MAX_LENGTH);
     }
 
     public static String suggestedEbaySearch(String theme, String setNumber, String name) {
-        return suggestedTitle(theme, setNumber, name, ItemCondition.NEW_COMPLETE);
+        String number = displaySetNumber(setNumber);
+        String namePart = name == null || name.isBlank() ? "" : " " + name.trim();
+        return ("LEGO " + number + namePart).replaceAll(" +", " ").trim();
     }
 
     public static String displaySetNumber(String setNumber) {
         if (setNumber == null || setNumber.isBlank()) {
             return "";
         }
-        return setNumber.trim().replaceFirst("-1$", "");
+        return setNumber.trim().replaceFirst("-\\d+$", "");
     }
 }

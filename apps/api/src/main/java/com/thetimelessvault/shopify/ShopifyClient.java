@@ -18,9 +18,11 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class ShopifyClient {
@@ -244,6 +246,225 @@ public class ShopifyClient {
             publishToAllChannels(productId);
         }
         return created;
+    }
+
+    public JsonNode updateProduct(String productId, InventoryItem item, List<String> photoUrls) {
+        if (productId == null || productId.isBlank()) {
+            throw ApiException.badRequest("Shopify product id is missing");
+        }
+        JsonNode current = getProduct(productId);
+        ObjectNode product = mapper.createObjectNode();
+        product.put("id", productId);
+        product.put("title", item.getTitle());
+        product.put("descriptionHtml", com.thetimelessvault.common.DescriptionHtml.forShopify(item.getDescription()));
+        product.put("productType", item.getItemType() == com.thetimelessvault.common.ItemType.POLYBAG ? "Polybag" : "Set");
+        String categoryId = resolveConstructionCategoryId();
+        if (categoryId != null && !categoryId.isBlank()) {
+            product.put("category", categoryId);
+        }
+        if (item.getShopifyCollectionIds() != null && !item.getShopifyCollectionIds().isBlank()) {
+            ArrayNode collections = product.putArray("collectionsToJoin");
+            for (String id : item.getShopifyCollectionIds().split(",")) {
+                if (!id.isBlank()) {
+                    collections.add(id.trim());
+                }
+            }
+        }
+        ObjectNode variables = mapper.createObjectNode();
+        variables.set("product", product);
+        JsonNode data = graphql("""
+                mutation productUpdate($product: ProductUpdateInput!) {
+                  productUpdate(product: $product) {
+                    product {
+                      id
+                      handle
+                      status
+                      onlineStoreUrl
+                      variants(first: 1) {
+                        nodes {
+                          id
+                          inventoryItem { id }
+                        }
+                      }
+                    }
+                    userErrors { field message }
+                  }
+                }
+                """, variables);
+        JsonNode payload = data.path("productUpdate");
+        assertNoUserErrors(payload);
+        JsonNode updated = payload.path("product");
+        String variantId = firstVariantId(updated, current);
+        String inventoryItemId = firstInventoryItemId(updated, current);
+        if (variantId == null || variantId.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify did not return a variant for the product");
+        }
+        setVariantDetails(productId, variantId, item);
+        if (inventoryItemId == null || inventoryItemId.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify did not return an inventory item for the product");
+        }
+        setOnHandQuantity(inventoryItemId, Math.max(item.getQuantity(), 0));
+        replaceMedia(productId, current, photoUrls, item.getTitle());
+        return updated;
+    }
+
+    private JsonNode getProduct(String productId) {
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("id", productId);
+        JsonNode product = graphql("""
+                query product($id: ID!) {
+                  product(id: $id) {
+                    id
+                    handle
+                    status
+                    onlineStoreUrl
+                    media(first: 250) {
+                      nodes {
+                        id
+                        ... on MediaImage { id }
+                      }
+                    }
+                    variants(first: 1) {
+                      nodes {
+                        id
+                        inventoryItem { id }
+                      }
+                    }
+                  }
+                }
+                """, variables).path("product");
+        if (product.isMissingNode() || product.path("id").asText("").isBlank()) {
+            throw ApiException.notFound("Shopify product not found");
+        }
+        return product;
+    }
+
+    private static String firstVariantId(JsonNode... products) {
+        for (JsonNode product : products) {
+            String id = product.path("variants").path("nodes").path(0).path("id").asText(null);
+            if (id != null && !id.isBlank()) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    private static String firstInventoryItemId(JsonNode... products) {
+        for (JsonNode product : products) {
+            String id = product.path("variants").path("nodes").path(0).path("inventoryItem").path("id").asText(null);
+            if (id != null && !id.isBlank()) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    private void replaceMedia(String productId, JsonNode current, List<String> photoUrls, String alt) {
+        List<String> existingIds = collectMediaIds(current);
+        List<String> createdIds = List.of();
+        if (photoUrls != null && !photoUrls.isEmpty()) {
+            createdIds = createMedia(productId, photoUrls, alt);
+        }
+        List<String> removeIds = mediaIdsToRemove(existingIds, createdIds);
+        if (!removeIds.isEmpty()) {
+            deleteMedia(productId, removeIds);
+        }
+    }
+
+    private List<String> createMedia(String productId, List<String> photoUrls, String alt) {
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("productId", productId);
+        ArrayNode media = variables.putArray("media");
+        for (String url : photoUrls) {
+            ObjectNode mediaItem = media.addObject();
+            mediaItem.put("originalSource", url);
+            mediaItem.put("mediaContentType", "IMAGE");
+            mediaItem.put("alt", alt);
+        }
+        JsonNode payload = graphql("""
+                mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                  productCreateMedia(productId: $productId, media: $media) {
+                    media { id }
+                    userErrors { field message }
+                    mediaUserErrors { field message }
+                  }
+                }
+                """, variables).path("productCreateMedia");
+        assertNoUserErrors(payload);
+        return collectMediaIds(payload);
+    }
+
+    private void deleteMedia(String productId, List<String> mediaIds) {
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("productId", productId);
+        ArrayNode ids = variables.putArray("mediaIds");
+        mediaIds.forEach(ids::add);
+        JsonNode payload = graphql("""
+                mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
+                  productDeleteMedia(productId: $productId, mediaIds: $mediaIds) {
+                    deletedMediaIds
+                    deletedProductImageIds
+                    userErrors { field message }
+                    mediaUserErrors { field message }
+                  }
+                }
+                """, variables).path("productDeleteMedia");
+        assertNoUserErrors(payload);
+    }
+
+    static List<String> collectMediaIds(JsonNode root) {
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        addMediaIds(ids, root.path("media"));
+        addMediaIds(ids, root.path("nodes"));
+        addMediaIds(ids, root);
+        return List.copyOf(ids);
+    }
+
+    static List<String> mediaIdsToRemove(List<String> existingIds, List<String> createdIds) {
+        if (existingIds == null || existingIds.isEmpty()) {
+            return List.of();
+        }
+        if (createdIds == null || createdIds.isEmpty()) {
+            return List.copyOf(existingIds);
+        }
+        Set<String> keep = Set.copyOf(createdIds);
+        return existingIds.stream().filter(id -> !keep.contains(id)).toList();
+    }
+
+    private static void addMediaIds(Set<String> ids, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                addMediaIds(ids, child);
+            }
+            return;
+        }
+        if (node.isObject()) {
+            JsonNode nested = node.get("nodes");
+            if (nested != null) {
+                addMediaIds(ids, nested);
+            }
+            JsonNode edges = node.get("edges");
+            if (edges != null && edges.isArray()) {
+                for (JsonNode edge : edges) {
+                    addMediaIds(ids, edge.path("node"));
+                }
+            }
+            String id = node.path("id").asText("");
+            if (isProductMediaId(id)) {
+                ids.add(id);
+            }
+        }
+    }
+
+    private static boolean isProductMediaId(String id) {
+        return id != null && !id.isBlank()
+                && !id.contains("gid://shopify/Product/")
+                && !id.contains("gid://shopify/ProductVariant/")
+                && !id.contains("gid://shopify/InventoryItem/")
+                && !id.contains("gid://shopify/Collection/");
     }
 
     public String updateProductStatus(String productId, String status) {
@@ -541,6 +762,10 @@ public class ShopifyClient {
         JsonNode errors = payload.path("userErrors");
         if (errors.isArray() && !errors.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify user error: " + errors.toString());
+        }
+        JsonNode mediaErrors = payload.path("mediaUserErrors");
+        if (mediaErrors.isArray() && !mediaErrors.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify user error: " + mediaErrors.toString());
         }
     }
 }

@@ -57,6 +57,33 @@ class EbayOfferRequestTest {
     }
 
     @Test
+    void omitsStoreCategoryWhenItemHasNone() {
+        CatalogItem catalog = CatalogItem.create("75192-1");
+        InventoryItem item = InventoryItem.create(catalog, "SKU-75192");
+        item.setPrice(new BigDecimal("1.00"));
+        item.setEbayPrice(new BigDecimal("849.99"));
+        item.setQuantity(1);
+
+        AppProperties properties = new AppProperties();
+        properties.getEbay().setMarketplaceId("EBAY_US");
+        properties.getEbay().setCategoryId("19006");
+        properties.getEbay().setMerchantLocationKey("warehouse");
+        properties.getEbay().setFulfillmentPolicyId("fulfill");
+        properties.getEbay().setPaymentPolicyId("pay");
+        properties.getEbay().setReturnPolicyId("return");
+
+        ObjectNode body = new EbayClient(properties, null, new ObjectMapper()).offerRequest(item);
+        assertTrue(body.path("storeCategoryNames").isMissingNode());
+    }
+
+    @Test
+    void detectsStoresApiPermissionError() {
+        assertTrue(EbayClient.isInsufficientStorePermission(
+                new RuntimeException("eBay error: [1100] Insufficient permissions to fulfill the request.")));
+        assertFalse(EbayClient.isInsufficientStorePermission(new RuntimeException("eBay error: [25001] internal")));
+    }
+
+    @Test
     void listingUrlUsesItemId() {
         assertEquals("https://www.ebay.com/itm/123456789", EbayClient.listingUrl("123456789"));
         assertNull(EbayClient.listingUrl(null));

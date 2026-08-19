@@ -32,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -79,18 +78,13 @@ public class EbayClient {
         return config.configured() && tokens != null && tokens.hasRefreshToken();
     }
 
-    public List<Map<String, String>> storeCategories() {
-        if (!sellReady()) {
-            return EbayStoreCategories.fallback();
+    static boolean isInsufficientStorePermission(Exception error) {
+        String message = error.getMessage();
+        if (message == null) {
+            return false;
         }
-        try {
-            JsonNode data = sell("GET", "/sell/stores/v1/store/categories", null);
-            List<Map<String, String>> categories = EbayStoreCategories.flatten(data);
-            return categories.isEmpty() ? EbayStoreCategories.fallback() : categories;
-        } catch (Exception e) {
-            log.warn("Could not load eBay store categories: {}", e.getMessage());
-            return EbayStoreCategories.fallback();
-        }
+        String lower = message.toLowerCase(java.util.Locale.ROOT);
+        return message.contains("[1100]") || lower.contains("insufficient permissions");
     }
 
     public void createOrReplaceInventoryItem(InventoryItem item, List<String> photoUrls) {
@@ -752,12 +746,16 @@ public class EbayClient {
                 raw = spec.retrieve().body(String.class);
             }
         } catch (org.springframework.web.client.RestClientResponseException e) {
-            log.warn("eBay {} {} failed: {} {}", method, path, e.getStatusCode(),
-                    ebayError(e.getResponseBodyAsString(), e.getStatusText()));
+            String detail = ebayError(e.getResponseBodyAsString(), e.getStatusText());
+            if (isInsufficientStorePermission(new ApiException(HttpStatus.BAD_GATEWAY, "eBay error: " + detail))) {
+                log.info("eBay {} {} failed: {} {}", method, path, e.getStatusCode(), detail);
+            } else {
+                log.warn("eBay {} {} failed: {} {}", method, path, e.getStatusCode(), detail);
+            }
             if (e.getStatusCode().value() == 404) {
                 throw ApiException.notFound("eBay resource not found");
             }
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay error: " + ebayError(e.getResponseBodyAsString(), e.getStatusText()));
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay error: " + detail);
         }
         if (raw == null || raw.isBlank()) {
             return mapper.createObjectNode();

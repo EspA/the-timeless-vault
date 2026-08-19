@@ -5,16 +5,13 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.publish.ChannelListingRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -29,13 +26,6 @@ public class AlertController {
         this.alertService = alertService;
         this.catalogService = catalogService;
         this.listings = listings;
-    }
-
-    public record AlertView(UUID id, String type, Platform platform, String title, String body, String url, Instant createdAt, boolean read, boolean emailed) {
-        static AlertView from(AlertEvent event) {
-            return new AlertView(event.getId(), event.getType(), event.getPlatform(), event.getTitle(), event.getBody(),
-                    event.getUrl(), event.getCreatedAt(), event.getReadAt() != null, event.getEmailedAt() != null);
-        }
     }
 
     public record WatchRequest(boolean enabled, String ebaySearchQuery, Integer ebayFeedbackMin, String ebayExcludeWords) {
@@ -82,26 +72,6 @@ public class AlertController {
             return new GuardView(guard.getId(), guard.getChannelListing().getId(), guard.getChannelListing().getPlatform(),
                     guard.isEnabled(), guard.getHighPercent(), guard.getLowPercent());
         }
-    }
-
-    @GetMapping("/alerts")
-    public List<AlertView> alerts() {
-        return alertService.list().stream().map(AlertView::from).toList();
-    }
-
-    @GetMapping("/alerts/unread-count")
-    public Map<String, Long> unread() {
-        return Map.of("count", alertService.unreadCount());
-    }
-
-    @PostMapping("/alerts/{id}/read")
-    public AlertView read(@PathVariable UUID id) {
-        return AlertView.from(alertService.markRead(id));
-    }
-
-    @PostMapping("/alerts/read-all")
-    public Map<String, Integer> readAll() {
-        return Map.of("updated", alertService.markAllRead());
     }
 
     @GetMapping("/watch-rules")

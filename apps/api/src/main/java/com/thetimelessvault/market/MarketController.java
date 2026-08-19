@@ -91,58 +91,6 @@ public class MarketController {
     ) {
     }
 
-    public record ScanLogView(
-            UUID id,
-            UUID catalogId,
-            String setNumber,
-            String setName,
-            Platform platform,
-            ScanTrigger trigger,
-            ScanStatus status,
-            Integer listingCount,
-            String message,
-            Instant scannedAt
-    ) {
-        static ScanLogView from(MarketScanLog log) {
-            return new ScanLogView(
-                    log.getId(),
-                    log.getCatalogItemId(),
-                    log.getSetNumber(),
-                    log.getSetName(),
-                    log.getPlatform(),
-                    log.getScanTrigger(),
-                    log.getStatus(),
-                    log.getListingCount(),
-                    log.getMessage(),
-                    log.getScannedAt()
-            );
-        }
-    }
-
-    public record ScanPageView(
-            List<ScanLogView> items,
-            int page,
-            int size,
-            long total,
-            int totalPages
-    ) {
-    }
-
-    @GetMapping("/scans")
-    public ScanPageView scans(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
-        var result = marketScanService.scanLog(page, size);
-        return new ScanPageView(
-                result.getContent().stream().map(ScanLogView::from).toList(),
-                result.getNumber(),
-                result.getSize(),
-                result.getTotalElements(),
-                result.getTotalPages()
-        );
-    }
-
     @GetMapping("/{catalogId}")
     public DashboardView get(@PathVariable UUID catalogId) {
         return toView(marketScanService.dashboard(catalogId));

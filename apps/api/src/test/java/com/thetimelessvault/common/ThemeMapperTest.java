@@ -20,9 +20,31 @@ class ThemeMapperTest {
                 "LEGO 10236 Star Wars Ewok Village (New Sealed In Box)",
                 ThemeMapper.suggestedTitle("Star Wars", "10236-1", "Ewok Village", ItemCondition.NEW_SEALED)
         );
+        String limited = ThemeMapper.suggestedTitle(
+                "Star Wars",
+                "10236-1",
+                "Super Extraordinarily Long Collectors Edition Display Set Name",
+                ItemCondition.NEW_SEALED
+        );
+        assertEquals(ThemeMapper.TITLE_MAX_LENGTH, limited.length());
         assertEquals(
-                "LEGO 10236 Star Wars Ewok Village",
+                "LEGO 10236 Ewok Village",
                 ThemeMapper.suggestedEbaySearch("Star Wars", "10236-1", "Ewok Village")
         );
+        assertEquals(
+                "LEGO 79001 Escape from Mirkwood Spiders",
+                ThemeMapper.suggestedEbaySearch("The Hobbit", "79001-1", "Escape from Mirkwood Spiders")
+        );
+        assertEquals(
+                "LEGO 79001 Escape from Mirkwood Spiders",
+                ThemeMapper.suggestedEbaySearch("The Hobbit", "79001-2", "Escape from Mirkwood Spiders")
+        );
+    }
+
+    @Test
+    void stripsVariantSuffixFromSetNumber() {
+        assertEquals("79001", ThemeMapper.displaySetNumber("79001-1"));
+        assertEquals("79001", ThemeMapper.displaySetNumber("79001-2"));
+        assertEquals("10236", ThemeMapper.displaySetNumber("10236-1"));
     }
 }

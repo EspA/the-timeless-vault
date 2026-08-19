@@ -40,7 +40,7 @@ const parsePrice = (raw: string) => {
       <h3>Watch</h3>
       <label><input type="checkbox" v-model="enabled" /> Enable market watch</label>
       <div class="grid two">
-        <label>Min price
+        <label>Alert min price
           <input
             :value="minPrice ?? ''"
             type="number"
@@ -50,7 +50,7 @@ const parsePrice = (raw: string) => {
             @input="minPrice = parsePrice(($event.target as HTMLInputElement).value)"
           />
         </label>
-        <label>Max price
+        <label>Alert max price
           <input
             :value="maxPrice ?? ''"
             type="number"

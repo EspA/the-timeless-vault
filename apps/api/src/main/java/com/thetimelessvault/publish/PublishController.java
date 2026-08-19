@@ -84,9 +84,16 @@ public class PublishController {
         return jobs.stream().map(JobView::from).toList();
     }
 
+    @PostMapping("/publish/update")
+    public List<JobView> update(@PathVariable UUID id, @RequestBody(required = false) PublishRequest request) {
+        List<PublishJob> jobs = publishService.enqueueUpdate(id, request == null ? Set.of() : request.platforms());
+        publishService.runJobs(jobs.stream().map(PublishJob::getId).toList());
+        return jobs.stream().map(JobView::from).toList();
+    }
+
     @PostMapping("/publish/{platform}/retry")
     public JobView retry(@PathVariable UUID id, @PathVariable Platform platform) {
-        List<PublishJob> jobs = publishService.enqueue(id, Set.of(platform));
+        List<PublishJob> jobs = publishService.enqueueRetry(id, platform);
         publishService.runJobs(jobs.stream().map(PublishJob::getId).toList());
         return JobView.from(jobs.getFirst());
     }

@@ -98,6 +98,25 @@ public class ChannelListing {
         this.updatedAt = Instant.now();
     }
 
+    public void markUpdated(String externalId, String liveUrl, BigDecimal price) {
+        this.status = ListingStatus.PUBLISHED;
+        if (externalId != null && !externalId.isBlank()) {
+            this.externalId = externalId;
+        }
+        if (liveUrl != null && !liveUrl.isBlank()) {
+            this.liveUrl = liveUrl;
+        }
+        this.lastPublishedPrice = price;
+        this.lastError = null;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markUpdateFailed(String error) {
+        this.status = ListingStatus.PUBLISHED;
+        this.lastError = error;
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }

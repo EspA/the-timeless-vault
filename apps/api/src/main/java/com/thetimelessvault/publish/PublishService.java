@@ -33,6 +33,7 @@ public class PublishService {
     private final EbayClient ebayClient;
     private final EbayPublisher ebayPublisher;
     private final PriceGuardRepository priceGuards;
+    private final ListingLogService listingLogs;
 
     public PublishService(
             InventoryService inventoryService,
@@ -43,7 +44,8 @@ public class PublishService {
             BrickLinkClient brickLinkClient,
             EbayClient ebayClient,
             EbayPublisher ebayPublisher,
-            PriceGuardRepository priceGuards
+            PriceGuardRepository priceGuards,
+            ListingLogService listingLogs
     ) {
         this.inventoryService = inventoryService;
         this.listings = listings;
@@ -54,6 +56,7 @@ public class PublishService {
         this.ebayClient = ebayClient;
         this.ebayPublisher = ebayPublisher;
         this.priceGuards = priceGuards;
+        this.listingLogs = listingLogs;
     }
 
     public EbayCatalogPreview ebayCatalogPreview(UUID itemId) {
@@ -62,17 +65,90 @@ public class PublishService {
 
     @Transactional
     public List<PublishJob> enqueue(UUID itemId, Set<Platform> platforms) {
+        return enqueueJobs(itemId, platforms, false, ListingAction.CREATE);
+    }
+
+    @Transactional
+    public List<PublishJob> enqueueRetry(UUID itemId, Platform platform) {
+        return enqueueJobs(itemId, Set.of(platform), true, ListingAction.CREATE);
+    }
+
+    @Transactional
+    public List<PublishJob> enqueueUpdate(UUID itemId, Set<Platform> platforms) {
+        return enqueueJobs(itemId, platforms, false, ListingAction.UPDATE);
+    }
+
+    private List<PublishJob> enqueueJobs(UUID itemId, Set<Platform> platforms, boolean retry, ListingAction action) {
         InventoryItem item = inventoryService.get(itemId);
         Set<Platform> selected = platforms == null || platforms.isEmpty()
                 ? EnumSet.allOf(Platform.class)
                 : platforms;
+        if (action == ListingAction.UPDATE) {
+            List<ChannelListing> targets = listings.findByInventoryItemId(itemId).stream()
+                    .filter(listing -> selected.contains(listing.getPlatform()))
+                    .filter(PublishService::canUpdate)
+                    .toList();
+            if (targets.isEmpty()) {
+                throw ApiException.badRequest(noListingsToUpdateMessage(selected));
+            }
+            return targets.stream().map(listing -> queueJob(item, listing, ListingAction.UPDATE)).toList();
+        }
+        if (!retry) {
+            List<String> existing = selected.stream()
+                    .sorted()
+                    .filter(platform -> listings.findByInventoryItemIdAndPlatform(itemId, platform).isPresent())
+                    .map(PublishService::platformLabel)
+                    .toList();
+            if (!existing.isEmpty()) {
+                throw ApiException.conflict(alreadyCreatedMessage(existing));
+            }
+        }
         return selected.stream().map(platform -> {
             ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, platform)
                     .orElseGet(() -> listings.save(ChannelListing.create(item, platform)));
-            listing.markPublishing();
-            listings.save(listing);
-            return jobs.save(PublishJob.queued(item, platform));
+            return queueJob(item, listing, ListingAction.CREATE);
         }).toList();
+    }
+
+    private PublishJob queueJob(InventoryItem item, ChannelListing listing, ListingAction action) {
+        listing.markPublishing();
+        listings.save(listing);
+        return jobs.save(PublishJob.queued(item, listing.getPlatform(), action));
+    }
+
+    static boolean canUpdate(ChannelListing listing) {
+        return listing.getStatus() == ListingStatus.PUBLISHED
+                && listing.getExternalId() != null
+                && !listing.getExternalId().isBlank();
+    }
+
+    static String platformLabel(Platform platform) {
+        return switch (platform) {
+            case SHOPIFY -> "Shopify";
+            case BRICKLINK -> "BrickLink";
+            case EBAY -> "eBay";
+        };
+    }
+
+    static String alreadyCreatedMessage(List<String> channels) {
+        if (channels.size() == 1) {
+            return "A " + channels.getFirst() + " listing has already been created for this item.";
+        }
+        return "Listings have already been created for " + joinAnd(channels) + ".";
+    }
+
+    static String noListingsToUpdateMessage(Set<Platform> selected) {
+        if (selected.size() >= Platform.values().length) {
+            return "No existing listings to update. Create a listing first.";
+        }
+        return "None of the selected channels have an existing listing to update.";
+    }
+
+    private static String joinAnd(List<String> parts) {
+        if (parts.size() == 2) {
+            return parts.get(0) + " and " + parts.get(1);
+        }
+        return String.join(", ", parts.subList(0, parts.size() - 1)) + ", and " + parts.getLast();
     }
 
     @Async
@@ -94,15 +170,24 @@ public class PublishService {
         if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
             throw ApiException.badRequest("Shopify status must be Unlisted or Active");
         }
-        ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.SHOPIFY)
-                .orElseThrow(() -> ApiException.notFound("Shopify listing not found"));
-        if (listing.getStatus() != ListingStatus.PUBLISHED
-                || listing.getExternalId() == null
-                || listing.getExternalId().isBlank()) {
-            throw ApiException.badRequest("Publish to Shopify first");
+        InventoryItem item = inventoryService.get(itemId);
+        ListingAction action = ListingAction.fromVisibility(normalized);
+        try {
+            ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.SHOPIFY)
+                    .orElseThrow(() -> ApiException.notFound("Shopify listing not found"));
+            if (listing.getStatus() != ListingStatus.PUBLISHED
+                    || listing.getExternalId() == null
+                    || listing.getExternalId().isBlank()) {
+                throw ApiException.badRequest("Publish to Shopify first");
+            }
+            listing.setShopifyStatus(shopifyClient.updateProductStatus(listing.getExternalId(), normalized));
+            ChannelListing saved = listings.save(listing);
+            listingLogs.record(item, Platform.SHOPIFY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+            return saved;
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.SHOPIFY, action, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
         }
-        listing.setShopifyStatus(shopifyClient.updateProductStatus(listing.getExternalId(), normalized));
-        return listings.save(listing);
     }
 
     @Transactional
@@ -111,17 +196,26 @@ public class PublishService {
         if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
             throw ApiException.badRequest("BrickLink status must be Unlisted or Active");
         }
-        ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.BRICKLINK)
-                .orElseThrow(() -> ApiException.notFound("BrickLink listing not found"));
-        if (listing.getStatus() != ListingStatus.PUBLISHED
-                || listing.getExternalId() == null
-                || listing.getExternalId().isBlank()) {
-            throw ApiException.badRequest("Publish to BrickLink first");
+        InventoryItem item = inventoryService.get(itemId);
+        ListingAction action = ListingAction.fromVisibility(normalized);
+        try {
+            ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.BRICKLINK)
+                    .orElseThrow(() -> ApiException.notFound("BrickLink listing not found"));
+            if (listing.getStatus() != ListingStatus.PUBLISHED
+                    || listing.getExternalId() == null
+                    || listing.getExternalId().isBlank()) {
+                throw ApiException.badRequest("Publish to BrickLink first");
+            }
+            boolean inStockRoom = normalized.equals("UNLISTED");
+            boolean stockRoom = brickLinkClient.updateStockRoom(listing.getExternalId(), inStockRoom);
+            listing.setBricklinkStatus(stockRoom ? "UNLISTED" : "ACTIVE");
+            ChannelListing saved = listings.save(listing);
+            listingLogs.record(item, Platform.BRICKLINK, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+            return saved;
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.BRICKLINK, action, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
         }
-        boolean inStockRoom = normalized.equals("UNLISTED");
-        boolean stockRoom = brickLinkClient.updateStockRoom(listing.getExternalId(), inStockRoom);
-        listing.setBricklinkStatus(stockRoom ? "UNLISTED" : "ACTIVE");
-        return listings.save(listing);
     }
 
     @Transactional
@@ -130,61 +224,95 @@ public class PublishService {
         if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
             throw ApiException.badRequest("eBay status must be Unlisted or Active");
         }
-        ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.EBAY)
-                .orElseThrow(() -> ApiException.notFound("eBay listing not found"));
-        if (listing.getStatus() != ListingStatus.PUBLISHED
-                || listing.getExternalId() == null
-                || listing.getExternalId().isBlank()) {
-            throw ApiException.badRequest("Publish to eBay first");
+        InventoryItem item = inventoryService.get(itemId);
+        ListingAction action = ListingAction.fromVisibility(normalized);
+        try {
+            ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.EBAY)
+                    .orElseThrow(() -> ApiException.notFound("eBay listing not found"));
+            if (listing.getStatus() != ListingStatus.PUBLISHED
+                    || listing.getExternalId() == null
+                    || listing.getExternalId().isBlank()) {
+                throw ApiException.badRequest("Publish to eBay first");
+            }
+            String current = listing.getEbayStatus();
+            if (current == null && listing.getLiveUrl() != null && !listing.getLiveUrl().isBlank()) {
+                current = "ACTIVE";
+            }
+            if (normalized.equals(current)) {
+                listing.setEbayStatus(normalized);
+                ChannelListing saved = listings.save(listing);
+                listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+                return saved;
+            }
+            String offerId = resolveEbayOfferId(listing, itemId);
+            if (normalized.equals("ACTIVE")) {
+                ebayPublisher.syncInventory(item);
+                offerId = resolveEbayOfferId(listing, itemId);
+                String listingId = ebayClient.publishOffer(offerId);
+                listing.setLiveUrl(EbayClient.listingUrl(listingId));
+                listing.setEbayStatus("ACTIVE");
+            } else {
+                ebayClient.withdrawOffer(offerId);
+                listing.setEbayStatus("UNLISTED");
+            }
+            listing.setExternalId(offerId);
+            ChannelListing saved = listings.save(listing);
+            listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+            return saved;
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
         }
-        String current = listing.getEbayStatus();
-        if (current == null && listing.getLiveUrl() != null && !listing.getLiveUrl().isBlank()) {
-            current = "ACTIVE";
-        }
-        if (normalized.equals(current)) {
-            listing.setEbayStatus(normalized);
-            return listings.save(listing);
-        }
-        String offerId = resolveEbayOfferId(listing, itemId);
-        if (normalized.equals("ACTIVE")) {
-            InventoryItem item = inventoryService.get(itemId);
-            ebayPublisher.syncInventory(item);
-            offerId = resolveEbayOfferId(listing, itemId);
-            String listingId = ebayClient.publishOffer(offerId);
-            listing.setLiveUrl(EbayClient.listingUrl(listingId));
-            listing.setEbayStatus("ACTIVE");
-        } else {
-            ebayClient.withdrawOffer(offerId);
-            listing.setEbayStatus("UNLISTED");
-        }
-        listing.setExternalId(offerId);
-        return listings.save(listing);
     }
 
     @Transactional
     public void deleteShopifyListing(UUID itemId) {
-        ChannelListing listing = requireInactiveListing(itemId, Platform.SHOPIFY, "shopifyStatus");
-        if (listing.getExternalId() != null && !listing.getExternalId().isBlank()) {
-            shopifyClient.deleteProduct(listing.getExternalId());
+        InventoryItem item = inventoryService.get(itemId);
+        try {
+            ChannelListing listing = requireInactiveListing(itemId, Platform.SHOPIFY, "shopifyStatus");
+            if (listing.getExternalId() != null && !listing.getExternalId().isBlank()) {
+                shopifyClient.deleteProduct(listing.getExternalId());
+            }
+            removeListing(listing);
+            listingLogs.record(item, Platform.SHOPIFY, ListingAction.DELETE, ListingLogStatus.SUCCESS, "Listing deleted");
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.SHOPIFY, ListingAction.DELETE, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
         }
-        removeListing(listing);
     }
 
     @Transactional
     public void deleteBricklinkListing(UUID itemId) {
-        ChannelListing listing = requireInactiveListing(itemId, Platform.BRICKLINK, "bricklinkStatus");
-        if (listing.getExternalId() != null && !listing.getExternalId().isBlank()) {
-            brickLinkClient.deleteInventory(listing.getExternalId());
+        InventoryItem item = inventoryService.get(itemId);
+        try {
+            ChannelListing listing = requireInactiveListing(itemId, Platform.BRICKLINK, "bricklinkStatus");
+            if (listing.getExternalId() != null && !listing.getExternalId().isBlank()) {
+                brickLinkClient.deleteInventory(listing.getExternalId());
+            }
+            removeListing(listing);
+            listingLogs.record(item, Platform.BRICKLINK, ListingAction.DELETE, ListingLogStatus.SUCCESS, "Listing deleted");
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.BRICKLINK, ListingAction.DELETE, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
         }
-        removeListing(listing);
     }
 
     @Transactional
     public void deleteEbayListing(UUID itemId) {
         InventoryItem item = inventoryService.get(itemId);
-        ChannelListing listing = requireInactiveListing(itemId, Platform.EBAY, "ebayStatus");
-        ebayClient.purgeSku(item.getSku());
-        removeListing(listing);
+        try {
+            ChannelListing listing = requireInactiveListing(itemId, Platform.EBAY, "ebayStatus");
+            ebayClient.purgeSku(item.getSku());
+            removeListing(listing);
+            listingLogs.record(item, Platform.EBAY, ListingAction.DELETE, ListingLogStatus.SUCCESS, "Listing deleted");
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.EBAY, ListingAction.DELETE, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
+        }
+    }
+
+    private static String visibilityNote(String status) {
+        return "UNLISTED".equals(status) ? "Listing is now unlisted" : "Listing is now active";
     }
 
     private ChannelListing requireInactiveListing(UUID itemId, Platform platform, String statusField) {

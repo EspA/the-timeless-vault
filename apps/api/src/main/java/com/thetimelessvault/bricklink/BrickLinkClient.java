@@ -41,6 +41,16 @@ public class BrickLinkClient {
         return request("POST", "/inventories", inventoryRequest(item).toString());
     }
 
+    public JsonNode updateInventory(String inventoryId, InventoryItem item) {
+        if (inventoryId == null || inventoryId.isBlank()) {
+            throw ApiException.badRequest("BrickLink inventory id is missing");
+        }
+        JsonNode current = request("GET", "/inventories/" + inventoryId, null);
+        int currentQty = current.path("quantity").asInt(0);
+        int desiredQty = Math.max(item.getQuantity(), 0);
+        return request("PUT", "/inventories/" + inventoryId, inventoryUpdateRequest(item, desiredQty - currentQty).toString());
+    }
+
     ObjectNode inventoryRequest(InventoryItem item) {
         ObjectNode body = mapper.createObjectNode();
         ObjectNode catalog = body.putObject("item");
@@ -57,6 +67,19 @@ public class BrickLinkClient {
         body.put("is_retain", false);
         body.put("is_stock_room", true);
         body.put("stock_room_id", DEFAULT_STOCK_ROOM_ID);
+        return body;
+    }
+
+    ObjectNode inventoryUpdateRequest(InventoryItem item, int quantityDelta) {
+        ObjectNode body = mapper.createObjectNode();
+        if (quantityDelta != 0) {
+            body.put("quantity", quantityDelta);
+        }
+        body.put("unit_price", ChannelPrice.required(item, Platform.BRICKLINK));
+        body.put("new_or_used", item.getCondition().brickLinkNewOrUsed());
+        body.put("completeness", item.getCondition().brickLinkCompleteness());
+        body.put("description", com.thetimelessvault.common.DescriptionHtml.forBrickLink(item.getShortDescription()));
+        body.put("remarks", item.getSku());
         return body;
     }
 

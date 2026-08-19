@@ -46,16 +46,15 @@ onMounted(async () => {
         <div class="nav-group">
           <p class="nav-label">Inventory</p>
           <router-link to="/inventory">Inventory</router-link>
-          <router-link to="/inventory/new">New item</router-link>
+          <router-link to="/listing-logs">Listing logs</router-link>
         </div>
         <div class="nav-group">
           <p class="nav-label">Market Watch</p>
           <router-link to="/watches">Items watch</router-link>
-          <router-link to="/watches/new">New item watch</router-link>
           <router-link to="/market">Market Monitoring</router-link>
-          <router-link to="/scans">Alerts log</router-link>
+          <router-link to="/scan-logs">Scan logs</router-link>
           <router-link to="/alerts">
-            Buying Opportunities
+            Alerts
             <span v-if="unread" class="badge">{{ unread }}</span>
           </router-link>
         </div>

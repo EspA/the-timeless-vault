@@ -6,6 +6,8 @@ import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,11 @@ import java.util.Base64;
 @Service
 public class EbayTokenService {
 
+    private static final Logger log = LoggerFactory.getLogger(EbayTokenService.class);
+
     public static final String REFRESH_TOKEN_KEY = "ebay.refresh_token";
+    static final String STORE_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.stores";
+    static final String STORE_READONLY_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.stores.readonly";
 
     private final AppProperties.Ebay config;
     private final AppSettingRepository settings;
@@ -47,9 +53,8 @@ public class EbayTokenService {
         if (refresh == null || refresh.isBlank()) {
             throw ApiException.unavailable("eBay refresh token is missing. Complete OAuth on the Settings page.");
         }
-        JsonNode token = exchange("refresh_token", refresh, null);
-        userAccessToken = token.path("access_token").asText();
-        userAccessExpiry = Instant.now().plusSeconds(token.path("expires_in").asLong(7200));
+        JsonNode token = refreshUserAccessToken(refresh);
+        applyUserToken(token);
         return userAccessToken;
     }
 
@@ -94,8 +99,8 @@ public class EbayTokenService {
             );
         }
         settings.save(new AppSetting(REFRESH_TOKEN_KEY, refresh));
-        userAccessToken = token.path("access_token").asText();
-        userAccessExpiry = Instant.now().plusSeconds(token.path("expires_in").asLong(7200));
+        applyUserToken(token);
+        logGrantedScopes("authorization_code", token);
     }
 
     static String authorizationCodeFrom(String raw) {
@@ -129,6 +134,47 @@ public class EbayTokenService {
                 .map(AppSetting::getValue)
                 .filter(v -> v != null && !v.isBlank())
                 .orElse(config.getRefreshToken());
+    }
+
+    private JsonNode refreshUserAccessToken(String refresh) {
+        try {
+            JsonNode token = exchange("refresh_token", refresh, sellScopes());
+            logGrantedScopes("refresh_token", token);
+            return token;
+        } catch (ApiException e) {
+            if (!isInvalidScope(e.getMessage())) {
+                throw e;
+            }
+        }
+        try {
+            JsonNode token = exchange("refresh_token", refresh, legacySellScopes());
+            log.warn("eBay refresh token does not include sell.stores.readonly. Using sell.stores.");
+            logGrantedScopes("refresh_token", token);
+            return token;
+        } catch (ApiException e) {
+            if (!isInvalidScope(e.getMessage())) {
+                throw e;
+            }
+        }
+        log.warn("eBay refresh token was granted without store scopes. Developer-portal grant types are not applied until you reconnect eBay on Settings.");
+        return exchange("refresh_token", refresh, null);
+    }
+
+    private void applyUserToken(JsonNode token) {
+        userAccessToken = token.path("access_token").asText();
+        userAccessExpiry = Instant.now().plusSeconds(token.path("expires_in").asLong(7200));
+    }
+
+    private void logGrantedScopes(String grant, JsonNode token) {
+        String scope = token.path("scope").asText("");
+        if (scope.isBlank()) {
+            return;
+        }
+        if (hasStoreScope(scope)) {
+            log.info("eBay {} token includes store scopes", grant);
+        } else {
+            log.warn("eBay {} token scopes do not include sell.stores: {}", grant, scope);
+        }
     }
 
     private JsonNode exchange(String grantType, String secret, String scope) {
@@ -201,13 +247,28 @@ public class EbayTokenService {
         return fallback == null || fallback.isBlank() ? "unknown error" : fallback;
     }
 
-    private static String sellScopes() {
+    static String sellScopes() {
+        return legacySellScopes() + " " + STORE_READONLY_SCOPE;
+    }
+
+    static String legacySellScopes() {
         return String.join(" ",
                 "https://api.ebay.com/oauth/api_scope/sell.inventory",
                 "https://api.ebay.com/oauth/api_scope/sell.account",
                 "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
-                "https://api.ebay.com/oauth/api_scope/sell.stores"
+                STORE_SCOPE
         );
+    }
+
+    static boolean hasStoreScope(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return false;
+        }
+        return scope.contains(STORE_SCOPE);
+    }
+
+    static boolean isInvalidScope(String message) {
+        return message != null && message.toLowerCase().contains("invalid_scope");
     }
 
     private static String url(String value) {

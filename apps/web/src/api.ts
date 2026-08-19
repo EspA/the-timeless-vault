@@ -1,8 +1,18 @@
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 const json = async <T>(res: Response): Promise<T> => {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     const err = body as { error?: string; message?: string };
-    throw new Error(err.message || err.error || res.statusText);
+    throw new ApiError(err.message || err.error || res.statusText, res.status);
   }
   if (res.status === 204) {
     return undefined as T;
@@ -26,7 +36,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     }).then(json<T>),
-  del: (path: string) => fetch(path, { method: "DELETE", credentials: "include" }).then(json<void>),
+  del: <T = void>(path: string) => fetch(path, { method: "DELETE", credentials: "include" }).then(json<T>),
 };
 
 export type Catalog = {
@@ -182,21 +192,22 @@ export type PublishJob = {
   finishedAt?: string;
 };
 
+export const LISTING_TITLE_MAX = 80;
+
 export const defaultListingTitle = (catalog: Pick<Catalog, "setNumber" | "name" | "theme">) => {
   const number = catalog.setNumber.replace(/-1$/, "");
   const theme = catalog.theme?.trim() ? ` ${catalog.theme.trim()}` : "";
   const name = catalog.name?.trim() ? ` ${catalog.name.trim()}` : "";
-  return `LEGO ${number}${theme}${name} (New Sealed In Box)`.replace(/ +/g, " ").trim();
+  return `LEGO ${number}${theme}${name} (New Sealed In Box)`.replace(/ +/g, " ").trim().slice(0, LISTING_TITLE_MAX);
 };
 
 export const defaultEbayExcludeWords =
   "-custom -moc -replica -case -kit -led -minifigure -no -minifigures -figures -bricks -blocks -minifig -minifigs -figure -sticker -stickers -display -copy -creative -bag -compatible -only -generic -manuals -manual -displaycase -brick -toys -unofficial -kids -gift -fake -adults -mini-figures -mock";
 
-export const defaultEbaySearchQuery = (catalog: Pick<Catalog, "setNumber" | "name" | "theme">) => {
-  const number = catalog.setNumber.replace(/-1$/, "");
-  const theme = catalog.theme?.trim() ? ` ${catalog.theme.trim()}` : "";
+export const defaultEbaySearchQuery = (catalog: Pick<Catalog, "setNumber" | "name">) => {
+  const number = catalog.setNumber.replace(/-\d+$/, "");
   const name = catalog.name?.trim() ? ` ${catalog.name.trim()}` : "";
-  return `LEGO ${number}${theme}${name}`.replace(/ +/g, " ").trim();
+  return `LEGO ${number}${name}`.replace(/ +/g, " ").trim();
 };
 
 const yearFrom = (date?: string, fallback?: number | string) => {
@@ -390,7 +401,7 @@ export type SetWatch = {
   updatedAt: string;
 };
 
-export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 15;
+export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 5;
 export const DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES = 360;
 
 export const SCAN_INTERVALS = [

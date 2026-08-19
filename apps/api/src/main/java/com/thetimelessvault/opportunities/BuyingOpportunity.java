@@ -1,7 +1,8 @@
-package com.thetimelessvault.alerts;
+package com.thetimelessvault.opportunities;
 
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.market.ScanTrigger;
 import com.thetimelessvault.publish.ChannelListing;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,7 +19,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "alert_event")
-public class AlertEvent {
+public class BuyingOpportunity {
+
+    public static final String TYPE_BUYING_OPPORTUNITY = "BUYING_OPPORTUNITY";
+    public static final String TYPE_PRICE_HIGH = "PRICE_HIGH";
+    public static final String TYPE_PRICE_LOW = "PRICE_LOW";
 
     @Id
     private UUID id;
@@ -45,8 +50,12 @@ public class AlertEvent {
 
     private String url;
 
-    @Column(name = "dedupe_key", nullable = false, unique = true)
+    @Column(name = "dedupe_key", nullable = false)
     private String dedupeKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scan_trigger")
+    private ScanTrigger scanTrigger;
 
     @Column(name = "read_at")
     private Instant readAt;
@@ -57,14 +66,14 @@ public class AlertEvent {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    public static AlertEvent create(String type, String title, String dedupeKey) {
-        AlertEvent event = new AlertEvent();
-        event.id = UUID.randomUUID();
-        event.type = type;
-        event.title = title;
-        event.dedupeKey = dedupeKey;
-        event.createdAt = Instant.now();
-        return event;
+    public static BuyingOpportunity create(String type, String title, String dedupeKey) {
+        BuyingOpportunity opportunity = new BuyingOpportunity();
+        opportunity.id = UUID.randomUUID();
+        opportunity.type = type;
+        opportunity.title = title;
+        opportunity.dedupeKey = dedupeKey;
+        opportunity.createdAt = Instant.now();
+        return opportunity;
     }
 
     public UUID getId() {
@@ -121,6 +130,14 @@ public class AlertEvent {
 
     public String getDedupeKey() {
         return dedupeKey;
+    }
+
+    public ScanTrigger getScanTrigger() {
+        return scanTrigger;
+    }
+
+    public void setScanTrigger(ScanTrigger scanTrigger) {
+        this.scanTrigger = scanTrigger;
     }
 
     public Instant getReadAt() {

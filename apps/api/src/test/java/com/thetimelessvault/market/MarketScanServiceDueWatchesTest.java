@@ -1,7 +1,7 @@
 package com.thetimelessvault.market;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thetimelessvault.alerts.AlertService;
+import com.thetimelessvault.opportunities.BuyingOpportunityService;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
 import com.thetimelessvault.catalog.CatalogItem;
@@ -10,6 +10,7 @@ import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.publish.ChannelListingRepository;
+import com.thetimelessvault.settings.PriceGuardDefaults;
 import com.thetimelessvault.settings.WatchDefaults;
 import com.thetimelessvault.watch.SetWatch;
 import com.thetimelessvault.watch.SetWatchRepository;
@@ -46,9 +47,10 @@ class MarketScanServiceDueWatchesTest {
     @Mock PriceGuardRepository priceGuards;
     @Mock EbayClient ebayClient;
     @Mock BrickLinkClient brickLinkClient;
-    @Mock AlertService alerts;
-    @Mock MarketScanLogRepository scanLogs;
+    @Mock BuyingOpportunityService opportunities;
+    @Mock ScanLogRepository scanLogs;
     @Mock WatchDefaults watchDefaults;
+    @Mock PriceGuardDefaults priceGuardDefaults;
 
     @InjectMocks
     MarketScanService service;
@@ -72,7 +74,8 @@ class MarketScanServiceDueWatchesTest {
         when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(snapshots.findFirstByCatalogItemIdAndPlatformAndConditionOrderByScannedAtDesc(any(), any(), any()))
                 .thenReturn(Optional.empty());
-        when(marketListings.findByCatalogItemIdAndPlatform(any(), any())).thenReturn(List.of());
+        when(marketListings.findByCatalogItemIdAndPlatformAndSnapshotScanTrigger(any(), any(), any()))
+                .thenReturn(List.of());
         when(priceGuards.findEnabledWithListing()).thenReturn(List.of());
         when(scanLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(watchDefaults.excludeWords()).thenReturn("");

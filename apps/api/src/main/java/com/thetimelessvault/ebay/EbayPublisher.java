@@ -5,6 +5,7 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.InventoryService;
 import com.thetimelessvault.inventory.Photo;
+import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelPublisher;
 import com.thetimelessvault.publish.PublishResult;
 import com.thetimelessvault.storage.ObjectStorage;
@@ -54,6 +55,29 @@ public class EbayPublisher implements ChannelPublisher {
             return PublishResult.ebay(offerId, EbayClient.listingUrl(listingId), "ACTIVE");
         }
         return PublishResult.ebay(offerId, null, "UNLISTED");
+    }
+
+    @Override
+    public PublishResult update(InventoryItem item, ChannelListing listing, List<String> photoUrls) {
+        if (!client.configured()) {
+            throw ApiException.unavailable("eBay client credentials are not configured");
+        }
+        if (!client.sellReady()) {
+            throw ApiException.unavailable("Connect eBay on the Settings page (OAuth refresh token missing)");
+        }
+        List<String> hostedPhotos = hostPhotos(item, photoUrls);
+        if (hostedPhotos.isEmpty()) {
+            throw ApiException.badRequest("eBay requires at least one photo");
+        }
+        client.createOrReplaceInventoryItem(item, hostedPhotos);
+        String offerId = client.createOffer(item);
+        String listingId = client.liveListingId(offerId);
+        String liveUrl = listingId != null ? EbayClient.listingUrl(listingId) : listing.getLiveUrl();
+        String status = listing.getEbayStatus();
+        if (status == null || status.isBlank()) {
+            status = listingId != null ? "ACTIVE" : "UNLISTED";
+        }
+        return PublishResult.ebay(offerId, liveUrl, status);
     }
 
     public void syncInventory(InventoryItem item) {

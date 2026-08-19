@@ -1,0 +1,3 @@
+UPDATE alert_event
+SET type = 'BUYING_OPPORTUNITY'
+WHERE type = 'NEW_LISTING';

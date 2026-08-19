@@ -10,4 +10,10 @@ public interface MarketListingRepository extends JpaRepository<MarketListing, UU
     List<MarketListing> findBySnapshotId(UUID snapshotId);
 
     List<MarketListing> findByCatalogItemIdAndPlatform(UUID catalogItemId, Platform platform);
+
+    List<MarketListing> findByCatalogItemIdAndPlatformAndSnapshotScanTrigger(
+            UUID catalogItemId,
+            Platform platform,
+            ScanTrigger scanTrigger
+    );
 }

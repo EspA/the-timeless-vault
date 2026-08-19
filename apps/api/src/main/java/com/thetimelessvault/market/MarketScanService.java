@@ -1,7 +1,6 @@
 package com.thetimelessvault.market;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.thetimelessvault.alerts.AlertService;
 import com.thetimelessvault.alerts.PriceGuard;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
@@ -15,8 +14,11 @@ import com.thetimelessvault.common.ThemeMapper;
 import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.ebay.EbayListingDetails;
 import com.thetimelessvault.ebay.EbayMarketFilters;
+import com.thetimelessvault.opportunities.BuyingOpportunity;
+import com.thetimelessvault.opportunities.BuyingOpportunityService;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
+import com.thetimelessvault.settings.PriceGuardDefaults;
 import com.thetimelessvault.settings.WatchDefaults;
 import com.thetimelessvault.watch.SetWatch;
 import com.thetimelessvault.watch.SetWatchRepository;
@@ -49,9 +51,10 @@ public class MarketScanService {
     private final PriceGuardRepository priceGuards;
     private final EbayClient ebayClient;
     private final BrickLinkClient brickLinkClient;
-    private final AlertService alerts;
-    private final MarketScanLogRepository scanLogs;
+    private final BuyingOpportunityService opportunities;
+    private final ScanLogRepository scanLogs;
     private final WatchDefaults watchDefaults;
+    private final PriceGuardDefaults priceGuardDefaults;
 
     public MarketScanService(
             SetWatchRepository setWatches,
@@ -62,9 +65,10 @@ public class MarketScanService {
             PriceGuardRepository priceGuards,
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
-            AlertService alerts,
-            MarketScanLogRepository scanLogs,
-            WatchDefaults watchDefaults
+            BuyingOpportunityService opportunities,
+            ScanLogRepository scanLogs,
+            WatchDefaults watchDefaults,
+            PriceGuardDefaults priceGuardDefaults
     ) {
         this.setWatches = setWatches;
         this.catalogItems = catalogItems;
@@ -74,9 +78,10 @@ public class MarketScanService {
         this.priceGuards = priceGuards;
         this.ebayClient = ebayClient;
         this.brickLinkClient = brickLinkClient;
-        this.alerts = alerts;
+        this.opportunities = opportunities;
         this.scanLogs = scanLogs;
         this.watchDefaults = watchDefaults;
+        this.priceGuardDefaults = priceGuardDefaults;
     }
 
     public void scanDueWatches() {
@@ -116,12 +121,12 @@ public class MarketScanService {
         String ebayError = null;
         PlatformScanResult result;
         if (platform == Platform.EBAY) {
-            result = scanEbay(catalog, watch);
+            result = scanEbay(catalog, watch, trigger);
             ebayError = result.message();
         } else {
-            result = scanBrickLink(catalog, watch);
+            result = scanBrickLink(catalog, watch, trigger);
         }
-        scanLogs.save(MarketScanLog.create(
+        scanLogs.save(ScanLog.create(
                 catalog,
                 platform,
                 trigger,
@@ -132,8 +137,8 @@ public class MarketScanService {
         return dashboard(catalogId, ebayError);
     }
 
-    public Page<MarketScanLog> scanLog(int page, int size) {
-        int pageSize = Math.min(20, Math.max(1, size));
+    public Page<ScanLog> scanLogs(int page, int size) {
+        int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
         return scanLogs.findAllByOrderByScannedAtDesc(PageRequest.of(pageIndex, pageSize));
     }
@@ -158,7 +163,7 @@ public class MarketScanService {
                 ebaySnap.orElse(null), blNew.orElse(null), ebay, bricklink, ebayError);
     }
 
-    private PlatformScanResult scanEbay(CatalogItem catalog, SetWatch watch) {
+    private PlatformScanResult scanEbay(CatalogItem catalog, SetWatch watch, ScanTrigger trigger) {
         if (!ebayClient.browseConfigured()) {
             return PlatformScanResult.fail("eBay is not configured.");
         }
@@ -177,7 +182,7 @@ public class MarketScanService {
             return PlatformScanResult.fail(e.getMessage() == null ? "eBay search failed." : e.getMessage());
         }
         int returned = root.path("itemSummaries").size();
-        MarketSnapshot snapshot = MarketSnapshot.create(catalog, Platform.EBAY, "NEW");
+        MarketSnapshot snapshot = MarketSnapshot.create(catalog, Platform.EBAY, "NEW", trigger);
         BigDecimal min = null;
         BigDecimal max = null;
         BigDecimal sum = BigDecimal.ZERO;
@@ -189,9 +194,6 @@ public class MarketScanService {
                 continue;
             }
             BigDecimal price = decimal(item.path("price").path("value").asText(null));
-            if (watch != null && !watch.acceptsPrice(price)) {
-                continue;
-            }
             MarketListing listing = MarketListing.create(snapshot, catalog, Platform.EBAY);
             String itemId = item.path("itemId").asText();
             listing.setExternalId(itemId);
@@ -211,8 +213,8 @@ public class MarketScanService {
                 prices.add(price);
                 count++;
             }
-            if (watch != null && !previous.isEmpty() && !previous.contains(itemId)) {
-                alerts.recordNewListing(catalog, Platform.EBAY, listing, watch);
+            if (trigger == ScanTrigger.AUTOMATIC && watch != null && !previous.contains(itemId)) {
+                opportunities.recordNewListing(catalog, Platform.EBAY, listing, watch);
             }
         }
         snapshot.setMinPrice(min);
@@ -227,7 +229,7 @@ public class MarketScanService {
         }
         if (count == 0 && returned > 0) {
             return PlatformScanResult.ok(count, "eBay returned " + returned + " listings, but none matched North America, feedback min "
-                    + feedbackMin + ", your title search/exclude words, or your price range.");
+                    + feedbackMin + ", or your title search/exclude words.");
         }
         if (count == 0) {
             return PlatformScanResult.ok(count, "eBay returned no listings for \"" + query + "\".");
@@ -235,22 +237,22 @@ public class MarketScanService {
         return PlatformScanResult.ok(count, null);
     }
 
-    private PlatformScanResult scanBrickLink(CatalogItem catalog, SetWatch watch) {
+    private PlatformScanResult scanBrickLink(CatalogItem catalog, SetWatch watch, ScanTrigger trigger) {
         try {
-            return scanBrickLinkLots(catalog, watch);
+            return scanBrickLinkLots(catalog, watch, trigger);
         } catch (Exception e) {
             log.warn("BrickLink market scan failed for {}", catalog.getSetNumber(), e);
             return PlatformScanResult.fail(e.getMessage() == null ? "BrickLink scan failed." : e.getMessage());
         }
     }
 
-    private PlatformScanResult scanBrickLinkLots(CatalogItem catalog, SetWatch watch) {
+    private PlatformScanResult scanBrickLinkLots(CatalogItem catalog, SetWatch watch, ScanTrigger trigger) {
         List<BrickLinkForSale.Lot> lots = brickLinkClient.forSaleNewSealedShipsToUsa(catalog.getSetNumber());
         Set<String> previous = previousFingerprints(catalog.getId(), Platform.BRICKLINK);
         if (previous.stream().noneMatch(fingerprint -> fingerprint.chars().allMatch(Character::isDigit))) {
             previous = Set.of();
         }
-        MarketSnapshot snapshot = MarketSnapshot.create(catalog, Platform.BRICKLINK, "N");
+        MarketSnapshot snapshot = MarketSnapshot.create(catalog, Platform.BRICKLINK, "N", trigger);
         BigDecimal min = null;
         BigDecimal max = null;
         BigDecimal sum = BigDecimal.ZERO;
@@ -258,9 +260,6 @@ public class MarketScanService {
         int count = 0;
         snapshots.save(snapshot);
         for (BrickLinkForSale.Lot lot : lots) {
-            if (watch != null && !watch.acceptsPrice(lot.price())) {
-                continue;
-            }
             MarketListing listing = MarketListing.create(snapshot, catalog, Platform.BRICKLINK);
             listing.setExternalId(lot.fingerprint());
             listing.setFingerprint(lot.fingerprint());
@@ -280,8 +279,8 @@ public class MarketScanService {
                 prices.add(lot.price());
                 count++;
             }
-            if (watch != null && !previous.isEmpty() && !previous.contains(lot.fingerprint())) {
-                alerts.recordNewListing(catalog, Platform.BRICKLINK, listing, watch);
+            if (trigger == ScanTrigger.AUTOMATIC && watch != null && !previous.contains(lot.fingerprint())) {
+                opportunities.recordNewListing(catalog, Platform.BRICKLINK, listing, watch);
             }
         }
         snapshot.setMinPrice(min);
@@ -305,6 +304,8 @@ public class MarketScanService {
     }
 
     private void evaluatePriceGuards() {
+        BigDecimal highPercent = priceGuardDefaults.highPercent();
+        BigDecimal lowPercent = priceGuardDefaults.lowPercent();
         for (PriceGuard guard : priceGuards.findEnabledWithListing()) {
             ChannelListing listing = guard.getChannelListing();
             if (listing.getStatus() != ListingStatus.PUBLISHED || listing.getLastPublishedPrice() == null) {
@@ -319,12 +320,14 @@ public class MarketScanService {
                 }
                 BigDecimal yours = listing.getLastPublishedPrice();
                 BigDecimal avg = snapshot.getAvgPrice();
-                BigDecimal high = avg.multiply(BigDecimal.ONE.add(guard.getHighPercent().movePointLeft(2)));
-                BigDecimal low = avg.multiply(BigDecimal.ONE.subtract(guard.getLowPercent().movePointLeft(2)));
+                BigDecimal high = avg.multiply(BigDecimal.ONE.add(highPercent.movePointLeft(2)));
+                BigDecimal low = avg.multiply(BigDecimal.ONE.subtract(lowPercent.movePointLeft(2)));
                 if (yours.compareTo(high) > 0) {
-                    alerts.recordPriceGuard(listing, "PRICE_HIGH", yours, avg, guard);
+                    opportunities.recordPriceGuard(
+                            listing, BuyingOpportunity.TYPE_PRICE_HIGH, yours, avg, highPercent, lowPercent);
                 } else if (yours.compareTo(low) < 0) {
-                    alerts.recordPriceGuard(listing, "PRICE_LOW", yours, avg, guard);
+                    opportunities.recordPriceGuard(
+                            listing, BuyingOpportunity.TYPE_PRICE_LOW, yours, avg, highPercent, lowPercent);
                 }
             });
         }
@@ -332,7 +335,9 @@ public class MarketScanService {
 
     private Set<String> previousFingerprints(UUID catalogId, Platform platform) {
         Set<String> set = new HashSet<>();
-        marketListings.findByCatalogItemIdAndPlatform(catalogId, platform).forEach(l -> set.add(l.getFingerprint()));
+        marketListings.findByCatalogItemIdAndPlatformAndSnapshotScanTrigger(
+                catalogId, platform, ScanTrigger.AUTOMATIC
+        ).forEach(l -> set.add(l.getFingerprint()));
         return set;
     }
 

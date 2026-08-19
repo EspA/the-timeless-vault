@@ -14,7 +14,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "market_scan_log")
-public class MarketScanLog {
+public class ScanLog {
 
     @Id
     private UUID id;
@@ -49,7 +49,7 @@ public class MarketScanLog {
     @Column(name = "scanned_at", nullable = false)
     private Instant scannedAt;
 
-    public static MarketScanLog create(
+    public static ScanLog create(
             CatalogItem catalog,
             Platform platform,
             ScanTrigger trigger,
@@ -57,7 +57,7 @@ public class MarketScanLog {
             Integer listingCount,
             String message
     ) {
-        MarketScanLog log = new MarketScanLog();
+        ScanLog log = new ScanLog();
         log.id = UUID.randomUUID();
         log.catalogItemId = catalog.getId();
         log.setNumber = catalog.getSetNumber();

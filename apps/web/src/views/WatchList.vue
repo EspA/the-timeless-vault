@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { api, SCAN_INTERVALS, type SetWatch } from "../api";
 import { askConfirm } from "../confirm";
+import WatchNewModal from "../components/WatchNewModal.vue";
+
+const router = useRouter();
+const adding = ref(false);
 
 type Column = "set" | "name" | "status" | "theme" | "ebayScan" | "bricklinkScan";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
+const PAGE_SIZE = 20;
 const watches = ref<SetWatch[]>([]);
+const page = ref(0);
 const error = ref("");
 const sort = ref<Sort>({ key: "set", dir: "asc" });
 const filters = ref({
@@ -60,7 +67,7 @@ const filtered = computed(() =>
   )
 );
 
-const visible = computed(() => {
+const sorted = computed(() => {
   const rows = [...filtered.value];
   const { key, dir } = sort.value;
   const direction = dir === "asc" ? 1 : -1;
@@ -80,12 +87,27 @@ const visible = computed(() => {
   return rows;
 });
 
+const total = computed(() => sorted.value.length);
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
+const visible = computed(() => {
+  const start = page.value * PAGE_SIZE;
+  return sorted.value.slice(start, start + PAGE_SIZE);
+});
+
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
+
+const rangeLabel = computed(() => {
+  if (!total.value) return `0 of ${watches.value.length} watches`;
+  const start = page.value * PAGE_SIZE + 1;
+  const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
+  return `${start}–${end} of ${total.value} watches`;
+});
 
 const sortBy = (key: Column) => {
   sort.value = sort.value.key === key
     ? { key, dir: sort.value.dir === "asc" ? "desc" : "asc" }
     : { key, dir: "asc" };
+  page.value = 0;
 };
 
 const sortMark = (key: Column) => {
@@ -104,15 +126,36 @@ const clearFilters = () => {
   };
 };
 
+const previous = () => {
+  if (page.value <= 0) return;
+  page.value -= 1;
+};
+
+const next = () => {
+  if (page.value + 1 >= totalPages.value) return;
+  page.value += 1;
+};
+
+watch(filters, () => {
+  page.value = 0;
+}, { deep: true });
+
+watch(totalPages, (pages) => {
+  if (page.value >= pages) page.value = Math.max(0, pages - 1);
+});
+
 const load = async () => {
   watches.value = await api.get<SetWatch[]>("/api/set-watches");
 };
 
 const remove = async (watch: SetWatch) => {
-  if (!(await askConfirm(`Stop watching ${watch.setNumber} ${watch.name}?`, {
-    title: "Stop watching",
-    confirmLabel: "Stop watching",
-  }))) {
+  if (!(await askConfirm(
+    `Stop watching ${watch.setNumber} ${watch.name}? Buying opportunity alerts and scan history for this set will also be deleted.`,
+    {
+      title: "Stop watching",
+      confirmLabel: "Stop watching",
+    }
+  ))) {
     return;
   }
   error.value = "";
@@ -122,6 +165,11 @@ const remove = async (watch: SetWatch) => {
   } catch (e) {
     error.value = (e as Error).message;
   }
+};
+
+const onSaved = async (watch: SetWatch) => {
+  adding.value = false;
+  await router.push(`/watches/${watch.id}`);
 };
 
 onMounted(async () => {
@@ -139,15 +187,21 @@ onMounted(async () => {
       <div>
         <h1>Items watch</h1>
       </div>
-      <router-link class="btn gold" to="/watches/new">New item watch</router-link>
+      <button class="btn gold" type="button" @click="adding = true">New item watch</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
       <div v-if="watches.length" class="pager" style="margin:0 0 0.85rem">
-        <span class="muted">{{ visible.length }} of {{ watches.length }} watches</span>
-        <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
-          Clear filters
-        </button>
+        <span class="muted">{{ rangeLabel }}</span>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
+            Clear filters
+          </button>
+          <template v-if="totalPages > 1">
+            <button class="btn secondary compact" type="button" :disabled="page <= 0" @click="previous">Previous</button>
+            <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages" @click="next">Next</button>
+          </template>
+        </div>
       </div>
       <div class="table-scroll">
         <table>
@@ -200,7 +254,7 @@ onMounted(async () => {
               <td>{{ scanFrequency(watch.ebayScanIntervalMinutes) }}</td>
               <td>{{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</td>
               <td>
-                <button class="btn danger" type="button" @click="remove(watch)">Delete</button>
+                <button class="btn danger compact" type="button" @click="remove(watch)">Delete</button>
               </td>
             </tr>
             <tr v-if="!visible.length">
@@ -209,6 +263,14 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
+      <div v-if="totalPages > 1" class="pager">
+        <span class="muted">{{ rangeLabel }}</span>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn secondary compact" type="button" :disabled="page <= 0" @click="previous">Previous</button>
+          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages" @click="next">Next</button>
+        </div>
+      </div>
     </div>
+    <WatchNewModal v-if="adding" @close="adding = false" @saved="onSaved" />
   </div>
 </template>

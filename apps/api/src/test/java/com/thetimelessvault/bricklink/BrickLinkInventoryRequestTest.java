@@ -45,6 +45,28 @@ class BrickLinkInventoryRequestTest {
     }
 
     @Test
+    void inventoryUpdateSendsPriceAndQuantityDelta() {
+        CatalogItem catalog = CatalogItem.create("10236-1");
+        InventoryItem item = InventoryItem.create(catalog, "SKU-10236");
+        item.setBricklinkPrice(new BigDecimal("210.00"));
+        item.setQuantity(2);
+        item.setShortDescription("New in sealed box");
+        item.setCondition(ItemCondition.NEW_SEALED);
+        BrickLinkClient client = new BrickLinkClient(new AppProperties(), new ObjectMapper());
+
+        ObjectNode changed = client.inventoryUpdateRequest(item, 1);
+        assertEquals(1, changed.path("quantity").asInt());
+        assertEquals("210.00", changed.path("unit_price").asText());
+        assertEquals("New in sealed box", changed.path("description").asText());
+        assertTrue(changed.path("item").isMissingNode());
+        assertTrue(changed.path("is_stock_room").isMissingNode());
+
+        ObjectNode unchangedQty = client.inventoryUpdateRequest(item, 0);
+        assertTrue(unchangedQty.path("quantity").isMissingNode());
+        assertEquals("210.00", unchangedQty.path("unit_price").asText());
+    }
+
+    @Test
     void stockRoomUpdateListsOrHidesTheLot() {
         BrickLinkClient client = new BrickLinkClient(new AppProperties(), new ObjectMapper());
 

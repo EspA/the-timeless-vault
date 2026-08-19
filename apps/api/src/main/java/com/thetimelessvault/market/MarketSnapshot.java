@@ -49,18 +49,23 @@ public class MarketSnapshot {
     @Column(name = "listing_count")
     private Integer listingCount;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scan_trigger")
+    private ScanTrigger scanTrigger;
+
     @Column(name = "scanned_at", nullable = false)
     private Instant scannedAt;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    public static MarketSnapshot create(CatalogItem catalog, Platform platform, String condition) {
+    public static MarketSnapshot create(CatalogItem catalog, Platform platform, String condition, ScanTrigger trigger) {
         MarketSnapshot snapshot = new MarketSnapshot();
         snapshot.id = UUID.randomUUID();
         snapshot.catalogItem = catalog;
         snapshot.platform = platform;
         snapshot.condition = condition;
+        snapshot.scanTrigger = trigger;
         snapshot.scannedAt = Instant.now();
         snapshot.createdAt = Instant.now();
         return snapshot;
@@ -120,6 +125,10 @@ public class MarketSnapshot {
 
     public void setListingCount(Integer listingCount) {
         this.listingCount = listingCount;
+    }
+
+    public ScanTrigger getScanTrigger() {
+        return scanTrigger;
     }
 
     public Instant getScannedAt() {

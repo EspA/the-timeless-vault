@@ -35,6 +35,10 @@ public class PublishJob {
     @Column(nullable = false)
     private JobStatus status = JobStatus.QUEUED;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ListingAction action = ListingAction.CREATE;
+
     @Column(columnDefinition = "text")
     private String error;
 
@@ -48,11 +52,16 @@ public class PublishJob {
     private Instant createdAt;
 
     public static PublishJob queued(InventoryItem item, Platform platform) {
+        return queued(item, platform, ListingAction.CREATE);
+    }
+
+    public static PublishJob queued(InventoryItem item, Platform platform, ListingAction action) {
         PublishJob job = new PublishJob();
         job.id = UUID.randomUUID();
         job.inventoryItem = item;
         job.platform = platform;
         job.status = JobStatus.QUEUED;
+        job.action = action == null ? ListingAction.CREATE : action;
         job.createdAt = Instant.now();
         return job;
     }
@@ -84,6 +93,10 @@ public class PublishJob {
 
     public Platform getPlatform() {
         return platform;
+    }
+
+    public ListingAction getAction() {
+        return action == null ? ListingAction.CREATE : action;
     }
 
     public JobStatus getStatus() {

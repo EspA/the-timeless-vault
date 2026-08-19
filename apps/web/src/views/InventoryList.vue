@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { api, CONDITIONS, visibilityStatusLabel, type InventoryItem } from "../api";
 import { askConfirm } from "../confirm";
+import ItemNewModal from "../components/ItemNewModal.vue";
+
+const router = useRouter();
+const adding = ref(false);
 
 type Column = "sku" | "set" | "title" | "created" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
 type Sort = { key: Column; dir: "asc" | "desc" };
@@ -172,6 +177,11 @@ const remove = async (item: InventoryItem) => {
   }
 };
 
+const onSaved = async (item: InventoryItem) => {
+  adding.value = false;
+  await router.push(`/inventory/${item.id}`);
+};
+
 onMounted(async () => {
   try {
     await load();
@@ -185,7 +195,7 @@ onMounted(async () => {
   <div class="grid">
     <div style="display:flex;justify-content:space-between;align-items:end">
       <h1>Inventory</h1>
-      <router-link class="btn gold" to="/inventory/new">Add item</router-link>
+      <button class="btn gold" type="button" @click="adding = true">Add item</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
@@ -285,7 +295,7 @@ onMounted(async () => {
               </td>
               <td>{{ formatCreated(item.createdAt) }}</td>
               <td>
-                <button class="btn danger" type="button" @click="remove(item)">Delete</button>
+                <button class="btn danger compact" type="button" @click="remove(item)">Delete</button>
               </td>
             </tr>
             <tr v-if="!visible.length">
@@ -295,5 +305,6 @@ onMounted(async () => {
         </table>
       </div>
     </div>
+    <ItemNewModal v-if="adding" @close="adding = false" @saved="onSaved" />
   </div>
 </template>

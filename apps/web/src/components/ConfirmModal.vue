@@ -10,6 +10,10 @@ const onKey = (event: KeyboardEvent) => {
     event.preventDefault();
     closeConfirm(false);
   }
+  if (event.key === "Enter" && !confirmDialog.showCancel) {
+    event.preventDefault();
+    closeConfirm(true);
+  }
 };
 
 onMounted(() => window.addEventListener("keydown", onKey));
@@ -34,8 +38,18 @@ watch(
         <h3 id="confirm-title">{{ confirmDialog.title }}</h3>
         <p v-for="(line, index) in lines" :key="index">{{ line }}</p>
         <div class="confirm-actions">
-          <button class="btn secondary" type="button" @click="closeConfirm(false)">Cancel</button>
-          <button class="btn danger" type="button" @click="closeConfirm(true)">{{ confirmDialog.confirmLabel }}</button>
+          <button
+            v-if="confirmDialog.showCancel"
+            class="btn secondary"
+            type="button"
+            @click="closeConfirm(false)"
+          >{{ confirmDialog.cancelLabel }}</button>
+          <button
+            class="btn"
+            :class="confirmDialog.variant"
+            type="button"
+            @click="closeConfirm(true)"
+          >{{ confirmDialog.confirmLabel }}</button>
         </div>
       </div>
     </div>

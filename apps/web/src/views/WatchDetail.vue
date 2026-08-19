@@ -96,10 +96,13 @@ const save = async () => {
 
 const remove = async () => {
   if (!watch.value) return;
-  if (!(await askConfirm(`Stop watching ${watch.value.setNumber} ${watch.value.name}?`, {
-    title: "Stop watching",
-    confirmLabel: "Stop watching",
-  }))) {
+  if (!(await askConfirm(
+    `Stop watching ${watch.value.setNumber} ${watch.value.name}? Buying opportunity alerts and scan history for this set will also be deleted.`,
+    {
+      title: "Stop watching",
+      confirmLabel: "Stop watching",
+    }
+  ))) {
     return;
   }
   error.value = "";
@@ -159,7 +162,7 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
         {{ saving ? "Saving…" : justSaved ? "Saved" : "Save watch" }}
       </button>
       <span v-if="justSaved" class="save-note">Filters saved</span>
-      <button class="btn danger" type="button" @click="remove">Delete</button>
+      <button class="btn danger compact" type="button" @click="remove">Delete</button>
     </div>
   </div>
 </template>

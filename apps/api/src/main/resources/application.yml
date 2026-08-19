@@ -27,6 +27,10 @@ spring:
     properties:
       mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
       mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
 
 server:
   port: ${PORT:8080}

@@ -36,6 +36,47 @@ type Dashboard = {
   ebayError?: string;
 };
 type Sort = { key: string; dir: "asc" | "desc" };
+type EbayFilters = {
+  photo: string;
+  title: string;
+  price: string;
+  shipping: string;
+  total: string;
+  lastBid: string;
+  bestOffer: string;
+  feedback: string;
+  seller: string;
+};
+type BricklinkFilters = {
+  photo: string;
+  title: string;
+  country: string;
+  price: string;
+  condition: string;
+  seller: string;
+  qty: string;
+};
+
+const emptyEbayFilters = (): EbayFilters => ({
+  photo: "",
+  title: "",
+  price: "",
+  shipping: "",
+  total: "",
+  lastBid: "",
+  bestOffer: "",
+  feedback: "",
+  seller: "",
+});
+const emptyBricklinkFilters = (): BricklinkFilters => ({
+  photo: "",
+  title: "",
+  country: "",
+  price: "",
+  condition: "",
+  seller: "",
+  qty: "",
+});
 
 const PAGE_SIZE = 10;
 const route = useRoute();
@@ -45,12 +86,16 @@ const dash = ref<Dashboard | null>(null);
 const error = ref("");
 const ebaySort = ref<Sort>({ key: "total", dir: "asc" });
 const bricklinkSort = ref<Sort>({ key: "price", dir: "asc" });
+const ebayFilters = ref(emptyEbayFilters());
+const bricklinkFilters = ref(emptyBricklinkFilters());
 const ebayPage = ref(1);
 const bricklinkPage = ref(1);
 const listingTab = ref<"ebay" | "bricklink">("ebay");
+const minPriceInput = ref<number | null>(null);
 const maxPriceInput = ref<number | null>(null);
-const filterMessage = ref("");
 const scanning = ref<"ebay" | "bricklink" | "all" | "">("");
+const applyingAlertRange = ref(false);
+const filterMessage = ref("");
 
 const loadDash = async (catalogId: string) => {
   selected.value = catalogId;
@@ -217,6 +262,56 @@ const compareValues = (left: unknown, right: unknown) => {
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
 };
 
+const contains = (value: unknown, needle: string) => {
+  if (!needle.trim()) return true;
+  return String(value ?? "").toLowerCase().includes(needle.trim().toLowerCase());
+};
+
+const matchesPhoto = (row: Listing, filter: string) => {
+  if (!filter) return true;
+  const has = Boolean(row.imageUrl);
+  return filter === "yes" ? has : !has;
+};
+
+const matchesPriceRange = (price?: number | null) => {
+  if (minPriceInput.value == null && maxPriceInput.value == null) {
+    return true;
+  }
+  if (price == null || Number.isNaN(Number(price))) {
+    return false;
+  }
+  if (minPriceInput.value != null && price < minPriceInput.value) {
+    return false;
+  }
+  return maxPriceInput.value == null || price <= maxPriceInput.value;
+};
+
+const matchesEbay = (row: Listing, filters: EbayFilters) =>
+  matchesPriceRange(row.price)
+  && matchesPhoto(row, filters.photo)
+  && contains(row.title, filters.title)
+  && contains(money(row.price), filters.price)
+  && contains(shipping(row), filters.shipping)
+  && contains(money(totalCost(row)), filters.total)
+  && contains(lastBid(row), filters.lastBid)
+  && (!filters.bestOffer || (filters.bestOffer === "yes") === Boolean(row.bestOffer))
+  && contains(feedback(row), filters.feedback)
+  && contains(row.seller, filters.seller);
+
+const matchesBricklink = (row: Listing, filters: BricklinkFilters) =>
+  matchesPriceRange(row.price)
+  && matchesPhoto(row, filters.photo)
+  && contains(row.title, filters.title)
+  && contains(row.sellerCountry, filters.country)
+  && contains(money(row.price), filters.price)
+  && (!filters.condition || row.condition === filters.condition)
+  && contains(row.seller, filters.seller)
+  && contains(row.quantity, filters.qty);
+
+const uniqueOptions = (rows: Listing[], pick: (row: Listing) => string | undefined) =>
+  [...new Set(rows.map((row) => pick(row)?.trim() || "").filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
 const sortedListings = (rows: Listing[], sort: Sort) =>
   [...rows].sort((a, b) => {
     const cmp = compareValues(sortValue(a, sort.key), sortValue(b, sort.key));
@@ -228,8 +323,18 @@ const paginate = (rows: Listing[], page: number) => {
   return rows.slice(start, start + PAGE_SIZE);
 };
 
-const ebaySorted = computed(() => sortedListings(dash.value?.ebayListings ?? [], ebaySort.value));
-const bricklinkSorted = computed(() => sortedListings(dash.value?.bricklinkListings ?? [], bricklinkSort.value));
+const ebayFiltered = computed(() =>
+  (dash.value?.ebayListings ?? []).filter((row) => matchesEbay(row, ebayFilters.value))
+);
+const bricklinkFiltered = computed(() =>
+  (dash.value?.bricklinkListings ?? []).filter((row) => matchesBricklink(row, bricklinkFilters.value))
+);
+const ebaySorted = computed(() => sortedListings(ebayFiltered.value, ebaySort.value));
+const bricklinkSorted = computed(() => sortedListings(bricklinkFiltered.value, bricklinkSort.value));
+const bricklinkCountries = computed(() => uniqueOptions(dash.value?.bricklinkListings ?? [], (row) => row.sellerCountry));
+const bricklinkConditions = computed(() => uniqueOptions(dash.value?.bricklinkListings ?? [], (row) => row.condition));
+const ebayFilterCount = computed(() => Object.values(ebayFilters.value).filter((value) => value.trim()).length);
+const bricklinkFilterCount = computed(() => Object.values(bricklinkFilters.value).filter((value) => value.trim()).length);
 const ebayPages = computed(() => Math.max(1, Math.ceil(ebaySorted.value.length / PAGE_SIZE)));
 const bricklinkPages = computed(() => Math.max(1, Math.ceil(bricklinkSorted.value.length / PAGE_SIZE)));
 const ebayListings = computed(() => paginate(ebaySorted.value, ebayPage.value));
@@ -262,6 +367,13 @@ const sortMark = (sort: Sort, key: string) => {
   return sort.dir === "asc" ? " ▲" : " ▼";
 };
 
+const clearEbayFilters = () => {
+  ebayFilters.value = emptyEbayFilters();
+};
+const clearBricklinkFilters = () => {
+  bricklinkFilters.value = emptyBricklinkFilters();
+};
+
 watch(ebayPages, (pages) => {
   if (ebayPage.value > pages) ebayPage.value = pages;
 });
@@ -273,20 +385,22 @@ watch(
   () => {
     ebayPage.value = 1;
     bricklinkPage.value = 1;
+    ebayFilters.value = emptyEbayFilters();
+    bricklinkFilters.value = emptyBricklinkFilters();
+    minPriceInput.value = null;
+    maxPriceInput.value = null;
+    filterMessage.value = "";
   }
 );
+watch(ebayFilters, () => { ebayPage.value = 1; }, { deep: true });
+watch(bricklinkFilters, () => { bricklinkPage.value = 1; }, { deep: true });
+watch([minPriceInput, maxPriceInput], () => {
+  ebayPage.value = 1;
+  bricklinkPage.value = 1;
+});
 
 const selectedWatch = computed(() =>
   watches.value.find((watch) => watch.catalogId === selected.value) ?? null
-);
-
-watch(
-  selectedWatch,
-  (watch) => {
-    maxPriceInput.value = watch?.maxPrice ?? null;
-    filterMessage.value = "";
-  },
-  { immediate: true }
 );
 
 const parsePrice = (raw: string) => {
@@ -297,11 +411,12 @@ const parsePrice = (raw: string) => {
   return Number.isFinite(value) ? value : null;
 };
 
-const saveMaxPrice = async () => {
+const applyRangeForAlert = async () => {
   const watch = selectedWatch.value;
-  if (!watch) return;
+  if (!watch || applyingAlertRange.value) return;
   error.value = "";
   filterMessage.value = "";
+  applyingAlertRange.value = true;
   try {
     const saved = await api.put<SetWatch>(`/api/set-watches/${watch.id}`, {
       enabled: watch.enabled,
@@ -310,13 +425,15 @@ const saveMaxPrice = async () => {
       ebayFeedbackMin: watch.ebayFeedbackMin,
       ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
       bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
-      minPrice: watch.minPrice ?? null,
+      minPrice: minPriceInput.value,
       maxPrice: maxPriceInput.value,
     });
     watches.value = watches.value.map((row) => (row.id === saved.id ? saved : row));
-    filterMessage.value = "Max price saved.";
+    filterMessage.value = "Alert price range updated.";
   } catch (e) {
-    error.value = (e as Error).message;
+    error.value = e instanceof Error ? e.message : "Could not save alert price range";
+  } finally {
+    applyingAlertRange.value = false;
   }
 };
 
@@ -361,7 +478,7 @@ onMounted(async () => {
     <p v-if="selectedWatch" class="muted">{{ lastScanLabel }}</p>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="filterMessage" class="muted">{{ filterMessage }}</p>
-    <p v-if="!watches.length" class="muted">No sets are watched yet. Add one from <router-link to="/watches/new">New item watch</router-link>.</p>
+    <p v-if="!watches.length" class="muted">No sets are watched yet. Add one with <router-link to="/watches">New item watch</router-link>.</p>
     <div class="card grid">
       <div style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap">
         <label style="flex:1">Watched set
@@ -387,6 +504,16 @@ onMounted(async () => {
         >Market filters</router-link>
       </div>
       <div v-if="selectedWatch" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap">
+        <label style="max-width:12rem">Min price
+          <input
+            :value="minPriceInput ?? ''"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="No minimum"
+            @input="minPriceInput = parsePrice(($event.target as HTMLInputElement).value)"
+          />
+        </label>
         <label style="max-width:12rem">Max price
           <input
             :value="maxPriceInput ?? ''"
@@ -397,7 +524,14 @@ onMounted(async () => {
             @input="maxPriceInput = parsePrice(($event.target as HTMLInputElement).value)"
           />
         </label>
-        <button class="btn gold" type="button" :disabled="!!scanning" @click="saveMaxPrice">Save</button>
+        <button
+          class="btn gold"
+          type="button"
+          :disabled="!!scanning || applyingAlertRange"
+          @click="applyRangeForAlert"
+        >
+          {{ applyingAlertRange ? "Saving…" : "Apply range for alert" }}
+        </button>
       </div>
     </div>
     <ScanProgressModal :open="!!scanning" :title="scanTitle" :message="scanMessage" />
@@ -481,6 +615,29 @@ onMounted(async () => {
                 <th><button class="sort-btn" type="button" @click="sortEbay('feedback')">Feedback{{ sortMark(ebaySort, 'feedback') }}</button></th>
                 <th><button class="sort-btn" type="button" @click="sortEbay('seller')">Seller{{ sortMark(ebaySort, 'seller') }}</button></th>
               </tr>
+              <tr>
+                <th>
+                  <select v-model="ebayFilters.photo" class="column-filter">
+                    <option value="">All</option>
+                    <option value="yes">Has photo</option>
+                    <option value="no">No photo</option>
+                  </select>
+                </th>
+                <th><input v-model="ebayFilters.title" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="ebayFilters.price" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="ebayFilters.shipping" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="ebayFilters.total" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="ebayFilters.lastBid" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th>
+                  <select v-model="ebayFilters.bestOffer" class="column-filter">
+                    <option value="">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </th>
+                <th><input v-model="ebayFilters.feedback" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="ebayFilters.seller" class="column-filter" type="search" placeholder="Filter" /></th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="row in ebayListings" :key="row.id" :style="{ fontWeight: row.own ? '700' : '400' }">
@@ -501,16 +658,19 @@ onMounted(async () => {
                 <td>{{ row.seller || "—" }}</td>
               </tr>
               <tr v-if="!ebaySorted.length">
-                <td colspan="9" class="muted">No eBay listings in this scan.</td>
+                <td colspan="9" class="muted">{{ dash.ebayListings.length ? "No eBay listings match those filters." : "No eBay listings in this scan." }}</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div v-if="ebaySorted.length" class="pager">
-          <span class="muted">{{ rangeLabel(ebayPage, ebaySorted.length) }}</span>
-          <div v-if="ebayPages > 1" style="display:flex;gap:0.5rem">
-            <button class="btn secondary" type="button" :disabled="ebayPage <= 1" @click="ebayPage -= 1">Previous</button>
-            <button class="btn secondary" type="button" :disabled="ebayPage >= ebayPages" @click="ebayPage += 1">Next</button>
+        <div v-if="ebaySorted.length || ebayFilterCount" class="pager">
+          <span class="muted">{{ rangeLabel(ebayPage, ebaySorted.length) }}{{ ebayFilterCount ? ` · ${dash.ebayListings.length} total` : "" }}</span>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button v-if="ebayFilterCount" class="btn secondary compact" type="button" @click="clearEbayFilters">Clear filters</button>
+            <template v-if="ebayPages > 1">
+              <button class="btn secondary compact" type="button" :disabled="ebayPage <= 1" @click="ebayPage -= 1">Previous</button>
+              <button class="btn secondary compact" type="button" :disabled="ebayPage >= ebayPages" @click="ebayPage += 1">Next</button>
+            </template>
           </div>
         </div>
         </div>
@@ -526,6 +686,31 @@ onMounted(async () => {
                 <th><button class="sort-btn" type="button" @click="sortBricklink('condition')">Condition{{ sortMark(bricklinkSort, 'condition') }}</button></th>
                 <th><button class="sort-btn" type="button" @click="sortBricklink('seller')">Seller{{ sortMark(bricklinkSort, 'seller') }}</button></th>
                 <th><button class="sort-btn" type="button" @click="sortBricklink('qty')">Qty{{ sortMark(bricklinkSort, 'qty') }}</button></th>
+              </tr>
+              <tr>
+                <th>
+                  <select v-model="bricklinkFilters.photo" class="column-filter">
+                    <option value="">All</option>
+                    <option value="yes">Has photo</option>
+                    <option value="no">No photo</option>
+                  </select>
+                </th>
+                <th><input v-model="bricklinkFilters.title" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th>
+                  <select v-model="bricklinkFilters.country" class="column-filter">
+                    <option value="">All</option>
+                    <option v-for="country in bricklinkCountries" :key="country" :value="country">{{ country }}</option>
+                  </select>
+                </th>
+                <th><input v-model="bricklinkFilters.price" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th>
+                  <select v-model="bricklinkFilters.condition" class="column-filter">
+                    <option value="">All</option>
+                    <option v-for="condition in bricklinkConditions" :key="condition" :value="condition">{{ condition }}</option>
+                  </select>
+                </th>
+                <th><input v-model="bricklinkFilters.seller" class="column-filter" type="search" placeholder="Filter" /></th>
+                <th><input v-model="bricklinkFilters.qty" class="column-filter" type="search" placeholder="Filter" /></th>
               </tr>
             </thead>
             <tbody>
@@ -545,16 +730,19 @@ onMounted(async () => {
                 <td>{{ row.quantity ?? "—" }}</td>
               </tr>
               <tr v-if="!bricklinkSorted.length">
-                <td colspan="7" class="muted">No BrickLink listings in this scan.</td>
+                <td colspan="7" class="muted">{{ dash.bricklinkListings.length ? "No BrickLink listings match those filters." : "No BrickLink listings in this scan." }}</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div v-if="bricklinkSorted.length" class="pager">
-          <span class="muted">{{ rangeLabel(bricklinkPage, bricklinkSorted.length) }}</span>
-          <div v-if="bricklinkPages > 1" style="display:flex;gap:0.5rem">
-            <button class="btn secondary" type="button" :disabled="bricklinkPage <= 1" @click="bricklinkPage -= 1">Previous</button>
-            <button class="btn secondary" type="button" :disabled="bricklinkPage >= bricklinkPages" @click="bricklinkPage += 1">Next</button>
+        <div v-if="bricklinkSorted.length || bricklinkFilterCount" class="pager">
+          <span class="muted">{{ rangeLabel(bricklinkPage, bricklinkSorted.length) }}{{ bricklinkFilterCount ? ` · ${dash.bricklinkListings.length} total` : "" }}</span>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button v-if="bricklinkFilterCount" class="btn secondary compact" type="button" @click="clearBricklinkFilters">Clear filters</button>
+            <template v-if="bricklinkPages > 1">
+              <button class="btn secondary compact" type="button" :disabled="bricklinkPage <= 1" @click="bricklinkPage -= 1">Previous</button>
+              <button class="btn secondary compact" type="button" :disabled="bricklinkPage >= bricklinkPages" @click="bricklinkPage += 1">Next</button>
+            </template>
           </div>
         </div>
         </div>

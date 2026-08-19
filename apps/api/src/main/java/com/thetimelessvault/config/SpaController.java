@@ -16,7 +16,10 @@ public class SpaController {
             "/market",
             "/market/**",
             "/scans",
+            "/scan-logs",
             "/alerts",
+            "/buying-opportunities",
+            "/listing-logs",
             "/settings"
     })
     public String spa() {

@@ -1,9 +1,11 @@
 package com.thetimelessvault.watch;
 
+import com.thetimelessvault.opportunities.BuyingOpportunityService;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.catalog.CatalogService;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.ThemeMapper;
+import com.thetimelessvault.market.ScanLogRepository;
 import com.thetimelessvault.settings.WatchDefaults;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +20,21 @@ public class SetWatchService {
     private final SetWatchRepository watches;
     private final CatalogService catalogService;
     private final WatchDefaults watchDefaults;
+    private final BuyingOpportunityService opportunities;
+    private final ScanLogRepository scanLogs;
 
-    public SetWatchService(SetWatchRepository watches, CatalogService catalogService, WatchDefaults watchDefaults) {
+    public SetWatchService(
+            SetWatchRepository watches,
+            CatalogService catalogService,
+            WatchDefaults watchDefaults,
+            BuyingOpportunityService opportunities,
+            ScanLogRepository scanLogs
+    ) {
         this.watches = watches;
         this.catalogService = catalogService;
         this.watchDefaults = watchDefaults;
+        this.opportunities = opportunities;
+        this.scanLogs = scanLogs;
     }
 
     public List<SetWatch> list() {
@@ -63,6 +75,24 @@ public class SetWatchService {
     }
 
     @Transactional
+    public boolean ensureWatch(CatalogItem catalog, boolean enabled) {
+        if (catalog == null) {
+            return false;
+        }
+        var existing = watches.findByCatalogItemId(catalog.getId());
+        if (existing.isEmpty() && catalog.getSetNumber() != null && !catalog.getSetNumber().isBlank()) {
+            existing = watches.findBySetNumberIgnoreCase(catalog.getSetNumber());
+        }
+        if (existing.isPresent()) {
+            return false;
+        }
+        SetWatch watch = SetWatch.create(catalog);
+        applyFilters(watch, catalog, enabled, null, null, null, null, null, null, null, true);
+        watches.saveAndFlush(watch);
+        return true;
+    }
+
+    @Transactional
     public SetWatch update(
             UUID id,
             Boolean enabled,
@@ -91,7 +121,14 @@ public class SetWatchService {
 
     @Transactional
     public void delete(UUID id) {
-        watches.delete(get(id));
+        SetWatch watch = get(id);
+        CatalogItem catalog = watch.getCatalogItem();
+        opportunities.deleteNewListings(catalog.getId());
+        scanLogs.deleteByCatalogItemId(catalog.getId());
+        if (catalog.getSetNumber() != null && !catalog.getSetNumber().isBlank()) {
+            scanLogs.deleteBySetNumberIgnoreCase(catalog.getSetNumber());
+        }
+        watches.delete(watch);
     }
 
     private void applyFilters(

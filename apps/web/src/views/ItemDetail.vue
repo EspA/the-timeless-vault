@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, CONDITIONS, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
-import { askConfirm } from "../confirm";
+import { api, ApiError, CONDITIONS, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { askAlert, askConfirm } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "../components/EbayStoreCategoryField.vue";
@@ -25,6 +25,21 @@ const pendingPublishKind = ref<"publish" | "retry" | null>(null);
 const activityTitle = ref("Publish log");
 const publishLogs = ref<{ time: string; text: string; kind?: "ok" | "bad" }[]>([]);
 const jobStatus = ref<Record<string, string>>({});
+type MarketSnapshot = { min?: number; avg?: number; median?: number; max?: number; count?: number; scannedAt?: string };
+type MarketDashboard = { ebay?: MarketSnapshot | null; bricklink?: MarketSnapshot | null };
+const market = ref<MarketDashboard | null>(null);
+
+const loadMarket = async (catalogId?: string) => {
+  if (!catalogId) {
+    market.value = null;
+    return;
+  }
+  try {
+    market.value = await api.get<MarketDashboard>(`/api/market/${catalogId}`);
+  } catch {
+    market.value = null;
+  }
+};
 
 const load = async () => {
   const id = String(route.params.id);
@@ -32,6 +47,7 @@ const load = async () => {
   loaded.shopifyCollectionIds = loaded.shopifyCollectionIds ?? [];
   item.value = loaded;
   listings.value = await api.get<ChannelListing[]>(`/api/inventory/${id}/listings`);
+  await loadMarket(loaded.catalog?.id);
 };
 
 onMounted(async () => {
@@ -88,6 +104,49 @@ const saveChanges = async () => {
   }
 };
 
+const money = (value?: number | null) =>
+  value == null || Number.isNaN(Number(value)) ? "—" : `$${Number(value).toFixed(2)}`;
+
+const weightedMean = (
+  left: { value: number | null; count: number },
+  right: { value: number | null; count: number }
+) => {
+  const parts = [left, right].filter((part) => part.value != null && part.count > 0) as { value: number; count: number }[];
+  const total = parts.reduce((sum, part) => sum + part.count, 0);
+  if (!total) {
+    return null;
+  }
+  return parts.reduce((sum, part) => sum + part.value * part.count, 0) / total;
+};
+
+const combinedAverage = computed(() => weightedMean(
+  { value: market.value?.ebay?.avg ?? null, count: market.value?.ebay?.count ?? 0 },
+  { value: market.value?.bricklink?.avg ?? null, count: market.value?.bricklink?.count ?? 0 }
+));
+
+const combinedMedian = computed(() => weightedMean(
+  { value: market.value?.ebay?.median ?? null, count: market.value?.ebay?.count ?? 0 },
+  { value: market.value?.bricklink?.median ?? null, count: market.value?.bricklink?.count ?? 0 }
+));
+
+const hasMarketStats = computed(() =>
+  Boolean(market.value?.ebay?.count || market.value?.bricklink?.count)
+);
+
+const marketScanLabel = computed(() => {
+  const times = [market.value?.ebay?.scannedAt, market.value?.bricklink?.scannedAt]
+    .filter((value): value is string => Boolean(value));
+  if (!times.length) {
+    return "No scan yet";
+  }
+  const latest = times.reduce((newest, time) => (time > newest ? time : newest));
+  const parsed = new Date(latest);
+  if (Number.isNaN(parsed.getTime())) {
+    return "No scan yet";
+  }
+  return `Last scan ${parsed.toLocaleString()}`;
+});
+
 const upload = async (event: Event) => {
   const files = (event.target as HTMLInputElement).files;
   if (!files || !item.value) return;
@@ -124,7 +183,7 @@ const logLine = (text: string, kind?: "ok" | "bad") => {
   publishLogs.value.push({ time: new Date().toLocaleTimeString(), text, kind });
 };
 
-const waitForJobs = async (ids: string[]) => {
+const waitForJobs = async (ids: string[], successText = "published successfully") => {
   const done = new Set(["SUCCESS", "FAILED"]);
   const started = Date.now();
   while (Date.now() - started < 120000) {
@@ -138,7 +197,7 @@ const waitForJobs = async (ids: string[]) => {
       if (job.status === "RUNNING") {
         logLine(`${job.platform}: calling API…`);
       } else if (job.status === "SUCCESS") {
-        logLine(`${job.platform}: published successfully`, "ok");
+        logLine(`${job.platform}: ${successText}`, "ok");
       } else if (job.status === "FAILED") {
         logLine(`${job.platform}: failed${job.error ? ` — ${job.error}` : ""}`, "bad");
       } else {
@@ -179,6 +238,40 @@ const runChannelAction = async (summary: string, action: () => Promise<void>) =>
 };
 
 const includesEbay = (selected: string[]) => selected.includes("EBAY");
+
+const platformLabel = (platform: string) => {
+  if (platform === "EBAY") return "eBay";
+  if (platform === "BRICKLINK") return "BrickLink";
+  if (platform === "SHOPIFY") return "Shopify";
+  return platform;
+};
+
+const joinAnd = (parts: string[]) => {
+  if (parts.length <= 1) return parts[0] || "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+};
+
+const alreadyCreatedPlatforms = (selected: string[]) =>
+  selected.filter((platform) => listings.value.some((listing) => listing.platform === platform));
+
+const alreadyCreatedMessage = (platforms: string[]) => {
+  const names = platforms.map(platformLabel);
+  const hint = platforms.length === 1
+    ? "Uncheck that channel, or delete the existing listing. If it failed, use Retry."
+    : "Uncheck those channels, or delete the existing listings. If a listing failed, use Retry.";
+  if (platforms.length === 1) {
+    return `A ${names[0]} listing has already been created for this item.\n${hint}`;
+  }
+  return `Listings have already been created for ${joinAnd(names)}.\n${hint}`;
+};
+
+const warnIfAlreadyCreated = async (selected: string[]) => {
+  const existing = alreadyCreatedPlatforms(selected);
+  if (!existing.length) return false;
+  await askAlert(alreadyCreatedMessage(existing), { title: "Listing already exists" });
+  return true;
+};
 
 const openEbayCatalogReview = async (kind: "publish" | "retry") => {
   if (!item.value) return;
@@ -222,6 +315,7 @@ const joinValues = (values?: string[]) => (values && values.length ? values.join
 
 const publish = async () => {
   if (!item.value || publishing.value || ebayCatalogLoading.value || !platforms.value.length) return;
+  if (await warnIfAlreadyCreated(platforms.value)) return;
   if (includesEbay(platforms.value)) {
     await openEbayCatalogReview("publish");
     return;
@@ -231,6 +325,7 @@ const publish = async () => {
 
 const runPublish = async (selected: string[]) => {
   if (!item.value || publishing.value || !selected.length) return;
+  if (await warnIfAlreadyCreated(selected)) return;
   startPublishLog(`Publishing ${selected.join(", ")}…`);
   try {
     await save();
@@ -246,6 +341,12 @@ const runPublish = async (selected: string[]) => {
     logLine("Publish finished.");
     await load();
   } catch (e) {
+    if (e instanceof ApiError && e.status === 409) {
+      publishing.value = false;
+      showPublishLog.value = false;
+      await askAlert(e.message, { title: "Listing already exists" });
+      return;
+    }
     error.value = (e as Error).message;
     logLine(`Request failed — ${(e as Error).message}`, "bad");
   } finally {
@@ -297,6 +398,56 @@ const canDeleteBricklink = (listing: ChannelListing) =>
 
 const canDeleteEbay = (listing: ChannelListing) =>
   listing.platform === "EBAY" && listing.ebayStatus === "UNLISTED";
+
+const canRetry = (listing: ChannelListing) => listing.status === "FAILED";
+
+const canUpdateListing = (listing: ChannelListing) =>
+  listing.status === "PUBLISHED" && !!listing.externalId;
+
+const updatableListings = computed(() => listings.value.filter(canUpdateListing));
+
+const selectedUpdatable = computed(() =>
+  updatableListings.value.filter((listing) => platforms.value.includes(listing.platform))
+);
+
+const updateSelected = () => updateListings(selectedUpdatable.value);
+
+const updateListing = (listing: ChannelListing) => {
+  if (!canUpdateListing(listing)) return;
+  return updateListings([listing]);
+};
+
+const updateListings = async (targets: ChannelListing[]) => {
+  if (!item.value || publishing.value || !targets.length) return;
+  const names = targets.map((listing) => platformLabel(listing.platform));
+  const bricklink = targets.some((listing) => listing.platform === "BRICKLINK");
+  const confirmed = await askConfirm(
+    `Push the saved title, description, photos, price, and quantity to the existing ${joinAnd(names)} listing${names.length === 1 ? "" : "s"}?`
+      + (bricklink ? " BrickLink photos still have to be uploaded on BrickLink." : ""),
+    { title: names.length === 1 ? `Update ${names[0]}` : "Update listings", confirmLabel: "Update", cancelLabel: "Cancel", variant: "gold" }
+  );
+  if (!confirmed) return;
+  startPublishLog(`Updating ${names.join(", ")}…`, "Update log");
+  try {
+    await save();
+    logLine("Item saved. Queuing channel updates…");
+    const jobs = await api.post<PublishJob[]>(`/api/inventory/${item.value.id}/publish/update`, {
+      platforms: targets.map((listing) => listing.platform),
+    });
+    for (const job of jobs) {
+      jobStatus.value[job.id] = job.status;
+      logLine(`${job.platform}: queued`);
+    }
+    await waitForJobs(jobs.map((job) => job.id), "updated successfully");
+    logLine("Update finished.");
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+    logLine(`Request failed — ${(e as Error).message}`, "bad");
+  } finally {
+    publishing.value = false;
+  }
+};
 
 const toggleShopify = async (listing: ChannelListing) => {
   if (!item.value || publishing.value || !canToggleShopify(listing)) return;
@@ -398,7 +549,10 @@ const remove = async () => {
 
     <div class="grid save-fields" :class="{ flash: justSaved }">
     <div class="card grid">
-      <label>Title <input v-model="item.title" /></label>
+      <label>Title
+        <input v-model="item.title" :maxlength="LISTING_TITLE_MAX" />
+        <span class="muted">{{ (item.title || "").length }}/{{ LISTING_TITLE_MAX }}</span>
+      </label>
       <label>Description
         <RichTextEditor v-model="item.description" />
       </label>
@@ -406,6 +560,22 @@ const remove = async () => {
         <textarea class="short-description" v-model="item.shortDescription" maxlength="255" rows="2" />
         <span class="muted">{{ (item.shortDescription || "").length }}/255</span>
       </label>
+    </div>
+
+    <div class="card grid">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap">
+        <h3 style="margin:0">Market prices <span class="muted" style="font-size:1rem;font-weight:400">{{ marketScanLabel }}</span></h3>
+        <router-link class="btn secondary compact" :to="`/market/${item.catalog.id}`">Open market</router-link>
+      </div>
+      <div v-if="hasMarketStats" class="grid two">
+        <label>Median
+          <input :value="money(combinedMedian)" disabled />
+        </label>
+        <label>Average
+          <input :value="money(combinedAverage)" disabled />
+        </label>
+      </div>
+      <p v-else class="muted">Market statistics will show here after the first scan for this set.</p>
     </div>
 
     <div class="card grid">
@@ -483,7 +653,7 @@ const remove = async () => {
           {{ saving ? "Saving…" : justSaved ? "Saved" : "Save changes" }}
         </button>
         <span v-if="justSaved" class="save-note">Changes saved</span>
-        <button class="btn danger" type="button" @click="remove">Delete item</button>
+        <button class="btn danger compact" type="button" @click="remove">Delete item</button>
       </div>
     </div>
     </div>
@@ -493,9 +663,19 @@ const remove = async () => {
       <label v-for="p in ['SHOPIFY','BRICKLINK','EBAY']" :key="p">
         <input type="checkbox" :value="p" v-model="platforms" /> {{ p }}
       </label>
-      <button class="btn gold" type="button" :disabled="publishing || ebayCatalogLoading || !platforms.length" @click="publish">
-        {{ publishing || ebayCatalogLoading ? "Creating listing…" : "Create Listing" }}
-      </button>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn gold" type="button" :disabled="publishing || ebayCatalogLoading || !platforms.length" @click="publish">
+          {{ publishing || ebayCatalogLoading ? "Working…" : "Create Listing" }}
+        </button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="publishing || !selectedUpdatable.length"
+          @click="updateSelected"
+        >
+          Update listings
+        </button>
+      </div>
       <table>
         <thead><tr><th>Channel</th><th>Status</th><th>Link</th><th></th></tr></thead>
         <tbody>
@@ -538,15 +718,6 @@ const remove = async () => {
                   {{ visibilityActionLabel(listing.shopifyStatus) }}
                 </button>
                 <button
-                  v-if="canDeleteShopify(listing)"
-                  class="btn danger compact"
-                  type="button"
-                  :disabled="publishing"
-                  @click="deleteShopifyListing(listing)"
-                >
-                  Delete listing
-                </button>
-                <button
                   v-if="canToggleBricklink(listing)"
                   class="btn secondary compact"
                   type="button"
@@ -554,15 +725,6 @@ const remove = async () => {
                   @click="toggleBricklink(listing)"
                 >
                   {{ visibilityActionLabel(listing.bricklinkStatus) }}
-                </button>
-                <button
-                  v-if="canDeleteBricklink(listing)"
-                  class="btn danger compact"
-                  type="button"
-                  :disabled="publishing"
-                  @click="deleteBricklinkListing(listing)"
-                >
-                  Delete listing
                 </button>
                 <button
                   v-if="canToggleEbay(listing)"
@@ -574,6 +736,33 @@ const remove = async () => {
                   {{ visibilityActionLabel(listing.ebayStatus) }}
                 </button>
                 <button
+                  v-if="canUpdateListing(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="updateListing(listing)"
+                >
+                  Update
+                </button>
+                <button
+                  v-if="canDeleteShopify(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteShopifyListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button
+                  v-if="canDeleteBricklink(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteBricklinkListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button
                   v-if="canDeleteEbay(listing)"
                   class="btn danger compact"
                   type="button"
@@ -582,7 +771,15 @@ const remove = async () => {
                 >
                   Delete listing
                 </button>
-                <button class="btn secondary" type="button" :disabled="publishing || ebayCatalogLoading" @click="retry(listing.platform)">Retry</button>
+                <button
+                  v-if="canRetry(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing || ebayCatalogLoading"
+                  @click="retry(listing.platform)"
+                >
+                  Retry
+                </button>
               </div>
             </td>
           </tr>
