@@ -44,7 +44,8 @@ current_shop="${current_shop:-thetimelessvault.myshopify.com}"
 current_id="$(read_env SHOPIFY_CLIENT_ID)"
 
 echo "Shopify Admin token helper"
-echo "The token lasts 24 hours. Re-run this script when it expires."
+echo "The API refreshes this token automatically when SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are set."
+echo "This script is only needed to write those credentials into .env."
 echo
 
 read -r -p "Shop domain [${current_shop}]: " shop
@@ -118,4 +119,4 @@ hours=$((expires / 3600))
 echo "Updated $ENV_FILE"
 echo "SHOPIFY_SHOP_DOMAIN=$shop"
 echo "SHOPIFY_ADMIN_TOKEN saved (expires in about ${hours} hours)."
-echo "Restart the API so it picks up the new token."
+echo "Restart is not required for later expiry — the API will fetch a new token on the next Shopify call."

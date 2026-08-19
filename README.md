@@ -61,7 +61,7 @@ Price-guard emails fire when your live eBay or BrickLink price is outside ±15% 
 | Platform | Auth | Constraint |
 | --- | --- | --- |
 | BrickEconomy | `x-apikey` | 100 lookups/day, cached |
-| Shopify | Admin token | GraphQL `productCreate` + variant price |
+| Shopify | Client credentials (auto-refreshed Admin token) | GraphQL `productCreate` + variant price |
 | BrickLink | OAuth 1.0 | No photo upload; completeness `C`/`B`/`S` |
 | eBay | OAuth 2.0 user token | Inventory item → offer → publish. Needs business policies |
 

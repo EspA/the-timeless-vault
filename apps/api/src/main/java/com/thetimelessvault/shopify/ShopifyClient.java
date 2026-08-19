@@ -9,10 +9,12 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryItem;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,12 +27,19 @@ public class ShopifyClient {
 
     private final AppProperties.Shopify config;
     private final ObjectMapper mapper;
+    private final ShopifyTokenService tokens;
     private final RestClient restClient;
 
-    public ShopifyClient(AppProperties properties, ObjectMapper mapper) {
+    @Autowired
+    public ShopifyClient(AppProperties properties, ObjectMapper mapper, ShopifyTokenService tokens) {
+        this(properties, mapper, tokens, RestClient.builder().build());
+    }
+
+    ShopifyClient(AppProperties properties, ObjectMapper mapper, ShopifyTokenService tokens, RestClient restClient) {
         this.config = properties.getShopify();
         this.mapper = mapper;
-        this.restClient = RestClient.builder().build();
+        this.tokens = tokens;
+        this.restClient = restClient;
     }
 
     public boolean configured() {
@@ -114,10 +123,10 @@ public class ShopifyClient {
     }
 
     private List<Map<String, String>> storefrontCollections() {
-        if (config.getShopDomain() == null || config.getShopDomain().isBlank()) {
+        if (config.shopHost().isBlank()) {
             return List.of();
         }
-        String url = "https://" + config.getShopDomain() + "/collections.json?limit=250";
+        String url = "https://" + config.shopHost() + "/collections.json?limit=250";
         try {
             String raw = restClient.get()
                     .uri(url)
@@ -472,18 +481,34 @@ public class ShopifyClient {
         return ids;
     }
 
-    private JsonNode graphql(String query, JsonNode variables) {
+    JsonNode graphql(String query, JsonNode variables) {
         if (!config.configured()) {
             throw ApiException.unavailable("Shopify is not configured");
         }
+        try {
+            return executeGraphql(query, variables, tokens.accessToken());
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 401 && tokens.refreshable()) {
+                tokens.invalidate();
+                try {
+                    return executeGraphql(query, variables, tokens.accessToken());
+                } catch (RestClientResponseException retry) {
+                    throw shopifyHttpError(retry);
+                }
+            }
+            throw shopifyHttpError(e);
+        }
+    }
+
+    private JsonNode executeGraphql(String query, JsonNode variables, String accessToken) {
         ObjectNode body = mapper.createObjectNode();
         body.put("query", query);
         body.set("variables", variables);
-        String url = "https://" + config.getShopDomain() + "/admin/api/" + config.getApiVersion() + "/graphql.json";
+        String url = "https://" + config.shopHost() + "/admin/api/" + config.getApiVersion() + "/graphql.json";
         String raw = restClient.post()
                 .uri(url)
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("X-Shopify-Access-Token", config.getAdminToken())
+                .header("X-Shopify-Access-Token", accessToken)
                 .body(body.toString())
                 .retrieve()
                 .body(String.class);
@@ -498,6 +523,18 @@ public class ShopifyClient {
         } catch (Exception e) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not parse Shopify response");
         }
+    }
+
+    private ApiException shopifyHttpError(RestClientResponseException e) {
+        if (e.getStatusCode().value() == 401) {
+            if (tokens.refreshable()) {
+                return new ApiException(HttpStatus.BAD_GATEWAY, "Shopify rejected the Admin token after a refresh.");
+            }
+            return new ApiException(HttpStatus.BAD_GATEWAY,
+                    "Shopify Admin token was rejected. Set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET so it can be refreshed automatically.");
+        }
+        return new ApiException(HttpStatus.BAD_GATEWAY,
+                "Shopify request failed: " + e.getStatusCode() + " " + e.getStatusText());
     }
 
     private static void assertNoUserErrors(JsonNode payload) {

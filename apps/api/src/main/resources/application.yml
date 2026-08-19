@@ -61,6 +61,8 @@ app:
     user-agent: ${BRICKECONOMY_USER_AGENT:TheTimelessVault/1.0}
   shopify:
     shop-domain: ${SHOPIFY_SHOP_DOMAIN:}
+    client-id: ${SHOPIFY_CLIENT_ID:}
+    client-secret: ${SHOPIFY_CLIENT_SECRET:}
     admin-token: ${SHOPIFY_ADMIN_TOKEN:}
     api-version: ${SHOPIFY_API_VERSION:2025-10}
     category-id: ${SHOPIFY_CATEGORY_ID:}

@@ -183,13 +183,32 @@ public class AppProperties {
 
     public static class Shopify {
         private String shopDomain = "";
+        private String clientId = "";
+        private String clientSecret = "";
         private String adminToken = "";
         private String apiVersion = "2025-10";
         private String categoryId = "";
         private String locationName = "Private Mail Box";
 
         public boolean configured() {
-            return notBlank(shopDomain) && notBlank(adminToken);
+            return notBlank(shopDomain) && (notBlank(adminToken) || clientCredentialsConfigured());
+        }
+
+        public boolean clientCredentialsConfigured() {
+            return notBlank(clientId) && notBlank(clientSecret);
+        }
+
+        public String shopHost() {
+            String domain = shopDomain == null ? "" : shopDomain.trim();
+            if (domain.startsWith("https://")) {
+                domain = domain.substring("https://".length());
+            } else if (domain.startsWith("http://")) {
+                domain = domain.substring("http://".length());
+            }
+            while (domain.endsWith("/")) {
+                domain = domain.substring(0, domain.length() - 1);
+            }
+            return domain;
         }
 
         public String getShopDomain() {
@@ -198,6 +217,22 @@ public class AppProperties {
 
         public void setShopDomain(String shopDomain) {
             this.shopDomain = shopDomain;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = clientId;
+        }
+
+        public String getClientSecret() {
+            return clientSecret;
+        }
+
+        public void setClientSecret(String clientSecret) {
+            this.clientSecret = clientSecret;
         }
 
         public String getAdminToken() {
