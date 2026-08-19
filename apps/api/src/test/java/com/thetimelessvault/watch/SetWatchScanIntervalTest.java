@@ -57,6 +57,20 @@ class SetWatchScanIntervalTest {
     }
 
     @Test
+    void loadedZeroIntervalUsesFiveMinuteMinimum() throws Exception {
+        SetWatch watch = new SetWatch();
+        watch.setEnabled(true);
+        var field = SetWatch.class.getDeclaredField("ebayScanIntervalMinutes");
+        field.setAccessible(true);
+        field.setInt(watch, 0);
+        Instant last = Instant.parse("2026-08-16T12:00:00Z");
+        watch.recordEbayScan(null, last);
+
+        assertFalse(watch.isEbayDue(last.plusSeconds(60)));
+        assertTrue(watch.isEbayDue(last.plusSeconds(5 * 60)));
+    }
+
+    @Test
     void disabledWatchIsNeverDue() {
         SetWatch watch = newWatch(15, 360, null, null);
         watch.setEnabled(false);

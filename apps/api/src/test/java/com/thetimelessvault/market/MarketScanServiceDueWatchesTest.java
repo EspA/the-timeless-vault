@@ -14,6 +14,7 @@ import com.thetimelessvault.settings.PriceGuardDefaults;
 import com.thetimelessvault.settings.WatchDefaults;
 import com.thetimelessvault.watch.SetWatch;
 import com.thetimelessvault.watch.SetWatchRepository;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +52,7 @@ class MarketScanServiceDueWatchesTest {
     @Mock ScanLogRepository scanLogs;
     @Mock WatchDefaults watchDefaults;
     @Mock PriceGuardDefaults priceGuardDefaults;
+    @Mock ObjectProvider<MarketScanService> self;
 
     @InjectMocks
     MarketScanService service;
@@ -128,6 +130,27 @@ class MarketScanServiceDueWatchesTest {
 
         verify(ebayClient, never()).searchBrowse(anyString());
         verify(brickLinkClient, never()).forSaleNewSealedShipsToUsa(anyString());
+    }
+
+    @Test
+    void skipsEbayWhenBrowseIsNotConfigured() {
+        when(ebayClient.browseConfigured()).thenReturn(false);
+
+        service.scanDueWatches();
+
+        verify(ebayClient, never()).searchBrowse(anyString());
+        verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
+    }
+
+    @Test
+    void failedScanConsumesTheInterval() {
+        when(ebayClient.searchBrowse(anyString())).thenThrow(new RuntimeException("eBay down"));
+
+        service.scanDueWatches();
+        service.scanDueWatches();
+
+        verify(ebayClient).searchBrowse(anyString());
+        verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
     }
 
     @Test

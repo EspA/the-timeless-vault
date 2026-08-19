@@ -24,6 +24,7 @@ import com.thetimelessvault.watch.SetWatch;
 import com.thetimelessvault.watch.SetWatchRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -55,6 +56,7 @@ public class MarketScanService {
     private final ScanLogRepository scanLogs;
     private final WatchDefaults watchDefaults;
     private final PriceGuardDefaults priceGuardDefaults;
+    private final ObjectProvider<MarketScanService> self;
 
     public MarketScanService(
             SetWatchRepository setWatches,
@@ -68,7 +70,8 @@ public class MarketScanService {
             BuyingOpportunityService opportunities,
             ScanLogRepository scanLogs,
             WatchDefaults watchDefaults,
-            PriceGuardDefaults priceGuardDefaults
+            PriceGuardDefaults priceGuardDefaults,
+            ObjectProvider<MarketScanService> self
     ) {
         this.setWatches = setWatches;
         this.catalogItems = catalogItems;
@@ -82,28 +85,48 @@ public class MarketScanService {
         this.scanLogs = scanLogs;
         this.watchDefaults = watchDefaults;
         this.priceGuardDefaults = priceGuardDefaults;
+        this.self = self;
     }
 
     public void scanDueWatches() {
         Instant now = Instant.now();
+        boolean ebayReady = ebayClient.browseConfigured();
+        MarketScanService scans = scanner();
         for (SetWatch watch : setWatches.findEnabledWithCatalog()) {
             UUID catalogId = watch.getCatalogItem().getId();
-            if (watch.isEbayDue(now)) {
+            if (ebayReady && watch.isEbayDue(now)) {
                 try {
-                    scan(catalogId, Platform.EBAY, ScanTrigger.AUTOMATIC);
+                    scans.scan(catalogId, Platform.EBAY, ScanTrigger.AUTOMATIC);
                 } catch (Exception e) {
                     log.warn("eBay market scan failed for {}", watch.getSetNumber(), e);
+                    recordFailedPlatformScan(watch, Platform.EBAY);
                 }
             }
             if (watch.isBrickLinkDue(now)) {
                 try {
-                    scan(catalogId, Platform.BRICKLINK, ScanTrigger.AUTOMATIC);
+                    scans.scan(catalogId, Platform.BRICKLINK, ScanTrigger.AUTOMATIC);
                 } catch (Exception e) {
                     log.warn("BrickLink market scan failed for {}", watch.getSetNumber(), e);
+                    recordFailedPlatformScan(watch, Platform.BRICKLINK);
                 }
             }
         }
         evaluatePriceGuards();
+    }
+
+    private MarketScanService scanner() {
+        MarketScanService proxy = self == null ? null : self.getIfAvailable();
+        return proxy == null ? this : proxy;
+    }
+
+    private void recordFailedPlatformScan(SetWatch watch, Platform platform) {
+        Instant when = Instant.now();
+        if (platform == Platform.EBAY) {
+            watch.recordEbayScan(watch.getEbayCurrentValueNew(), when);
+        } else {
+            watch.recordBrickLinkScan(watch.getBricklinkCurrentValueNew(), when);
+        }
+        setWatches.save(watch);
     }
 
     @Transactional
@@ -136,12 +159,16 @@ public class MarketScanService {
                 result.listingCount(),
                 result.message()
         ));
+        if (result.failed() && watch != null) {
+            recordFailedPlatformScan(watch, platform);
+        }
         return dashboard(catalogId, ebayError, bricklinkError);
     }
 
     public MarketDashboard scanAll(UUID catalogId) {
-        MarketDashboard afterEbay = scan(catalogId, Platform.EBAY);
-        MarketDashboard afterBrickLink = scan(catalogId, Platform.BRICKLINK);
+        MarketScanService scans = scanner();
+        MarketDashboard afterEbay = scans.scan(catalogId, Platform.EBAY);
+        MarketDashboard afterBrickLink = scans.scan(catalogId, Platform.BRICKLINK);
         return new MarketDashboard(
                 afterBrickLink.catalogId(),
                 afterBrickLink.setNumber(),

@@ -174,7 +174,9 @@ public class SecurityConfig {
                 throws ServletException, IOException {
             if (request.getRequestURI().startsWith("/internal/jobs/")) {
                 String token = request.getHeader("X-Internal-Token");
-                if (token == null || !token.equals(properties.getInternalJobToken())) {
+                String expected = properties.getInternalJobToken();
+                if (token == null || expected == null || expected.isBlank()
+                        || !token.trim().equals(expected.trim())) {
                     response.setStatus(HttpStatus.UNAUTHORIZED.value());
                     return;
                 }

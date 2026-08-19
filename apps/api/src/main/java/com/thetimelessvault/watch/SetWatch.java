@@ -165,7 +165,7 @@ public class SetWatch {
         if (lastScan == null) {
             return true;
         }
-        return !now.isBefore(lastScan.plus(Duration.ofMinutes(intervalMinutes)));
+        return !now.isBefore(lastScan.plus(Duration.ofMinutes(clampScanInterval(intervalMinutes))));
     }
 
     public boolean acceptsPrice(BigDecimal price) {

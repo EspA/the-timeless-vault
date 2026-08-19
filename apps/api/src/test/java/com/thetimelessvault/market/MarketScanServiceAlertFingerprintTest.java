@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -51,6 +52,7 @@ class MarketScanServiceAlertFingerprintTest {
     @Mock ScanLogRepository scanLogs;
     @Mock WatchDefaults watchDefaults;
     @Mock PriceGuardDefaults priceGuardDefaults;
+    @Mock ObjectProvider<MarketScanService> self;
 
     @InjectMocks
     MarketScanService service;
