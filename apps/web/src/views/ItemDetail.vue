@@ -6,6 +6,7 @@ import { askAlert, askConfirm } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "../components/EbayStoreCategoryField.vue";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -580,9 +581,18 @@ const remove = async () => {
 
     <div class="card grid">
       <div class="grid three">
-        <label>eBay price (default 45% margin) <input v-model.number="item.ebayPrice" type="number" step="0.01" /></label>
-        <label>BrickLink price (default 40% margin) <input v-model.number="item.bricklinkPrice" type="number" step="0.01" /></label>
-        <label>Shopify price (default 32% margin) <input v-model.number="item.shopifyPrice" type="number" step="0.01" /></label>
+        <label>
+          <span class="channel-field-label"><ChannelLogo platform="EBAY" :height="16" /> price (default 45% margin)</span>
+          <input v-model.number="item.ebayPrice" type="number" step="0.01" />
+        </label>
+        <label>
+          <span class="channel-field-label"><ChannelLogo platform="BRICKLINK" :height="16" /> price (default 40% margin)</span>
+          <input v-model.number="item.bricklinkPrice" type="number" step="0.01" />
+        </label>
+        <label>
+          <span class="channel-field-label"><ChannelLogo platform="SHOPIFY" :height="16" /> price (default 32% margin)</span>
+          <input v-model.number="item.shopifyPrice" type="number" step="0.01" />
+        </label>
       </div>
       <div class="grid three">
         <label>Cost <input v-model.number="item.cost" type="number" step="0.01" /></label>
@@ -660,9 +670,12 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Listing channels</h3>
-      <label v-for="p in ['SHOPIFY','BRICKLINK','EBAY']" :key="p">
-        <input type="checkbox" :value="p" v-model="platforms" /> {{ p }}
-      </label>
+      <div class="channel-picks">
+        <label v-for="p in ['SHOPIFY','BRICKLINK','EBAY']" :key="p" class="channel-pick">
+          <input type="checkbox" :value="p" v-model="platforms" />
+          <ChannelLogo :platform="p" />
+        </label>
+      </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
         <button class="btn gold" type="button" :disabled="publishing || ebayCatalogLoading || !platforms.length" @click="publish">
           {{ publishing || ebayCatalogLoading ? "Working…" : "Create Listing" }}
@@ -680,7 +693,7 @@ const remove = async () => {
         <thead><tr><th>Channel</th><th>Status</th><th>Link</th><th></th></tr></thead>
         <tbody>
           <tr v-for="listing in listings" :key="listing.id">
-            <td>{{ listing.platform }}</td>
+            <td><ChannelLogo :platform="listing.platform" /></td>
             <td>
               <div class="shopify-status">
                 <span class="badge" :class="{ ok: listing.status === 'PUBLISHED', bad: listing.status === 'FAILED' }">{{ listing.status }}</span>

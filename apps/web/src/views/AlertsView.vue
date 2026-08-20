@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from "vue";
 import { api } from "../api";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 type AlertEvent = {
   id: string;
@@ -24,6 +25,7 @@ const TYPE_OPTIONS = [
 const emptyFilters = () => ({
   when: "",
   type: "",
+  platform: "",
   alert: "",
   emailed: "",
   read: "",
@@ -70,6 +72,7 @@ const filtered = computed(() =>
   alerts.value.filter((alert) =>
     contains(whenLabel(alert.createdAt), filters.value.when)
     && (!filters.value.type || alert.type === filters.value.type)
+    && (!filters.value.platform || alert.platform === filters.value.platform)
     && contains(`${alert.title} ${alert.body || ""}`, filters.value.alert)
     && (!filters.value.emailed || String(alert.emailed) === filters.value.emailed)
     && (!filters.value.read || String(alert.read) === filters.value.read)
@@ -143,6 +146,7 @@ const readAll = async () => {
             <tr>
               <th>When</th>
               <th>Type</th>
+              <th>Platform</th>
               <th>Alert</th>
               <th>Email</th>
               <th>Status</th>
@@ -154,6 +158,14 @@ const readAll = async () => {
                   <option v-for="option in typeOptions" :key="option.value || 'all'" :value="option.value">
                     {{ option.label }}
                   </option>
+                </select>
+              </th>
+              <th>
+                <select v-model="filters.platform" class="column-filter">
+                  <option value="">All</option>
+                  <option value="EBAY">eBay</option>
+                  <option value="BRICKLINK">BrickLink</option>
+                  <option value="SHOPIFY">Shopify</option>
                 </select>
               </th>
               <th><input v-model="filters.alert" class="column-filter" type="search" placeholder="Filter" /></th>
@@ -178,6 +190,10 @@ const readAll = async () => {
               <td>{{ whenLabel(alert.createdAt) }}</td>
               <td><span class="badge" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span></td>
               <td>
+                <ChannelLogo v-if="alert.platform" :platform="alert.platform" :height="16" />
+                <span v-else class="muted">—</span>
+              </td>
+              <td>
                 <strong>{{ alert.title }}</strong>
                 <div class="muted">{{ alert.body }}</div>
                 <router-link v-if="alert.url && listingHref(alert.url)" :to="alert.url">Open listing</router-link>
@@ -198,7 +214,7 @@ const readAll = async () => {
               </td>
             </tr>
             <tr v-if="!filtered.length">
-              <td colspan="5" class="muted">{{ alerts.length ? "No alerts match those filters." : "No alerts yet." }}</td>
+              <td colspan="6" class="muted">{{ alerts.length ? "No alerts match those filters." : "No alerts yet." }}</td>
             </tr>
           </tbody>
         </table>

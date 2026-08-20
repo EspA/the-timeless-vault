@@ -233,6 +233,7 @@ public class MarketScanService {
         BigDecimal sum = BigDecimal.ZERO;
         List<BigDecimal> prices = new ArrayList<>();
         int count = 0;
+        List<MarketListing> newListings = new ArrayList<>();
         snapshots.save(snapshot);
         for (JsonNode item : root.path("itemSummaries")) {
             if (!EbayMarketFilters.matchesWatch(item, feedbackMin, query, excludeWords)) {
@@ -259,7 +260,7 @@ public class MarketScanService {
                 count++;
             }
             if (trigger == ScanTrigger.AUTOMATIC && watch != null && !previous.contains(itemId)) {
-                opportunities.recordNewListing(catalog, Platform.EBAY, listing, watch);
+                newListings.add(listing);
             }
         }
         snapshot.setMinPrice(min);
@@ -268,6 +269,9 @@ public class MarketScanService {
         snapshot.setMedianPrice(MarketStats.median(prices));
         snapshot.setListingCount(count);
         snapshots.save(snapshot);
+        for (MarketListing listing : newListings) {
+            opportunities.recordNewListing(catalog, Platform.EBAY, listing, watch, snapshot.getMedianPrice());
+        }
         if (watch != null) {
             watch.recordEbayScan(snapshot.getAvgPrice(), snapshot.getScannedAt());
             setWatches.save(watch);
@@ -303,6 +307,7 @@ public class MarketScanService {
         BigDecimal sum = BigDecimal.ZERO;
         List<BigDecimal> prices = new ArrayList<>();
         int count = 0;
+        List<MarketListing> newListings = new ArrayList<>();
         snapshots.save(snapshot);
         for (BrickLinkForSale.Lot lot : lots) {
             MarketListing listing = MarketListing.create(snapshot, catalog, Platform.BRICKLINK);
@@ -325,7 +330,7 @@ public class MarketScanService {
                 count++;
             }
             if (trigger == ScanTrigger.AUTOMATIC && watch != null && !previous.contains(lot.fingerprint())) {
-                opportunities.recordNewListing(catalog, Platform.BRICKLINK, listing, watch);
+                newListings.add(listing);
             }
         }
         snapshot.setMinPrice(min);
@@ -334,6 +339,9 @@ public class MarketScanService {
         snapshot.setMedianPrice(MarketStats.median(prices));
         snapshot.setListingCount(count);
         snapshots.save(snapshot);
+        for (MarketListing listing : newListings) {
+            opportunities.recordNewListing(catalog, Platform.BRICKLINK, listing, watch, snapshot.getMedianPrice());
+        }
         if (watch != null) {
             watch.recordBrickLinkScan(snapshot.getAvgPrice(), snapshot.getScannedAt());
             setWatches.save(watch);
@@ -363,19 +371,19 @@ public class MarketScanService {
             snapshots.findFirstByCatalogItemIdAndPlatformAndConditionOrderByScannedAtDesc(
                     listing.getInventoryItem().getCatalogItem().getId(), listing.getPlatform(), condition
             ).ifPresent(snapshot -> {
-                if (snapshot.getAvgPrice() == null) {
+                BigDecimal market = snapshot.getMedianPrice() != null ? snapshot.getMedianPrice() : snapshot.getAvgPrice();
+                if (market == null) {
                     return;
                 }
                 BigDecimal yours = listing.getLastPublishedPrice();
-                BigDecimal avg = snapshot.getAvgPrice();
-                BigDecimal high = avg.multiply(BigDecimal.ONE.add(highPercent.movePointLeft(2)));
-                BigDecimal low = avg.multiply(BigDecimal.ONE.subtract(lowPercent.movePointLeft(2)));
+                BigDecimal high = market.multiply(BigDecimal.ONE.add(highPercent.movePointLeft(2)));
+                BigDecimal low = market.multiply(BigDecimal.ONE.subtract(lowPercent.movePointLeft(2)));
                 if (yours.compareTo(high) > 0) {
                     opportunities.recordPriceGuard(
-                            listing, BuyingOpportunity.TYPE_PRICE_HIGH, yours, avg, highPercent, lowPercent);
+                            listing, BuyingOpportunity.TYPE_PRICE_HIGH, yours, market, highPercent, lowPercent, snapshot.getScannedAt());
                 } else if (yours.compareTo(low) < 0) {
                     opportunities.recordPriceGuard(
-                            listing, BuyingOpportunity.TYPE_PRICE_LOW, yours, avg, highPercent, lowPercent);
+                            listing, BuyingOpportunity.TYPE_PRICE_LOW, yours, market, highPercent, lowPercent, snapshot.getScannedAt());
                 }
             });
         }

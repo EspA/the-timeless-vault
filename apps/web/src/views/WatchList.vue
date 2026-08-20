@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { api, SCAN_INTERVALS, type SetWatch } from "../api";
 import { askConfirm } from "../confirm";
 import WatchNewModal from "../components/WatchNewModal.vue";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 const router = useRouter();
 const adding = ref(false);
@@ -211,8 +212,16 @@ onMounted(async () => {
               <th><button class="sort-btn" type="button" @click="sortBy('name')">Name{{ sortMark("name") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('status')">Status{{ sortMark("status") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('theme')">Theme{{ sortMark("theme") }}</button></th>
-              <th><button class="sort-btn" type="button" @click="sortBy('ebayScan')">eBay scan{{ sortMark("ebayScan") }}</button></th>
-              <th><button class="sort-btn" type="button" @click="sortBy('bricklinkScan')">BrickLink scan{{ sortMark("bricklinkScan") }}</button></th>
+              <th>
+                <button class="sort-btn channel-sort" type="button" @click="sortBy('ebayScan')">
+                  <ChannelLogo platform="EBAY" :height="14" />{{ sortMark("ebayScan") }}
+                </button>
+              </th>
+              <th>
+                <button class="sort-btn channel-sort" type="button" @click="sortBy('bricklinkScan')">
+                  <ChannelLogo platform="BRICKLINK" :height="14" />{{ sortMark("bricklinkScan") }}
+                </button>
+              </th>
               <th></th>
             </tr>
             <tr>

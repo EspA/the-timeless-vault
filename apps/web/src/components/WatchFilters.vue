@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { SCAN_INTERVALS } from "../api";
+import ChannelLogo from "./ChannelLogo.vue";
 
 defineProps<{
   setNumber?: string;
@@ -64,7 +65,7 @@ const parsePrice = (raw: string) => {
     </div>
     <div class="grid two">
       <div class="card grid">
-        <h3>BrickLink</h3>
+        <h3 class="channel-heading"><ChannelLogo platform="BRICKLINK" :height="22" /></h3>
         <label>Automatic scan frequency
           <select v-model.number="bricklinkScanIntervalMinutes">
             <option v-for="option in bricklinkIntervalOptions" :key="option.minutes" :value="option.minutes">
@@ -78,7 +79,7 @@ const parsePrice = (raw: string) => {
       <label>Seller ships to <input value="USA" disabled /></label>
     </div>
     <div class="card grid">
-      <h3>eBay</h3>
+      <h3 class="channel-heading"><ChannelLogo platform="EBAY" :height="22" /></h3>
       <label>Automatic scan frequency
         <select v-model.number="ebayScanIntervalMinutes">
           <option v-for="option in ebayIntervalOptions" :key="option.minutes" :value="option.minutes">

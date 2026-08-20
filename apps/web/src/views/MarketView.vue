@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api, type SetWatch } from "../api";
 import ScanProgressModal from "../components/ScanProgressModal.vue";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 type Listing = {
   id: string;
@@ -489,11 +490,13 @@ onMounted(async () => {
             </option>
           </select>
         </label>
-        <button class="btn secondary" type="button" :disabled="!!scanning" @click="scan('ebay')">
-          {{ scanning === "ebay" ? "Scanning eBay…" : "Scan eBay" }}
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('ebay')">
+          {{ scanning === "ebay" ? "Scanning" : "Scan" }}
+          <ChannelLogo platform="EBAY" :height="16" />
         </button>
-        <button class="btn secondary" type="button" :disabled="!!scanning" @click="scan('bricklink')">
-          {{ scanning === "bricklink" ? "Scanning BrickLink…" : "Scan BrickLink" }}
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('bricklink')">
+          {{ scanning === "bricklink" ? "Scanning" : "Scan" }}
+          <ChannelLogo platform="BRICKLINK" :height="16" />
         </button>
         <button class="btn gold" type="button" :disabled="!!scanning" @click="scan('all')">
           {{ scanning === "all" ? "Scanning…" : "Scan all" }}
@@ -553,7 +556,10 @@ onMounted(async () => {
         </div>
         <div class="platform-stats">
           <div class="grid">
-            <h4>eBay <span class="muted">{{ dash.ebay?.count != null ? `${dash.ebay.count} listings` : "No scan yet" }}</span></h4>
+            <h4 class="channel-heading">
+              <ChannelLogo platform="EBAY" :height="18" />
+              <span class="muted">{{ dash.ebay?.count != null ? `${dash.ebay.count} listings` : "No scan yet" }}</span>
+            </h4>
             <div class="grid four stats">
               <div class="stat">
                 <span class="stat-value">{{ money(dash.ebay?.min) }}</span>
@@ -574,7 +580,10 @@ onMounted(async () => {
             </div>
           </div>
           <div class="grid">
-            <h4>BrickLink <span class="muted">{{ dash.bricklink?.count != null ? `${dash.bricklink.count} listings` : "No scan yet" }}</span></h4>
+            <h4 class="channel-heading">
+              <ChannelLogo platform="BRICKLINK" :height="18" />
+              <span class="muted">{{ dash.bricklink?.count != null ? `${dash.bricklink.count} listings` : "No scan yet" }}</span>
+            </h4>
             <div class="grid four stats">
               <div class="stat">
                 <span class="stat-value">{{ money(dash.bricklink?.min) }}</span>
@@ -598,8 +607,12 @@ onMounted(async () => {
       </div>
       <div class="card">
         <div class="tabs">
-          <button class="tab" type="button" :class="{ on: listingTab === 'ebay' }" @click="listingTab = 'ebay'">eBay</button>
-          <button class="tab" type="button" :class="{ on: listingTab === 'bricklink' }" @click="listingTab = 'bricklink'">BrickLink</button>
+          <button class="tab" type="button" :class="{ on: listingTab === 'ebay' }" @click="listingTab = 'ebay'">
+            <ChannelLogo platform="EBAY" :height="16" />
+          </button>
+          <button class="tab" type="button" :class="{ on: listingTab === 'bricklink' }" @click="listingTab = 'bricklink'">
+            <ChannelLogo platform="BRICKLINK" :height="16" />
+          </button>
         </div>
         <div v-if="listingTab === 'ebay'">
         <p v-if="dash.ebayError" class="error">{{ dash.ebayError }}</p>

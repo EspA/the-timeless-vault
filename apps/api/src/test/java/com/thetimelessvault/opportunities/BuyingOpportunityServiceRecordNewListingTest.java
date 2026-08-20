@@ -2,10 +2,13 @@ package com.thetimelessvault.opportunities;
 
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.config.AppProperties;
+import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
 import com.thetimelessvault.market.MarketSnapshot;
 import com.thetimelessvault.market.ScanTrigger;
 import com.thetimelessvault.settings.AlertMailer;
+import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +32,8 @@ class BuyingOpportunityServiceRecordNewListingTest {
 
     @Mock BuyingOpportunityRepository opportunities;
     @Mock AlertMailer alertMailer;
+    @Mock PhotoRepository photos;
+    @Mock ObjectStorage storage;
 
     BuyingOpportunityService service;
 
@@ -38,7 +44,13 @@ class BuyingOpportunityServiceRecordNewListingTest {
 
     @BeforeEach
     void setUp() {
-        service = new BuyingOpportunityService(opportunities, alertMailer);
+        service = new BuyingOpportunityService(
+                opportunities,
+                alertMailer,
+                new AppProperties(),
+                photos,
+                storage
+        );
         catalog = CatalogItem.create("75017-1");
         catalog.setName("Duel on Geonosis");
         watch = SetWatch.create(catalog);
@@ -52,6 +64,9 @@ class BuyingOpportunityServiceRecordNewListingTest {
         listing.setTitle("LEGO Star Wars: Duel on Geonosis (75017) new still sealed");
         listing.setPrice(new BigDecimal("315.00"));
         listing.setUrl("https://www.ebay.com/itm/146877641523");
+        listing.setSeller("brickshop");
+        listing.setSellerFeedbackScore(1842);
+        listing.setSellerFeedbackPercentage("99.8");
         dedupe = "NEW:EBAY:" + catalog.getId() + ":v1|146877641523|0";
     }
 
@@ -59,7 +74,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
     void firstAutomaticSightingCreatesAnOpportunityEvenWhenAManualOneAlreadyExists() {
         when(opportunities.findByDedupeKeyAndScanTrigger(dedupe, ScanTrigger.AUTOMATIC)).thenReturn(Optional.empty());
         when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(alertMailer.sendQuietly(any(), any())).thenReturn(false);
+        when(alertMailer.sendQuietly(any(), any(), any())).thenReturn(false);
 
         service.recordNewListing(catalog, Platform.EBAY, listing, watch);
 
@@ -68,6 +83,44 @@ class BuyingOpportunityServiceRecordNewListingTest {
         assertEquals(BuyingOpportunity.TYPE_BUYING_OPPORTUNITY, saved.getValue().getType());
         assertEquals(ScanTrigger.AUTOMATIC, saved.getValue().getScanTrigger());
         assertEquals(dedupe, saved.getValue().getDedupeKey());
+    }
+
+    @Test
+    void sellerMetaIsFeedbackOnEbayAndCountryOnBrickLink() {
+        listing.setSellerCountry("United Kingdom");
+        assertEquals(
+                "Feedback 1,842 / 99.8%",
+                BuyingOpportunityService.sellerMeta(Platform.EBAY, listing)
+        );
+        assertEquals(
+                "Country United Kingdom",
+                BuyingOpportunityService.sellerMeta(Platform.BRICKLINK, listing)
+        );
+    }
+
+    @Test
+    void emailsHtmlWithSetNamePriceAndPercentVsMedian() {
+        listing.setImageUrl("https://i.ebayimg.com/photo.jpg");
+        when(opportunities.findByDedupeKeyAndScanTrigger(dedupe, ScanTrigger.AUTOMATIC)).thenReturn(Optional.empty());
+        when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(alertMailer.sendQuietly(any(), any(), any())).thenReturn(true);
+
+        service.recordNewListing(catalog, Platform.EBAY, listing, watch, new BigDecimal("358.00"));
+
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
+        verify(alertMailer).sendQuietly(subject.capture(), any(), html.capture());
+        assertTrue(subject.getValue().contains("BUYING OPPORTUNITY"));
+        assertTrue(html.getValue().contains("75017-1 / Duel on Geonosis"));
+        assertTrue(html.getValue().contains("$315.00"));
+        assertTrue(html.getValue().contains("(-12%)"));
+        assertTrue(html.getValue().contains("https://www.ebay.com/itm/146877641523"));
+        assertTrue(html.getValue().contains("https://i.ebayimg.com/photo.jpg"));
+        assertTrue(html.getValue().contains("Scanned"));
+        assertTrue(html.getValue().contains("brickshop"));
+        assertTrue(html.getValue().contains("Feedback 1,842 / 99.8%"));
+        assertTrue(html.getValue().contains("ebay-logo.png"));
+        assertTrue(subject.getValue().contains("eBay"));
     }
 
     @Test

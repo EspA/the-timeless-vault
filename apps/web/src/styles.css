@@ -127,6 +127,53 @@ button, .btn {
   flex-wrap: wrap;
 }
 
+.channel-logo {
+  width: auto;
+  max-width: 7.5rem;
+  display: inline-block;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+.channel-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.5rem;
+  align-items: center;
+}
+
+.channel-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.channel-field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 1.35rem;
+}
+
+.channel-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.channel-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.channel-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 input:disabled, select:disabled, textarea:disabled {
   background: var(--chip);
   color: var(--slate);
@@ -403,6 +450,8 @@ th .sort-btn { width: 100%; }
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
@@ -410,9 +459,9 @@ th .sort-btn { width: 100%; }
 }
 
 .tab.on {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
+  background: var(--select-on);
+  color: var(--ink);
+  border-color: var(--gold);
 }
 
 .loading-bar {

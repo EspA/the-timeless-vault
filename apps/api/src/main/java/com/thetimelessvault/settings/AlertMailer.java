@@ -4,13 +4,21 @@ import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
+import com.thetimelessvault.opportunities.AlertEmail;
+import com.thetimelessvault.opportunities.AlertEmailRenderer;
+import com.thetimelessvault.opportunities.BuyingOpportunity;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 
@@ -76,8 +84,12 @@ public class AlertMailer {
     }
 
     public boolean sendQuietly(String subject, String body) {
+        return sendQuietly(subject, body, null);
+    }
+
+    public boolean sendQuietly(String subject, String textBody, String htmlBody) {
         try {
-            send(subject, body);
+            send(subject, textBody, htmlBody);
             return true;
         } catch (Exception e) {
             log.warn("Could not send alert email", e);
@@ -86,18 +98,38 @@ public class AlertMailer {
     }
 
     public void send(String subject, String body) {
+        send(subject, body, null);
+    }
+
+    public void send(String subject, String textBody, String htmlBody) {
         String to = recipient();
         if (to.isBlank()) {
             throw ApiException.badRequest("Set an alert email in Settings first.");
         }
         validateAddress(to);
-        sendSmtp(to, subject, body);
+        sendSmtp(to, subject, textBody, htmlBody);
     }
 
     public void sendTest() {
+        AlertEmail sample = new AlertEmail(
+                BuyingOpportunity.TYPE_BUYING_OPPORTUNITY,
+                "75017-1",
+                "Duel on Geonosis",
+                null,
+                "$315.00",
+                "-12%",
+                properties.getBaseUrl(),
+                null,
+                "EBAY",
+                "brickshop",
+                "Feedback 1,842 / 99.8%",
+                Instant.now()
+        );
         send(
                 "Test alert from The Timeless Vault",
                 "If you received this, alert email is working.\n\nRecipient: " + recipient()
+                        + "\n\n" + AlertEmailRenderer.text(sample),
+                AlertEmailRenderer.html(sample, properties.getBaseUrl())
         );
     }
 
@@ -123,17 +155,36 @@ public class AlertMailer {
                 && mailPassword != null && !mailPassword.isBlank();
     }
 
-    private void sendSmtp(String to, String subject, String body) {
-        SimpleMailMessage message = new SimpleMailMessage();
+    private void sendSmtp(String to, String subject, String textBody, String htmlBody) {
+        String from = fromAddress();
+        if (htmlBody == null || htmlBody.isBlank()) {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(from);
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(textBody);
+            mailSender.send(message);
+            return;
+        }
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, true, StandardCharsets.UTF_8.name());
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(textBody == null ? "" : textBody, htmlBody);
+            mailSender.send(mime);
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not send email");
+        }
+    }
+
+    private String fromAddress() {
         String from = properties.getMailFrom();
         if (from == null || from.isBlank()) {
-            from = hasSmtpCredentials() ? mailUsername : "vault@thetimelessvault.com";
+            return hasSmtpCredentials() ? mailUsername : "vault@thetimelessvault.com";
         }
-        message.setFrom(from);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(body);
-        mailSender.send(message);
+        return from;
     }
 
     static void validateAddress(String email) {

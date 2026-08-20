@@ -104,7 +104,7 @@ class MarketScanServiceAlertFingerprintTest {
 
         service.scan(catalog.getId(), Platform.EBAY, ScanTrigger.MANUAL);
 
-        verify(opportunities, never()).recordNewListing(any(), any(), any(), any());
+        verify(opportunities, never()).recordNewListing(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -115,7 +115,7 @@ class MarketScanServiceAlertFingerprintTest {
 
         service.scan(catalog.getId(), Platform.EBAY, ScanTrigger.AUTOMATIC);
 
-        verify(opportunities).recordNewListing(eq(catalog), eq(Platform.EBAY), any(), eq(watch));
+        verify(opportunities).recordNewListing(eq(catalog), eq(Platform.EBAY), any(), eq(watch), any());
     }
 
     @Test
@@ -126,7 +126,7 @@ class MarketScanServiceAlertFingerprintTest {
 
         service.scan(catalog.getId(), Platform.EBAY, ScanTrigger.AUTOMATIC);
 
-        verify(opportunities).recordNewListing(eq(catalog), eq(Platform.EBAY), any(), eq(watch));
+        verify(opportunities).recordNewListing(eq(catalog), eq(Platform.EBAY), any(), eq(watch), any());
     }
 
     @Test
@@ -156,7 +156,7 @@ class MarketScanServiceAlertFingerprintTest {
 
         service.scan(catalog.getId(), Platform.EBAY, ScanTrigger.AUTOMATIC);
 
-        verify(opportunities, never()).recordNewListing(any(), any(), any(), any());
+        verify(opportunities, never()).recordNewListing(any(), any(), any(), any(), any());
     }
 
     private MarketListing listing(String fingerprint) {

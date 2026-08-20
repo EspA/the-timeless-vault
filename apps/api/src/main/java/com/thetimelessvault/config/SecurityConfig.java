@@ -71,6 +71,8 @@ public class SecurityConfig {
                                 "/index.html",
                                 "/assets/**",
                                 "/favicon.ico",
+                                "/email/**",
+                                "/logos/**",
                                 "/inventory",
                                 "/inventory/**",
                                 "/watches",

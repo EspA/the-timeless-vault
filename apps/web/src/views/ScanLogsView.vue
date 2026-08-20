@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api } from "../api";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 type ScanLog = {
   id: string;
@@ -42,12 +43,6 @@ const error = ref("");
 const loading = ref(false);
 const filters = ref(emptyFilters());
 let timer: ReturnType<typeof setInterval> | undefined;
-
-const platformLabel = (platform: string) => {
-  if (platform === "EBAY") return "eBay";
-  if (platform === "BRICKLINK") return "BrickLink";
-  return platform;
-};
 
 const triggerLabel = (trigger?: string | null) => {
   if (trigger === "AUTOMATIC") return "Automatic";
@@ -200,7 +195,7 @@ onUnmounted(() => {
           <tbody>
             <tr v-for="row in items" :key="row.id">
               <td>{{ whenLabel(row.scannedAt) }}</td>
-              <td><span class="badge">{{ platformLabel(row.platform) }}</span></td>
+              <td><ChannelLogo :platform="row.platform" :height="16" /></td>
               <td>
                 <router-link v-if="row.catalogId" :to="`/market/${row.catalogId}`">
                   {{ row.setNumber }} {{ row.setName }}
