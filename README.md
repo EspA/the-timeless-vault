@@ -69,12 +69,22 @@ Connect eBay from **Settings** (one-time consent). The refresh token is stored i
 
 ## Production
 
+The live Cloud Run service is:
+
+https://YOUR_CLOUD_RUN_URL
+
 ```bash
-PROJECT_ID=your-gcp-project bash infra/setup-gcp.sh
-gcloud builds submit --config infra/cloudbuild.yaml
+PROJECT_ID=the-timeless-vault bash infra/setup-gcp.sh
+gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_CLOUDSQL_INSTANCE=the-timeless-vault:us-east1:timeless-vault,_GCS_BUCKET=the-timeless-vault-photos
 ```
 
-See `infra/setup-gcp.sh` for Secret Manager names, the GCS photo bucket, and the Cloud Scheduler job that POSTs `/internal/jobs/market-scan` with `X-Internal-Token`.
+`infra/setup-gcp.sh` creates Cloud SQL, the photo bucket, Secret Manager values from `.env`, and IAM. After the first deploy, set Google OAuth authorized redirect URI to:
+
+`https://YOUR_CLOUD_RUN_URL/login/oauth2/code/google`
+
+Then store `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Secret Manager (`ttv-google-client-id`, `ttv-google-client-secret`) and redeploy.
+
+Cloud Scheduler job `ttv-market-scan` POSTs `/internal/jobs/market-scan` every 5 minutes with `X-Internal-Token`.
 
 ## Out of scope (V1)
 

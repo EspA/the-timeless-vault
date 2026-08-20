@@ -76,7 +76,9 @@ const filtered = computed(() =>
   )
 );
 
-const listingHref = (url?: string) => url && url.startsWith("/") && !url.startsWith("//");
+const listingHref = (url?: string) => !!url && url.startsWith("/") && !url.startsWith("//");
+
+const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const clearFilters = () => {
   filters.value = emptyFilters();
@@ -178,7 +180,7 @@ const readAll = async () => {
               <td>
                 <strong>{{ alert.title }}</strong>
                 <div class="muted">{{ alert.body }}</div>
-                <router-link v-if="listingHref(alert.url)" :to="alert.url">Open listing</router-link>
+                <router-link v-if="alert.url && listingHref(alert.url)" :to="alert.url">Open listing</router-link>
                 <a v-else-if="alert.url" :href="alert.url" target="_blank" rel="noopener noreferrer">Open listing</a>
               </td>
               <td>
