@@ -1,5 +1,6 @@
 .idea/
 .vscode/
+.cursor/
 *.iml
 .DS_Store
 .env
@@ -11,4 +12,5 @@ data/
 *.log
 .mvn/wrapper/maven-wrapper.jar
 apps/web/dist/
-apps/api/src/main/resources/static/app/
+apps/api/src/main/resources/static/assets/
+apps/api/src/main/resources/static/index.html
