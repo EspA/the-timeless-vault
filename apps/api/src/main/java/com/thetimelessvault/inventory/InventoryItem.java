@@ -191,6 +191,7 @@ public class InventoryItem {
             case EBAY -> ebayPrice;
             case BRICKLINK -> bricklinkPrice;
             case SHOPIFY -> shopifyPrice;
+            case LOCAL -> price;
         };
     }
 

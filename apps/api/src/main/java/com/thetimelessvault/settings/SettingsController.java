@@ -39,6 +39,7 @@ public class SettingsController {
     private final WatchDefaults watchDefaults;
     private final AlertMailer alertMailer;
     private final PriceGuardDefaults priceGuardDefaults;
+    private final ChannelFeeRates channelFeeRates;
     private final EbayStoreCategorySettings storeCategorySettings;
 
     public SettingsController(
@@ -52,6 +53,7 @@ public class SettingsController {
             WatchDefaults watchDefaults,
             AlertMailer alertMailer,
             PriceGuardDefaults priceGuardDefaults,
+            ChannelFeeRates channelFeeRates,
             EbayStoreCategorySettings storeCategorySettings
     ) {
         this.properties = properties;
@@ -64,6 +66,7 @@ public class SettingsController {
         this.watchDefaults = watchDefaults;
         this.alertMailer = alertMailer;
         this.priceGuardDefaults = priceGuardDefaults;
+        this.channelFeeRates = channelFeeRates;
         this.storeCategorySettings = storeCategorySettings;
     }
 
@@ -100,6 +103,9 @@ public class SettingsController {
         PriceGuardDefaults.Thresholds thresholds = priceGuardDefaults.thresholds();
         health.put("priceGuardHighPercent", thresholds.highPercent());
         health.put("priceGuardLowPercent", thresholds.lowPercent());
+        ChannelFeeRates.Rates fees = channelFeeRates.rates();
+        health.put("bricklinkFeePercent", fees.bricklinkPercent());
+        health.put("shopifyFeePercent", fees.shopifyPercent());
         return health;
     }
 
@@ -135,6 +141,15 @@ public class SettingsController {
                 decimal(body == null ? null : body.get("lowPercent"))
         );
         return Map.of("highPercent", saved.highPercent(), "lowPercent", saved.lowPercent());
+    }
+
+    @PutMapping("/settings/channel-fee-rates")
+    public Map<String, Object> saveChannelFeeRates(@RequestBody(required = false) Map<String, Object> body) {
+        ChannelFeeRates.Rates saved = channelFeeRates.save(
+                decimal(body == null ? null : body.get("bricklinkPercent")),
+                decimal(body == null ? null : body.get("shopifyPercent"))
+        );
+        return Map.of("bricklinkPercent", saved.bricklinkPercent(), "shopifyPercent", saved.shopifyPercent());
     }
 
     @GetMapping("/shopify/collections")

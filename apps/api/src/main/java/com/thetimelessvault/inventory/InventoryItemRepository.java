@@ -19,6 +19,9 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
 
     List<InventoryItem> findByCatalogItemId(UUID catalogItemId);
 
+    @Query("select i from InventoryItem i join fetch i.catalogItem where lower(i.sku) = lower(:sku)")
+    Optional<InventoryItem> findWithCatalogBySkuIgnoreCase(@Param("sku") String sku);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update InventoryItem i set i.ebayStoreCategory = null "
             + "where i.ebayStoreCategory = :name or i.ebayStoreCategory like concat(:name, '/%')")

@@ -175,6 +175,8 @@ upsert_secret ttv-ebay-location "$(read_env EBAY_MERCHANT_LOCATION_KEY)"
 upsert_secret ttv-ebay-fulfillment "$(read_env EBAY_FULFILLMENT_POLICY_ID)"
 upsert_secret ttv-ebay-payment "$(read_env EBAY_PAYMENT_POLICY_ID)"
 upsert_secret ttv-ebay-return "$(read_env EBAY_RETURN_POLICY_ID)"
+upsert_secret ttv-ebay-verification-token "$(read_env EBAY_VERIFICATION_TOKEN)"
+upsert_secret ttv-ebay-deletion-endpoint "$(read_env EBAY_ACCOUNT_DELETION_ENDPOINT_URL)"
 upsert_secret ttv-internal-token "$(read_env INTERNAL_JOB_TOKEN)"
 upsert_secret ttv-alert-email "$(read_env ALERT_TO_EMAIL)"
 upsert_secret ttv-mail-host "$MAIL_HOST"
@@ -207,6 +209,26 @@ if [ -n "$SERVICE_URL" ] && [ -n "$JOB_TOKEN" ] && [ "$JOB_TOKEN" != "change-me-
       --attempt-deadline=320s \
       --quiet
     echo "Created Cloud Scheduler job ttv-market-scan."
+  fi
+  if gcloud scheduler jobs describe ttv-sales-sync --location="$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http ttv-sales-sync \
+      --location="$REGION" \
+      --uri="${SERVICE_URL}/internal/jobs/sales-sync" \
+      --http-method=POST \
+      --update-headers="X-Internal-Token=${JOB_TOKEN}" \
+      --attempt-deadline=320s \
+      --quiet
+    echo "Updated Cloud Scheduler job ttv-sales-sync."
+  else
+    gcloud scheduler jobs create http ttv-sales-sync \
+      --location="$REGION" \
+      --schedule="every 5 minutes" \
+      --uri="${SERVICE_URL}/internal/jobs/sales-sync" \
+      --http-method=POST \
+      --headers="X-Internal-Token=${JOB_TOKEN}" \
+      --attempt-deadline=320s \
+      --quiet
+    echo "Created Cloud Scheduler job ttv-sales-sync."
   fi
 elif [ -z "$SERVICE_URL" ]; then
   echo "Cloud Run service not found yet; create ttv-market-scan after the first deploy."

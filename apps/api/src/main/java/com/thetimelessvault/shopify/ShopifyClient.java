@@ -48,6 +48,53 @@ public class ShopifyClient {
         return config.configured();
     }
 
+    public String shopHost() {
+        return config.shopHost();
+    }
+
+    public JsonNode listOrdersSince(java.time.Instant since, String cursor) {
+        ObjectNode variables = mapper.createObjectNode();
+        String query = since == null
+                ? ""
+                : "processed_at:>='" + since.toString() + "'";
+        variables.put("query", query);
+        if (cursor != null && !cursor.isBlank()) {
+            variables.put("cursor", cursor);
+        } else {
+            variables.putNull("cursor");
+        }
+        return graphql(ORDERS_QUERY, variables);
+    }
+
+    private static final String ORDERS_QUERY = """
+            query Orders($query: String, $cursor: String) {
+              orders(first: 50, after: $cursor, query: $query, sortKey: PROCESSED_AT, reverse: true) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  id
+                  name
+                  createdAt
+                  processedAt
+                  cancelledAt
+                  displayFinancialStatus
+                  totalShippingPriceSet { shopMoney { amount currencyCode } }
+                  currentShippingPriceSet { shopMoney { amount currencyCode } }
+                  lineItems(first: 50) {
+                    nodes {
+                      id
+                      sku
+                      title
+                      quantity
+                      originalUnitPriceSet { shopMoney { amount currencyCode } }
+                      variant { id sku }
+                      product { id }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
     public Map<String, String> shipFromAddress() {
         String name = config.getLocationName() == null || config.getLocationName().isBlank()
                 ? "Private Mail Box"
@@ -708,6 +755,16 @@ public class ShopifyClient {
         }
         try {
             return executeGraphql(query, variables, tokens.accessToken());
+        } catch (ApiException e) {
+            if (isOrdersAccessDenied(e) && tokens.refreshable()) {
+                tokens.invalidate();
+                try {
+                    return executeGraphql(query, variables, tokens.accessToken());
+                } catch (ApiException retry) {
+                    throw shopifyAccessError(retry);
+                }
+            }
+            throw shopifyAccessError(e);
         } catch (RestClientResponseException e) {
             if (e.getStatusCode().value() == 401 && tokens.refreshable()) {
                 tokens.invalidate();
@@ -744,6 +801,83 @@ public class ShopifyClient {
         } catch (Exception e) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not parse Shopify response");
         }
+    }
+
+    public boolean canReadOrders() {
+        return tokens.hasScope("read_orders") || tokens.hasScope("read_all_orders");
+    }
+
+    public void refreshOrdersAccess() {
+        if (tokens.refreshable() && !tokens.grantedScope().isBlank() && !canReadOrders()) {
+            tokens.invalidate();
+        }
+    }
+
+    String grantedTokenScope() {
+        return tokens.grantedScope();
+    }
+
+    List<String> installedAccessScopes() {
+        try {
+            JsonNode nodes = executeGraphql("""
+                    query {
+                      currentAppInstallation {
+                        accessScopes { handle }
+                      }
+                    }
+                    """, mapper.createObjectNode(), tokens.accessToken())
+                    .path("currentAppInstallation")
+                    .path("accessScopes");
+            List<String> scopes = new ArrayList<>();
+            if (nodes.isArray()) {
+                for (JsonNode node : nodes) {
+                    String handle = node.path("handle").asText("");
+                    if (!handle.isBlank()) {
+                        scopes.add(handle);
+                    }
+                }
+            }
+            return scopes;
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private ApiException shopifyAccessError(ApiException error) {
+        if (!isOrdersAccessDenied(error)) {
+            return error;
+        }
+        String tokenScopes = tokens.grantedScope();
+        if (tokenScopes == null || tokenScopes.isBlank()) {
+            tokenScopes = "unknown";
+        }
+        List<String> installed = installedAccessScopes();
+        String installedLabel = installed.isEmpty() ? "unknown" : String.join(", ", installed);
+        boolean hasReadOrders = installed.stream().anyMatch(scope ->
+                "read_orders".equalsIgnoreCase(scope) || "write_orders".equalsIgnoreCase(scope))
+                || tokenScopes.contains("read_orders")
+                || tokenScopes.contains("write_orders");
+        if (hasReadOrders) {
+            return new ApiException(HttpStatus.BAD_GATEWAY,
+                    "Shopify denied the orders field even though read_orders is present (token scopes: "
+                            + tokenScopes + "; installed scopes: " + installedLabel
+                            + "). Complete Protected customer data access for this app, then reinstall it "
+                            + "from API credentials so the new grant is applied.");
+        }
+        return new ApiException(HttpStatus.BAD_GATEWAY,
+                "Shopify has not granted read_orders to the token this API uses (token scopes: "
+                        + tokenScopes + "; installed scopes: " + installedLabel
+                        + "). After enabling read_orders, open API credentials and click Install app again. "
+                        + "scripts/shopify-token.sh does not change granted scopes when client credentials are set.");
+    }
+
+    private static boolean isOrdersAccessDenied(ApiException error) {
+        String message = error.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("access denied") && lower.contains("orders");
     }
 
     private ApiException shopifyHttpError(RestClientResponseException e) {

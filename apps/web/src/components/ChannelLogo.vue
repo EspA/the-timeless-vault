@@ -21,6 +21,12 @@ const meta = computed(() => {
   }
   return null;
 });
+
+const label = computed(() => {
+  const platform = (props.platform || "").toUpperCase();
+  if (platform === "LOCAL") return "Local";
+  return meta.value?.alt || props.platform;
+});
 </script>
 
 <template>
@@ -32,5 +38,5 @@ const meta = computed(() => {
     :title="meta.alt"
     :style="{ height: `${height}px` }"
   />
-  <span v-else>{{ platform }}</span>
+  <span v-else>{{ label }}</span>
 </template>

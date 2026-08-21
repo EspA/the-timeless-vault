@@ -50,6 +50,9 @@ app:
   market:
     local-schedule: ${MARKET_LOCAL_SCHEDULE:false}
     scan-delay-ms: ${MARKET_SCAN_DELAY_MS:300000}
+  sales:
+    local-schedule: ${SALES_LOCAL_SCHEDULE:false}
+    sync-delay-ms: ${SALES_SYNC_DELAY_MS:300000}
   base-url: ${APP_BASE_URL:http://localhost:8080}
   frontend-origin: ${APP_FRONTEND_ORIGIN:http://localhost:5173}
   allowed-emails: ${AUTH_ALLOWED_EMAILS:}
@@ -94,3 +97,5 @@ app:
     return-policy-id: ${EBAY_RETURN_POLICY_ID:}
     browse-client-id: ${EBAY_BROWSE_CLIENT_ID:}
     browse-client-secret: ${EBAY_BROWSE_CLIENT_SECRET:}
+    verification-token: ${EBAY_VERIFICATION_TOKEN:}
+    account-deletion-endpoint-url: ${EBAY_ACCOUNT_DELETION_ENDPOINT_URL:}

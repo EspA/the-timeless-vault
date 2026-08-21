@@ -110,6 +110,12 @@ data = json.loads(sys.stdin.read())
 print(data.get("expires_in", 86400))
 ' <<< "$response")"
 
+scope="$(python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+print(data.get("scope", "") or "")
+' <<< "$response")"
+
 upsert_env SHOPIFY_SHOP_DOMAIN "$shop"
 upsert_env SHOPIFY_CLIENT_ID "$client_id"
 upsert_env SHOPIFY_CLIENT_SECRET "$client_secret"
@@ -118,5 +124,11 @@ upsert_env SHOPIFY_ADMIN_TOKEN "$token"
 hours=$((expires / 3600))
 echo "Updated $ENV_FILE"
 echo "SHOPIFY_SHOP_DOMAIN=$shop"
+echo "Granted scopes: ${scope:-none returned}"
 echo "SHOPIFY_ADMIN_TOKEN saved (expires in about ${hours} hours)."
-echo "Restart is not required for later expiry — the API will fetch a new token on the next Shopify call."
+echo "The running API fetches its own client-credentials token and ignores this saved token when SHOPIFY_CLIENT_ID is set."
+if [[ "$scope" != *read_orders* && "$scope" != *write_orders* ]]; then
+  echo
+  echo "This token does not include read_orders, so sales sync will fail."
+  echo "After enabling the scope, open the app's API credentials page and click Install app again, then re-run this script."
+fi

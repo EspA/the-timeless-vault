@@ -182,6 +182,16 @@ public class ChannelListing {
         this.updatedAt = Instant.now();
     }
 
+    public void markUnlisted() {
+        switch (platform) {
+            case SHOPIFY -> setShopifyStatus("UNLISTED");
+            case BRICKLINK -> setBricklinkStatus("UNLISTED");
+            case EBAY -> setEbayStatus("UNLISTED");
+            case LOCAL -> {
+            }
+        }
+    }
+
     public String getBricklinkPhotoUploadUrl() {
         return bricklinkPhotoUploadUrl;
     }

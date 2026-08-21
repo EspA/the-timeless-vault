@@ -27,6 +27,7 @@ public class ShopifyTokenService {
     private final RestClient restClient;
 
     private volatile String cachedToken;
+    private volatile String cachedScope = "";
     private volatile Instant expiry = Instant.EPOCH;
 
     @Autowired
@@ -65,7 +66,28 @@ public class ShopifyTokenService {
 
     public void invalidate() {
         cachedToken = null;
+        cachedScope = "";
         expiry = Instant.EPOCH;
+    }
+
+    public String grantedScope() {
+        return cachedScope == null ? "" : cachedScope;
+    }
+
+    public boolean hasScope(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return false;
+        }
+        String granted = grantedScope();
+        if (granted.isBlank()) {
+            return true;
+        }
+        for (String part : granted.split("[,\\s]+")) {
+            if (scope.equalsIgnoreCase(part.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasFreshCache() {
@@ -92,8 +114,13 @@ public class ShopifyTokenService {
             }
             long expiresIn = token.path("expires_in").asLong(DEFAULT_EXPIRES_IN);
             cachedToken = accessToken;
+            cachedScope = token.path("scope").asText("");
             expiry = Instant.now().plusSeconds(expiresIn);
-            log.info("Refreshed Shopify Admin token (expires in {}s)", expiresIn);
+            if (cachedScope.isBlank()) {
+                log.info("Refreshed Shopify Admin token (expires in {}s)", expiresIn);
+            } else {
+                log.info("Refreshed Shopify Admin token (expires in {}s, scopes={})", expiresIn, cachedScope);
+            }
         } catch (ApiException e) {
             throw e;
         } catch (org.springframework.web.client.RestClientResponseException e) {

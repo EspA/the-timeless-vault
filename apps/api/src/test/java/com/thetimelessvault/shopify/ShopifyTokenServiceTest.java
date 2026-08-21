@@ -72,7 +72,8 @@ class ShopifyTokenServiceTest {
     void fetchesAndCachesClientCredentialsToken() {
         expectToken("shpat_fresh");
         assertEquals("shpat_fresh", tokens.accessToken());
-        assertEquals("shpat_fresh", tokens.accessToken());
+        assertTrue(tokens.hasScope("read_orders"));
+        assertFalse(tokens.hasScope("read_customers"));
         server.verify();
     }
 
@@ -126,7 +127,7 @@ class ShopifyTokenServiceTest {
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
                 .andRespond(withSuccess(
-                        "{\"access_token\":\"" + accessToken + "\",\"expires_in\":86399}",
+                        "{\"access_token\":\"" + accessToken + "\",\"scope\":\"write_products,read_orders\",\"expires_in\":86399}",
                         MediaType.APPLICATION_JSON));
     }
 }

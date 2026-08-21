@@ -2,6 +2,8 @@ package com.thetimelessvault.catalog;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thetimelessvault.common.ApiException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +13,8 @@ import java.util.UUID;
 
 @Service
 public class CatalogService {
+
+    private static final Logger log = LoggerFactory.getLogger(CatalogService.class);
 
     private final CatalogItemRepository catalogItems;
     private final BrickEconomyClient brickEconomy;
@@ -26,6 +30,33 @@ public class CatalogService {
         return catalogItems.findBySetNumberIgnoreCase(setNumber)
                 .filter(existing -> !forceRefresh)
                 .orElseGet(() -> refresh(setNumber));
+    }
+
+    @Transactional
+    public CatalogItem lookupOrStub(String rawSetNumber, String fallbackName) {
+        String setNumber = rawSetNumber == null || rawSetNumber.isBlank() ? "UNKNOWN" : rawSetNumber.trim();
+        if ("UNKNOWN".equalsIgnoreCase(setNumber)) {
+            return stub(setNumber, fallbackName);
+        }
+        try {
+            return lookup(setNumber, false);
+        } catch (RuntimeException e) {
+            log.warn("Catalog lookup failed for {}: {}", setNumber, e.getMessage());
+            return stub(setNumber, fallbackName);
+        }
+    }
+
+    private CatalogItem stub(String setNumber, String fallbackName) {
+        return catalogItems.findBySetNumberIgnoreCase(setNumber).orElseGet(() -> {
+            CatalogItem item = CatalogItem.create(setNumber);
+            String name = fallbackName == null || fallbackName.isBlank() ? setNumber : fallbackName.trim();
+            if (name.length() > 255) {
+                name = name.substring(0, 255);
+            }
+            item.setName(name);
+            item.setCurrency("USD");
+            return catalogItems.save(item);
+        });
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.thetimelessvault.market;
 
 import com.thetimelessvault.common.Platform;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -16,4 +17,7 @@ public interface MarketListingRepository extends JpaRepository<MarketListing, UU
             Platform platform,
             ScanTrigger scanTrigger
     );
+
+    @Transactional
+    long deleteByPlatformAndSellerIgnoreCase(Platform platform, String seller);
 }

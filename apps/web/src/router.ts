@@ -7,6 +7,7 @@ import MarketView from "./views/MarketView.vue";
 import AlertsView from "./views/AlertsView.vue";
 import ScanLogsView from "./views/ScanLogsView.vue";
 import ListingLogsView from "./views/ListingLogsView.vue";
+import SalesView from "./views/SalesView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import LoginView from "./views/LoginView.vue";
 
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: "/inventory/new", redirect: "/inventory" },
     { path: "/inventory/:id", component: ItemDetail },
     { path: "/listing-logs", component: ListingLogsView },
+    { path: "/sales", component: SalesView },
     { path: "/watches", component: WatchList },
     { path: "/watches/new", redirect: "/watches" },
     { path: "/watches/:id", component: WatchDetail },

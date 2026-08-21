@@ -27,6 +27,7 @@ public final class ChannelPrice {
             case EBAY -> "eBay price";
             case BRICKLINK -> "BrickLink price";
             case SHOPIFY -> "Shopify price";
+            case LOCAL -> "price";
         };
     }
 }

@@ -145,6 +145,33 @@ export type ChannelListing = {
   lastError?: string;
 };
 
+export type Sale = {
+  id: string;
+  inventoryItemId?: string;
+  sku?: string;
+  setNumber?: string;
+  itemTitle?: string;
+  platform: string;
+  externalOrderId: string;
+  quantity: number;
+  unitPrice: number;
+  shippingCost?: number;
+  platformFee?: number;
+  currency: string;
+  soldAt: string;
+  orderUrl?: string;
+  inventoryCreated: boolean;
+};
+
+export type SalesPage = {
+  items: Sale[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+  lastSyncedAt?: string;
+};
+
 export const visibilityStatusLabel = (status?: string | null) => {
   if (status === "ACTIVE") return "Active";
   if (status === "UNLISTED") return "Inactive";

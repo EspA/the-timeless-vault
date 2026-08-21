@@ -19,7 +19,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -97,6 +99,62 @@ class PublishServiceDeactivateListingsTest {
 
         verify(shopifyClient, never()).updateProductStatus(any(), any());
         verify(ebayClient, never()).withdrawOffer(any());
+    }
+
+    @Test
+    void afterSaleSkipsRemoteUnlistOnSoldChannelButMarksItInactiveLocally() {
+        ChannelListing shopify = published(Platform.SHOPIFY, "gid://shopify/Product/1", "https://shop.example/1");
+        shopify.setShopifyStatus("ACTIVE");
+        ChannelListing bricklink = published(Platform.BRICKLINK, "12345", "https://bricklink.example/1");
+        bricklink.setBricklinkStatus("ACTIVE");
+        ChannelListing ebay = published(Platform.EBAY, "offer-1", "https://www.ebay.com/itm/999");
+        ebay.setEbayStatus("ACTIVE");
+
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, ebay));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED")).thenReturn("UNLISTED");
+        when(brickLinkClient.updateStockRoom("12345", true)).thenReturn(true);
+
+        service.deactivatePublishedListingsAfterSale(item.getId(), Platform.EBAY);
+
+        verify(shopifyClient).updateProductStatus("gid://shopify/Product/1", "UNLISTED");
+        verify(brickLinkClient).updateStockRoom("12345", true);
+        verify(ebayClient, never()).withdrawOffer(any());
+        assertEquals("UNLISTED", ebay.getEbayStatus());
+        verify(listingLogs).record(
+                eq(item),
+                eq(Platform.EBAY),
+                eq(ListingAction.DEACTIVATE),
+                eq(ListingLogStatus.SUCCESS),
+                eq("Sold on this channel; listing marked inactive locally")
+        );
+    }
+
+    @Test
+    void afterSaleMarksChannelInactiveLocallyWhenRemoteUnlistFails() {
+        ChannelListing shopify = published(Platform.SHOPIFY, "gid://shopify/Product/1", "https://shop.example/1");
+        shopify.setShopifyStatus("ACTIVE");
+
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED"))
+                .thenThrow(new RuntimeException("already sold"));
+
+        service.deactivatePublishedListingsAfterSale(item.getId(), Platform.EBAY);
+
+        assertEquals("UNLISTED", shopify.getShopifyStatus());
+        verify(listingLogs).record(
+                eq(item),
+                eq(Platform.SHOPIFY),
+                eq(ListingAction.DEACTIVATE),
+                eq(ListingLogStatus.SUCCESS),
+                eq("Marked inactive locally after unlist failed: already sold")
+        );
     }
 
     private ChannelListing published(Platform platform, String externalId, String liveUrl) {

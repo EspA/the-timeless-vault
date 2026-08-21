@@ -29,6 +29,8 @@ import java.math.RoundingMode;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,6 +78,29 @@ public class EbayClient {
 
     public boolean sellReady() {
         return config.configured() && tokens != null && tokens.hasRefreshToken();
+    }
+
+    public JsonNode getFulfillmentOrders(Instant since) {
+        ObjectNode combined = mapper.createObjectNode();
+        ArrayNode orders = combined.putArray("orders");
+        Instant from = since == null ? Instant.now().minus(java.time.Duration.ofDays(1)) : since;
+        String filter = "lastmodifieddate:[" + DateTimeFormatter.ISO_INSTANT.format(from) + "..]";
+        String path = "/sell/fulfillment/v1/order?filter="
+                + URLEncoder.encode(filter, StandardCharsets.UTF_8)
+                + "&limit=200";
+        for (int page = 0; page < 20 && path != null; page++) {
+            if (path.startsWith("http")) {
+                path = path.replace(config.apiHost(), "");
+            }
+            JsonNode data = sell("GET", path, null);
+            JsonNode pageOrders = data.path("orders");
+            if (pageOrders.isArray()) {
+                pageOrders.forEach(orders::add);
+            }
+            String next = data.path("next").asText("");
+            path = next.isBlank() ? null : next;
+        }
+        return combined;
     }
 
     static boolean isInsufficientStorePermission(Exception error) {

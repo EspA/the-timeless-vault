@@ -24,6 +24,11 @@ const alertError = ref("");
 const alertTo = ref("");
 const highPercent = ref("15");
 const lowPercent = ref("15");
+const bricklinkFeePercent = ref("5.4");
+const shopifyFeePercent = ref("2.9");
+const feeBusy = ref(false);
+const feeMessage = ref("");
+const feeError = ref("");
 const thresholdBusy = ref(false);
 const thresholdMessage = ref("");
 const thresholdError = ref("");
@@ -56,6 +61,8 @@ onMounted(async () => {
   alertTo.value = String(health.value?.alertTo || "");
   highPercent.value = String(health.value?.priceGuardHighPercent ?? "15");
   lowPercent.value = String(health.value?.priceGuardLowPercent ?? "15");
+  bricklinkFeePercent.value = String(health.value?.bricklinkFeePercent ?? "5.4");
+  shopifyFeePercent.value = String(health.value?.shopifyFeePercent ?? "2.9");
   const words = health.value?.ebayDefaultExcludeWords;
   defaultExcludeWords.value = typeof words === "string" ? words : defaultEbayExcludeWords;
   try {
@@ -184,6 +191,29 @@ const savePriceGuardThresholds = async () => {
     thresholdError.value = e instanceof Error ? e.message : "Could not save thresholds";
   } finally {
     thresholdBusy.value = false;
+  }
+};
+
+const saveChannelFeeRates = async () => {
+  feeBusy.value = true;
+  feeMessage.value = "";
+  feeError.value = "";
+  try {
+    const saved = await api.put<{ bricklinkPercent: number; shopifyPercent: number }>(
+      "/api/settings/channel-fee-rates",
+      {
+        bricklinkPercent: Number(bricklinkFeePercent.value),
+        shopifyPercent: Number(shopifyFeePercent.value),
+      }
+    );
+    bricklinkFeePercent.value = String(saved.bricklinkPercent);
+    shopifyFeePercent.value = String(saved.shopifyPercent);
+    feeMessage.value = "Fee rates saved. New sales will use these values; existing sales keep the fee they already have.";
+    await loadHealth();
+  } catch (e) {
+    feeError.value = e instanceof Error ? e.message : "Could not save fee rates";
+  } finally {
+    feeBusy.value = false;
   }
 };
 
@@ -346,6 +376,27 @@ const onThemeToggle = (event: Event) => {
       </button>
       <p v-if="thresholdMessage" class="muted">{{ thresholdMessage }}</p>
       <p v-if="thresholdError" class="error">{{ thresholdError }}</p>
+    </div>
+
+    <div class="card grid">
+      <h3>Sales channel fees</h3>
+      <p class="muted">
+        Applied when a sale is recorded: (price + shipping) × rate. Changing these values does not rewrite past sales.
+      </p>
+      <div class="grid two">
+        <label>BrickLink fee (%)
+          <input v-model="bricklinkFeePercent" type="number" min="0" max="100" step="0.1" />
+        </label>
+        <label>Shopify fee (%)
+          <input v-model="shopifyFeePercent" type="number" min="0" max="100" step="0.1" />
+        </label>
+      </div>
+      <p class="muted">Defaults are 5.4% for BrickLink and 2.9% for Shopify. eBay fees still come from the order.</p>
+      <button class="btn gold" type="button" :disabled="feeBusy" @click="saveChannelFeeRates">
+        {{ feeBusy ? "Saving…" : "Save fee rates" }}
+      </button>
+      <p v-if="feeMessage" class="muted">{{ feeMessage }}</p>
+      <p v-if="feeError" class="error">{{ feeError }}</p>
     </div>
 
     <div class="card grid">

@@ -59,6 +59,27 @@ public class BrickLinkClient {
         return config.configured();
     }
 
+    public JsonNode listReceivedOrders(boolean filed) {
+        if (!filed) {
+            return request("GET", "/orders", null);
+        }
+        return request("GET", "/orders?direction=in&filed=true", null);
+    }
+
+    public JsonNode getOrder(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            throw ApiException.badRequest("BrickLink order id is missing");
+        }
+        return request("GET", "/orders/" + orderId, null);
+    }
+
+    public JsonNode getOrderItems(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            throw ApiException.badRequest("BrickLink order id is missing");
+        }
+        return request("GET", "/orders/" + orderId + "/items", null);
+    }
+
     public JsonNode createInventory(InventoryItem item) {
         return request("POST", "/inventories", inventoryRequest(item).toString());
     }

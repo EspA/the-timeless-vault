@@ -11,6 +11,8 @@ import com.thetimelessvault.ebay.EbayPublisher;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.InventoryService;
 import com.thetimelessvault.shopify.ShopifyClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,8 @@ import java.util.UUID;
 
 @Service
 public class PublishService {
+
+    private static final Logger log = LoggerFactory.getLogger(PublishService.class);
 
     private final InventoryService inventoryService;
     private final ChannelListingRepository listings;
@@ -97,9 +101,12 @@ public class PublishService {
             boolean bypassEbayCatalog
     ) {
         InventoryItem item = inventoryService.get(itemId);
-        Set<Platform> selected = platforms == null || platforms.isEmpty()
-                ? EnumSet.allOf(Platform.class)
-                : platforms;
+        Set<Platform> selected = EnumSet.copyOf(
+                platforms == null || platforms.isEmpty()
+                        ? Platform.listingChannels()
+                        : platforms
+        );
+        selected.retainAll(Platform.listingChannels());
         if (action == ListingAction.UPDATE) {
             List<ChannelListing> targets = listings.findByInventoryItemId(itemId).stream()
                     .filter(listing -> selected.contains(listing.getPlatform()))
@@ -144,6 +151,7 @@ public class PublishService {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
             case EBAY -> "eBay";
+            case LOCAL -> "Local";
         };
     }
 
@@ -155,7 +163,7 @@ public class PublishService {
     }
 
     static String noListingsToUpdateMessage(Set<Platform> selected) {
-        if (selected.size() >= Platform.values().length) {
+        if (selected.containsAll(Platform.listingChannels())) {
             return "No existing listings to update. Create a listing first.";
         }
         return "None of the selected channels have an existing listing to update.";
@@ -290,11 +298,7 @@ public class PublishService {
                 continue;
             }
             try {
-                switch (listing.getPlatform()) {
-                    case SHOPIFY -> setShopifyStatus(itemId, "UNLISTED");
-                    case BRICKLINK -> setBricklinkStatus(itemId, "UNLISTED");
-                    case EBAY -> setEbayStatus(itemId, "UNLISTED");
-                }
+                unlistRemotely(itemId, listing.getPlatform());
             } catch (RuntimeException e) {
                 errors.add(platformName(listing.getPlatform()) + ": " + e.getMessage());
             }
@@ -304,7 +308,50 @@ public class PublishService {
         }
     }
 
+    @Transactional
+    public void deactivatePublishedListingsAfterSale(UUID itemId, Platform soldOn) {
+        InventoryItem item = inventoryService.get(itemId);
+        for (ChannelListing listing : listings.findByInventoryItemId(itemId)) {
+            if (!needsDeactivation(listing)) {
+                continue;
+            }
+            try {
+                if (soldOn != null && listing.getPlatform() == soldOn) {
+                    markUnlistedLocally(listing, item, "Sold on this channel; listing marked inactive locally");
+                    continue;
+                }
+                unlistRemotely(itemId, listing.getPlatform());
+            } catch (RuntimeException e) {
+                log.warn("Could not unlist {} after sale for item {}: {}", listing.getPlatform(), itemId, e.getMessage());
+                markUnlistedLocally(
+                        listing,
+                        item,
+                        "Marked inactive locally after unlist failed: " + e.getMessage()
+                );
+            }
+        }
+    }
+
+    private void unlistRemotely(UUID itemId, Platform platform) {
+        switch (platform) {
+            case SHOPIFY -> setShopifyStatus(itemId, "UNLISTED");
+            case BRICKLINK -> setBricklinkStatus(itemId, "UNLISTED");
+            case EBAY -> setEbayStatus(itemId, "UNLISTED");
+            case LOCAL -> {
+            }
+        }
+    }
+
+    private void markUnlistedLocally(ChannelListing listing, InventoryItem item, String message) {
+        listing.markUnlisted();
+        listings.save(listing);
+        listingLogs.record(item, listing.getPlatform(), ListingAction.DEACTIVATE, ListingLogStatus.SUCCESS, message);
+    }
+
     private static boolean needsDeactivation(ChannelListing listing) {
+        if (!listing.getPlatform().isListingChannel()) {
+            return false;
+        }
         if (listing.getStatus() != ListingStatus.PUBLISHED) {
             return false;
         }
@@ -315,6 +362,7 @@ public class PublishService {
             case SHOPIFY -> listing.getShopifyStatus();
             case BRICKLINK -> listing.getBricklinkStatus();
             case EBAY -> listing.getEbayStatus();
+            case LOCAL -> null;
         };
         if (listing.getPlatform() == Platform.EBAY
                 && (visibility == null || visibility.isBlank())
@@ -330,6 +378,7 @@ public class PublishService {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
             case EBAY -> "eBay";
+            case LOCAL -> "Local";
         };
     }
 
@@ -388,6 +437,7 @@ public class PublishService {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
             case EBAY -> "eBay";
+            case LOCAL -> "Local";
         };
         ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, platform)
                 .orElseThrow(() -> ApiException.notFound(name + " listing not found"));

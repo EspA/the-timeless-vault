@@ -8,6 +8,7 @@ import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class EbayTokenService {
     private final AppSettingRepository settings;
     private final ObjectMapper mapper;
     private final RestClient restClient = RestClient.builder().build();
+    private final ObjectProvider<EbayAccountDeletionService> accountDeletionService;
 
     private volatile String userAccessToken;
     private volatile Instant userAccessExpiry = Instant.EPOCH;
@@ -39,10 +41,16 @@ public class EbayTokenService {
     private volatile String browseAccessToken;
     private volatile Instant browseAccessExpiry = Instant.EPOCH;
 
-    public EbayTokenService(AppProperties properties, AppSettingRepository settings, ObjectMapper mapper) {
+    public EbayTokenService(
+            AppProperties properties,
+            AppSettingRepository settings,
+            ObjectMapper mapper,
+            ObjectProvider<EbayAccountDeletionService> accountDeletionService
+    ) {
         this.config = properties.getEbay();
         this.settings = settings;
         this.mapper = mapper;
+        this.accountDeletionService = accountDeletionService;
     }
 
     public String userAccessToken() {
@@ -101,6 +109,10 @@ public class EbayTokenService {
         settings.save(new AppSetting(REFRESH_TOKEN_KEY, refresh));
         applyUserToken(token);
         logGrantedScopes("authorization_code", token);
+        EbayAccountDeletionService deletionService = accountDeletionService.getIfAvailable();
+        if (deletionService != null) {
+            deletionService.storeConnectedIdentity(userAccessToken);
+        }
     }
 
     static String authorizationCodeFrom(String raw) {
@@ -127,6 +139,14 @@ public class EbayTokenService {
 
     public boolean hasRefreshToken() {
         return refreshToken() != null && !refreshToken().isBlank();
+    }
+
+    public void clearStoredCredentials() {
+        settings.findById(REFRESH_TOKEN_KEY).ifPresent(settings::delete);
+        settings.findById(EbayAccountDeletionService.CONNECTED_USER_ID_KEY).ifPresent(settings::delete);
+        settings.findById(EbayAccountDeletionService.CONNECTED_USERNAME_KEY).ifPresent(settings::delete);
+        userAccessToken = null;
+        userAccessExpiry = Instant.EPOCH;
     }
 
     private String refreshToken() {

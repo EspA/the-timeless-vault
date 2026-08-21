@@ -83,8 +83,10 @@ public class SecurityConfig {
                                 "/scan-logs",
                                 "/alerts",
                                 "/buying-opportunities",
-                                "/listing-logs",
-                                "/settings"
+                        "/listing-logs",
+                        "/sales",
+                        "/settings",
+                        "/webhooks/ebay/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

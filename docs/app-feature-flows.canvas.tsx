@@ -200,7 +200,7 @@ const FLOWS: Record<FlowId, FlowDef> = {
         title: "Channel orders",
         subtitle: "eBay · BrickLink · Shopify",
         detail:
-          "First poll looks back 7 days; later polls overlap the last watermark by 2 hours. Watermarks live in app_setting (sales.last_sync.*). eBay uses Fulfillment orders; BrickLink uses store orders plus order cost; Shopify uses paid orders (needs read_orders).",
+          "First poll looks back 1 day; later polls overlap the last watermark by 2 hours. Watermarks live in app_setting (sales.last_sync.*). eBay uses Fulfillment orders; BrickLink uses store orders plus order cost; Shopify uses paid orders (needs read_orders).",
       },
       {
         id: "match",

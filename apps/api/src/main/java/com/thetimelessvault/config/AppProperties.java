@@ -334,6 +334,14 @@ public class AppProperties {
         private String returnPolicyId = "";
         private String browseClientId = "";
         private String browseClientSecret = "";
+        private String verificationToken = "";
+        private String accountDeletionEndpointUrl = "";
+
+        public boolean accountDeletionConfigured() {
+            return notBlank(verificationToken)
+                    && notBlank(accountDeletionEndpointUrl)
+                    && configured();
+        }
 
         public boolean configured() {
             return notBlank(clientId) && notBlank(clientSecret);
@@ -473,6 +481,22 @@ public class AppProperties {
 
         public void setBrowseClientSecret(String browseClientSecret) {
             this.browseClientSecret = browseClientSecret;
+        }
+
+        public String getVerificationToken() {
+            return verificationToken;
+        }
+
+        public void setVerificationToken(String verificationToken) {
+            this.verificationToken = verificationToken;
+        }
+
+        public String getAccountDeletionEndpointUrl() {
+            return accountDeletionEndpointUrl;
+        }
+
+        public void setAccountDeletionEndpointUrl(String accountDeletionEndpointUrl) {
+            this.accountDeletionEndpointUrl = accountDeletionEndpointUrl;
         }
     }
 

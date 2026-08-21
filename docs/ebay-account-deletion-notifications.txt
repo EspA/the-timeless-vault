@@ -1,0 +1,123 @@
+eBay Marketplace User Account Deletion Notifications
+====================================================
+Reference for The Timeless Vault (Spring Boot on Cloud Run)
+
+Official docs: https://developer.ebay.com/marketplace-account-deletion
+Java SDK: https://github.com/eBay/event-notification-java-sdk
+
+
+Why this is required
+--------------------
+eBay requires every production app to expose an HTTPS endpoint that:
+1. Passes endpoint verification (GET challenge)
+2. Accepts signed account-deletion POST notifications
+
+Without a verified endpoint you cannot pass Application Growth Check and your keyset can be marked non-compliant if notifications are ignored for 30 days.
+
+
+What your app stores today (deletion scope)
+-------------------------------------------
+- eBay OAuth refresh token in app_setting (key: ebay.refresh_token)
+- Market listing snapshots with seller username, feedback, country (market_listing table)
+- Channel listings with eBay item/offer IDs (channel_listing table)
+
+When a deletion notification arrives, purge or anonymize data tied to the eBay userId / username in the payload.
+
+
+Recommended endpoint
+--------------------
+URL (must match exactly in portal and in challenge hash):
+  https://admin.thetimelessvault.com/webhooks/ebay/account-deletion
+
+Alternative if admin subdomain routes to the same Cloud Run service:
+  https://YOUR_CLOUD_RUN_URL/webhooks/ebay/account-deletion
+
+Use whichever URL is publicly reachable and stable long-term.
+
+
+Environment variables to add
+----------------------------
+EBAY_VERIFICATION_TOKEN=<random 32-80 char secret>
+EBAY_ACCOUNT_DELETION_ENDPOINT_URL=<exact public HTTPS URL above>
+
+
+Portal subscription steps
+-------------------------
+1. Log in at https://developer.ebay.com/
+2. Go to Application Keys → select production keyset (the production keyset)
+3. Find "Marketplace account deletion/closure notifications" (or Alerts and Notifications)
+4. Enter:
+   - Notification endpoint URL (exact match to EBAY_ACCOUNT_DELETION_ENDPOINT_URL)
+   - Verification token (same as EBAY_VERIFICATION_TOKEN)
+   - Contact email for outage alerts
+5. Deploy your webhook endpoint FIRST, then click Save
+6. eBay sends GET ?challenge_code=... — your app must respond correctly or verification fails
+7. Confirm endpoint shows as verified in the portal
+
+
+Implementation checklist (Spring Boot)
+--------------------------------------
+[x] Add GET + POST handler at /webhooks/ebay/account-deletion
+[x] Permit unauthenticated access in SecurityConfig for that path only
+[x] Implement challenge response (EbayAccountDeletionChallenge)
+[x] Verify x-ebay-signature on POST (EbayNotificationSignatureVerifier)
+[x] Return 204 immediately on POST; process deletion inline
+[x] Delete ebay.refresh_token from app_setting when userId matches connected seller
+[x] Delete market_listing rows where seller = username from payload
+[ ] Store EBAY_VERIFICATION_TOKEN in GCP Secret Manager for production
+[ ] Redeploy Cloud Run, then save settings in eBay portal (STEP 3 — user action)
+
+
+Challenge verification (GET)
+----------------------------
+When eBay sends:
+  GET /webhooks/ebay/account-deletion?challenge_code=ABC123
+
+Respond HTTP 200, Content-Type: application/json:
+  { "challengeResponse": "<hex-sha256>" }
+
+Where:
+  hashInput = challengeCode + verificationToken + endpointUrl
+  challengeResponse = SHA-256(hashInput) as lowercase hex
+
+IMPORTANT:
+- Concatenate in that exact order with no separators
+- endpointUrl must be the EXACT URL registered in the portal (including https, no trailing slash mismatch)
+
+
+Notification handling (POST)
+----------------------------
+1. Read raw request body (needed for signature verification)
+2. Validate x-ebay-signature header using eBay public key (kid → GET /commerce/notification/v1/public_key/{kid})
+3. If valid, return 204 No Content immediately
+4. Async: parse JSON payload, extract userId and username
+5. Run deletion logic (refresh token, market listings by seller username)
+6. Log notification ID for deduplication
+
+Invalid signature → HTTP 412 (eBay will retry)
+Valid signature → 2xx within 24h or keyset may be disabled
+
+
+Suggested Java approach
+-------------------------
+Option A (recommended): Integrate logic from eBay's event-notification-java-sdk
+  - Use their signature validator + challenge response helper
+  - Add a custom AccountDeletionMessageProcessor with your purge logic
+
+Option B (minimal): Single controller with:
+  - MessageDigest SHA-256 for GET challenge
+  - SDK validator class copied/imported for POST signatures
+
+
+SecurityConfig change (example path to permit):
+  .requestMatchers("/webhooks/ebay/**").permitAll()
+
+
+Testing locally
+---------------
+eBay cannot call localhost. Options:
+- Deploy to Cloud Run staging URL and verify there
+- Use ngrok temporarily: https://<id>.ngrok.io/webhooks/ebay/account-deletion
+- Portal verification must use the same URL you register
+
+After local dev, re-register production URL in portal if it changed.

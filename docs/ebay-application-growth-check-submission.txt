@@ -1,0 +1,75 @@
+eBay Application Growth Check — Submission Draft
+================================================
+Generated: 2026-08-21
+App ID: <ebay-app-id>
+Application URL: https://admin.thetimelessvault.com
+Product: Browse API
+Purpose: Increase My Call Limit
+eBay Partner Network member: No
+
+Prerequisite (complete BEFORE submitting):
+- Subscribe to eBay Marketplace User Account Deletion notifications
+- See docs/ebay-account-deletion-notifications.txt (or project README) for setup steps
+
+
+Application Title / Summary
+---------------------------
+The Timeless Vault — LEGO inventory management and eBay market monitoring for thetimelessvault.com
+
+
+Application Details (limit: 2000 characters)
+----------------------------------------------
+The Timeless Vault is an internal inventory and market-monitor for thetimelessvault.com, a LEGO collectibles retailer. Deployed on Google Cloud Run; staff-only access via Google SSO allowlist. Not a public marketplace and data is not resold.
+
+FLOW
+1. Staff create inventory records for LEGO sets (photos, condition, price).
+2. Listings publish to Shopify, BrickLink, and eBay (Sell APIs — separate request).
+3. Staff enable watch rules on sets they buy or sell.
+4. Cloud Scheduler runs every 5 minutes; due watches call Browse API to fetch current eBay listings per set.
+5. New listings and price-guard drift vs market median trigger internal email alerts.
+6. Pricing changes are manual — no auto-bidding or repricing.
+
+BROWSE API
+• GET /buy/browse/v1/item_summary/search — one per watched set per scan (default 5 min). Query: LEGO {setNumber}, limit=200, New condition.
+• GET item_summary/search — up to 3 catalog lookups per publish (GTIN/keyword).
+• GET /buy/browse/v1/item/{itemId} — up to 6 detail lookups per publish for ePID/MPN/specifics.
+
+Browse data is for internal monitoring only; not redistributed. eBay URLs appear in staff alert emails.
+
+WHY HIGHER LIMIT
+Each watch ≈288 search calls/day at 5-min interval. We are at/near the 5,000/day cap and hit errors 518/18000 when adding watches. Need headroom as inventory grows.
+
+COMPLIANCE
+OAuth 2.0 (client credentials for Browse, user token for Sell). Marketplace Account Deletion notifications subscribed. API License followed. URL: https://admin.thetimelessvault.com
+
+
+Call Volume Estimate
+--------------------
+Browse API — projected daily volume (production app: <ebay-app-id>)
+
+Call Name                              | Hourly Peak | Daily Est. | Notes
+---------------------------------------|-------------|------------|------
+GET item_summary/search (market scan)  | 400         | 14,400     | 50 watches × 288 scans/day (5-min interval)
+GET item_summary/search (catalog)      | 5           | 30         | ~10 publishes/day × up to 3 searches each
+GET item/{itemId} (catalog enrichment) | 10          | 60         | ~10 publishes/day × up to 6 detail calls
+---------------------------------------|-------------|------------|------
+TOTAL (near-term, 3–6 months)          | 415         | ~14,500    |
+
+12-MONTH GROWTH PLAN
+• Expand active watch list from ~20 sets today to 500+ sets as inventory grows
+• At 500 watches / 5-min interval: 500 × 288 = 144,000 search calls/day
+• Additional manual scans from Market UI: ~100/day
+• Publish/catalog lookups: ~100/day combined
+
+REQUESTED DAILY LIMIT: 250,000 calls/day (Browse API)
+REQUESTED HOURLY PEAK: 2,500 calls/hour
+
+This provides ~2× headroom over our 12-month forecast while keeping requests proportional to a single-retailer internal tool. We monitor usage via API Reports and will request further increases only if growth exceeds this plan.
+
+
+Notes for resubmission / updates
+--------------------------------
+- Adjust "Current watches" and volume table if your enabled watch count changes.
+- If already seeing 518 / 18000 errors, mention that explicitly in Application Details.
+- If Sell Inventory API limits become an issue, submit a separate growth check for that product.
+- Portal: https://developer.ebay.com/my/support/tickets?tab=app-check
