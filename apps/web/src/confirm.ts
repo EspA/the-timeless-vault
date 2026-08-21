@@ -46,6 +46,28 @@ export const askAlert = (message: string, options?: Omit<ConfirmOptions, "messag
   });
 };
 
+const STOCK_STATUS_LABELS: Record<string, string> = {
+  IN_TRANSIT: "In transit",
+  IN_STOCK: "In stock",
+  SOLD: "Sold",
+};
+
+export const confirmStockStatusChange = (nextStatus: string) => {
+  const label = STOCK_STATUS_LABELS[nextStatus] ?? nextStatus;
+  const quantityNote = nextStatus === "IN_STOCK"
+    ? "Quantity will increase by 1."
+    : "Quantity will be set to 0.";
+  const listingsNote = nextStatus === "SOLD"
+    ? " Active listings on Shopify, eBay, and BrickLink will be deactivated."
+    : "";
+  return askConfirm(`Switch status to ${label}? ${quantityNote}${listingsNote}`, {
+    title: "Change status",
+    confirmLabel: "Switch",
+    cancelLabel: "Cancel",
+    variant: "gold",
+  });
+};
+
 export const closeConfirm = (ok: boolean) => {
   confirmDialog.open = false;
   resolveConfirm?.(ok);

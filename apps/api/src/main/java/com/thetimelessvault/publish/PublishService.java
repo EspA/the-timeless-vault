@@ -15,6 +15,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -65,20 +66,36 @@ public class PublishService {
 
     @Transactional
     public List<PublishJob> enqueue(UUID itemId, Set<Platform> platforms) {
-        return enqueueJobs(itemId, platforms, false, ListingAction.CREATE);
+        return enqueue(itemId, platforms, false);
+    }
+
+    @Transactional
+    public List<PublishJob> enqueue(UUID itemId, Set<Platform> platforms, boolean bypassEbayCatalog) {
+        return enqueueJobs(itemId, platforms, false, ListingAction.CREATE, bypassEbayCatalog);
     }
 
     @Transactional
     public List<PublishJob> enqueueRetry(UUID itemId, Platform platform) {
-        return enqueueJobs(itemId, Set.of(platform), true, ListingAction.CREATE);
+        return enqueueRetry(itemId, platform, false);
+    }
+
+    @Transactional
+    public List<PublishJob> enqueueRetry(UUID itemId, Platform platform, boolean bypassEbayCatalog) {
+        return enqueueJobs(itemId, Set.of(platform), true, ListingAction.CREATE, bypassEbayCatalog);
     }
 
     @Transactional
     public List<PublishJob> enqueueUpdate(UUID itemId, Set<Platform> platforms) {
-        return enqueueJobs(itemId, platforms, false, ListingAction.UPDATE);
+        return enqueueJobs(itemId, platforms, false, ListingAction.UPDATE, false);
     }
 
-    private List<PublishJob> enqueueJobs(UUID itemId, Set<Platform> platforms, boolean retry, ListingAction action) {
+    private List<PublishJob> enqueueJobs(
+            UUID itemId,
+            Set<Platform> platforms,
+            boolean retry,
+            ListingAction action,
+            boolean bypassEbayCatalog
+    ) {
         InventoryItem item = inventoryService.get(itemId);
         Set<Platform> selected = platforms == null || platforms.isEmpty()
                 ? EnumSet.allOf(Platform.class)
@@ -91,7 +108,7 @@ public class PublishService {
             if (targets.isEmpty()) {
                 throw ApiException.badRequest(noListingsToUpdateMessage(selected));
             }
-            return targets.stream().map(listing -> queueJob(item, listing, ListingAction.UPDATE)).toList();
+            return targets.stream().map(listing -> queueJob(item, listing, ListingAction.UPDATE, false)).toList();
         }
         if (!retry) {
             List<String> existing = selected.stream()
@@ -106,14 +123,14 @@ public class PublishService {
         return selected.stream().map(platform -> {
             ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, platform)
                     .orElseGet(() -> listings.save(ChannelListing.create(item, platform)));
-            return queueJob(item, listing, ListingAction.CREATE);
+            return queueJob(item, listing, ListingAction.CREATE, bypassEbayCatalog && platform == Platform.EBAY);
         }).toList();
     }
 
-    private PublishJob queueJob(InventoryItem item, ChannelListing listing, ListingAction action) {
+    private PublishJob queueJob(InventoryItem item, ChannelListing listing, ListingAction action, boolean bypassEbayCatalog) {
         listing.markPublishing();
         listings.save(listing);
-        return jobs.save(PublishJob.queued(item, listing.getPlatform(), action));
+        return jobs.save(PublishJob.queued(item, listing.getPlatform(), action, bypassEbayCatalog));
     }
 
     static boolean canUpdate(ChannelListing listing) {
@@ -263,6 +280,57 @@ public class PublishService {
             listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.FAILED, e.getMessage());
             throw e;
         }
+    }
+
+    @Transactional
+    public void deactivatePublishedListings(UUID itemId) {
+        List<String> errors = new ArrayList<>();
+        for (ChannelListing listing : listings.findByInventoryItemId(itemId)) {
+            if (!needsDeactivation(listing)) {
+                continue;
+            }
+            try {
+                switch (listing.getPlatform()) {
+                    case SHOPIFY -> setShopifyStatus(itemId, "UNLISTED");
+                    case BRICKLINK -> setBricklinkStatus(itemId, "UNLISTED");
+                    case EBAY -> setEbayStatus(itemId, "UNLISTED");
+                }
+            } catch (RuntimeException e) {
+                errors.add(platformName(listing.getPlatform()) + ": " + e.getMessage());
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw ApiException.badRequest("Could not deactivate all listings. " + String.join(" ", errors));
+        }
+    }
+
+    private static boolean needsDeactivation(ChannelListing listing) {
+        if (listing.getStatus() != ListingStatus.PUBLISHED) {
+            return false;
+        }
+        if (listing.getExternalId() == null || listing.getExternalId().isBlank()) {
+            return false;
+        }
+        String visibility = switch (listing.getPlatform()) {
+            case SHOPIFY -> listing.getShopifyStatus();
+            case BRICKLINK -> listing.getBricklinkStatus();
+            case EBAY -> listing.getEbayStatus();
+        };
+        if (listing.getPlatform() == Platform.EBAY
+                && (visibility == null || visibility.isBlank())
+                && listing.getLiveUrl() != null
+                && !listing.getLiveUrl().isBlank()) {
+            visibility = "ACTIVE";
+        }
+        return !"UNLISTED".equalsIgnoreCase(visibility);
+    }
+
+    private static String platformName(Platform platform) {
+        return switch (platform) {
+            case SHOPIFY -> "Shopify";
+            case BRICKLINK -> "BrickLink";
+            case EBAY -> "eBay";
+        };
     }
 
     @Transactional

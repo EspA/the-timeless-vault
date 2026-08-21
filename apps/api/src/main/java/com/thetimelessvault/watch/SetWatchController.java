@@ -1,5 +1,7 @@
 package com.thetimelessvault.watch;
 
+import com.thetimelessvault.market.MarketSnapshotRepository;
+import com.thetimelessvault.market.MarketStats;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -21,9 +25,11 @@ import java.util.UUID;
 public class SetWatchController {
 
     private final SetWatchService setWatchService;
+    private final MarketSnapshotRepository snapshots;
 
-    public SetWatchController(SetWatchService setWatchService) {
+    public SetWatchController(SetWatchService setWatchService, MarketSnapshotRepository snapshots) {
         this.setWatchService = setWatchService;
+        this.snapshots = snapshots;
     }
 
     public record CreateRequest(
@@ -70,6 +76,7 @@ public class SetWatchController {
             Instant ebayScannedAt,
             BigDecimal bricklinkCurrentValueNew,
             Instant bricklinkScannedAt,
+            BigDecimal medianPrice,
             boolean enabled,
             String ebaySearchQuery,
             int ebayFeedbackMin,
@@ -82,6 +89,10 @@ public class SetWatchController {
             Instant updatedAt
     ) {
         static SetWatchView from(SetWatch watch) {
+            return from(watch, null);
+        }
+
+        static SetWatchView from(SetWatch watch, BigDecimal medianPrice) {
             return new SetWatchView(
                     watch.getId(),
                     watch.getCatalogItem().getId(),
@@ -101,6 +112,7 @@ public class SetWatchController {
                     watch.getEbayScannedAt(),
                     watch.getBricklinkCurrentValueNew(),
                     watch.getBricklinkScannedAt(),
+                    medianPrice,
                     watch.isEnabled(),
                     watch.getEbaySearchQuery(),
                     watch.getEbayFeedbackMin(),
@@ -117,17 +129,23 @@ public class SetWatchController {
 
     @GetMapping
     public List<SetWatchView> list() {
-        return setWatchService.list().stream().map(SetWatchView::from).toList();
+        List<SetWatch> watches = setWatchService.list();
+        Map<UUID, BigDecimal> medians = mediansFor(watches.stream()
+                .map(watch -> watch.getCatalogItem().getId())
+                .toList());
+        return watches.stream()
+                .map(watch -> SetWatchView.from(watch, medians.get(watch.getCatalogItem().getId())))
+                .toList();
     }
 
     @GetMapping("/{id}")
     public SetWatchView get(@PathVariable UUID id) {
-        return SetWatchView.from(setWatchService.get(id));
+        return toView(setWatchService.get(id));
     }
 
     @PostMapping
     public SetWatchView create(@RequestBody CreateRequest request) {
-        return SetWatchView.from(setWatchService.create(
+        return toView(setWatchService.create(
                 request.setNumber(),
                 request.enabled(),
                 request.ebaySearchQuery(),
@@ -142,7 +160,7 @@ public class SetWatchController {
 
     @PutMapping("/{id}")
     public SetWatchView update(@PathVariable UUID id, @RequestBody UpdateRequest request) {
-        return SetWatchView.from(setWatchService.update(
+        return toView(setWatchService.update(
                 id,
                 request.enabled(),
                 request.ebaySearchQuery(),
@@ -157,12 +175,24 @@ public class SetWatchController {
 
     @PostMapping("/{id}/refresh")
     public SetWatchView refresh(@PathVariable UUID id) {
-        return SetWatchView.from(setWatchService.refresh(id));
+        return toView(setWatchService.refresh(id));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         setWatchService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private SetWatchView toView(SetWatch watch) {
+        return SetWatchView.from(watch, mediansFor(List.of(watch.getCatalogItem().getId()))
+                .get(watch.getCatalogItem().getId()));
+    }
+
+    private Map<UUID, BigDecimal> mediansFor(Collection<UUID> catalogIds) {
+        if (catalogIds == null || catalogIds.isEmpty()) {
+            return Map.of();
+        }
+        return MarketStats.combinedMedians(snapshots.findLatestByCatalogItemIdIn(catalogIds));
     }
 }

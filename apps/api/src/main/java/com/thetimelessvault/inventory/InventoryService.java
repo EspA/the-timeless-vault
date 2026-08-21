@@ -6,6 +6,7 @@ import com.thetimelessvault.catalog.CatalogService;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.ItemCondition;
 import com.thetimelessvault.common.ItemType;
+import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.common.ThemeMapper;
@@ -116,9 +117,7 @@ public class InventoryService {
         if (request.shopifyPrice() != null) {
             item.setShopifyPrice(request.shopifyPrice());
         }
-        if (request.quantity() != null) {
-            item.setQuantity(request.quantity());
-        }
+        item.applyStockAndQuantity(request.stockStatus(), request.quantity());
         if (request.cost() != null) {
             item.setCost(request.cost());
         }
@@ -276,6 +275,7 @@ public class InventoryService {
                 item.priceFor(Platform.BRICKLINK),
                 item.priceFor(Platform.SHOPIFY),
                 item.getQuantity(),
+                item.getStockStatus(),
                 item.getCost(),
                 item.getItemType(),
                 item.getCondition(),
@@ -319,7 +319,10 @@ public class InventoryService {
         item.setBricklinkPrice(request.bricklinkPrice());
         item.setShopifyPrice(request.shopifyPrice());
         item.setPrice(request.ebayPrice());
-        item.setQuantity(request.quantity() == null ? 1 : request.quantity());
+        item.applyStockAndQuantity(
+                request.stockStatus() == null ? StockStatus.IN_TRANSIT : request.stockStatus(),
+                request.quantity()
+        );
         item.setCost(request.cost());
         item.setShopifyCollectionIds(request.shopifyCollectionIds() == null ? "" : String.join(",", request.shopifyCollectionIds()));
         item.setEbayStoreCategory(request.ebayStoreCategory() == null || request.ebayStoreCategory().isBlank()

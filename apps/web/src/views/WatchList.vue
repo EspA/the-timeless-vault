@@ -9,22 +9,27 @@ import ChannelLogo from "../components/ChannelLogo.vue";
 const router = useRouter();
 const adding = ref(false);
 
-type Column = "set" | "name" | "status" | "theme" | "ebayScan" | "bricklinkScan";
+type Column = "set" | "name" | "median" | "status" | "theme" | "ebayScan" | "bricklinkScan";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
 const PAGE_SIZE = 20;
 const watches = ref<SetWatch[]>([]);
 const page = ref(0);
 const error = ref("");
+const search = ref("");
 const sort = ref<Sort>({ key: "set", dir: "asc" });
 const filters = ref({
   set: "",
   name: "",
+  median: "",
   status: "",
   theme: "",
   ebayScan: "",
   bricklinkScan: "",
 });
+
+const money = (value?: number | null) =>
+  value == null || Number.isNaN(Number(value)) ? "—" : `$${Number(value).toFixed(2)}`;
 
 const scanFrequency = (minutes?: number) => {
   if (!minutes) return "—";
@@ -40,6 +45,8 @@ const valueFor = (watch: SetWatch, key: Column): string | number | null => {
       return watch.setNumber;
     case "name":
       return watch.name;
+    case "median":
+      return watch.medianPrice ?? null;
     case "status":
       return watch.enabled ? 1 : 0;
     case "theme":
@@ -61,10 +68,17 @@ const filtered = computed(() =>
   watches.value.filter((watch) =>
     contains(watch.setNumber, filters.value.set)
     && contains(watch.name, filters.value.name)
+    && contains(money(watch.medianPrice), filters.value.median)
     && (!filters.value.status || String(watch.enabled) === filters.value.status)
     && contains(watch.theme || "", filters.value.theme)
     && (!filters.value.ebayScan || String(watch.ebayScanIntervalMinutes) === filters.value.ebayScan)
     && (!filters.value.bricklinkScan || String(watch.bricklinkScanIntervalMinutes) === filters.value.bricklinkScan)
+    && (
+      !search.value.trim()
+      || contains(watch.setNumber, search.value)
+      || contains(watch.name, search.value)
+      || contains(watch.theme || "", search.value)
+    )
   )
 );
 
@@ -120,6 +134,7 @@ const clearFilters = () => {
   filters.value = {
     set: "",
     name: "",
+    median: "",
     status: "",
     theme: "",
     ebayScan: "",
@@ -145,8 +160,37 @@ watch(totalPages, (pages) => {
   if (page.value >= pages) page.value = Math.max(0, pages - 1);
 });
 
+const toggling = ref<Record<string, boolean>>({});
+
 const load = async () => {
   watches.value = await api.get<SetWatch[]>("/api/set-watches");
+};
+
+const toggleEnabled = async (watch: SetWatch) => {
+  if (toggling.value[watch.id]) return;
+  const next = !watch.enabled;
+  toggling.value = { ...toggling.value, [watch.id]: true };
+  error.value = "";
+  watches.value = watches.value.map((row) => (row.id === watch.id ? { ...row, enabled: next } : row));
+  try {
+    const saved = await api.put<SetWatch>(`/api/set-watches/${watch.id}`, {
+      enabled: next,
+      ebaySearchQuery: watch.ebaySearchQuery,
+      ebayExcludeWords: watch.ebayExcludeWords ?? "",
+      ebayFeedbackMin: watch.ebayFeedbackMin,
+      ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
+      bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
+      minPrice: watch.minPrice ?? null,
+      maxPrice: watch.maxPrice ?? null,
+    });
+    watches.value = watches.value.map((row) => (row.id === saved.id ? saved : row));
+  } catch (e) {
+    watches.value = watches.value.map((row) => (row.id === watch.id ? { ...row, enabled: watch.enabled } : row));
+    error.value = e instanceof Error ? e.message : "Could not update market watch";
+  } finally {
+    const { [watch.id]: _, ...rest } = toggling.value;
+    toggling.value = rest;
+  }
 };
 
 const remove = async (watch: SetWatch) => {
@@ -184,7 +228,7 @@ onMounted(async () => {
 
 <template>
   <div class="grid">
-    <div style="display:flex;justify-content:space-between;align-items:end">
+    <div class="page-head">
       <div>
         <h1>Items watch</h1>
       </div>
@@ -194,7 +238,7 @@ onMounted(async () => {
     <div class="card">
       <div v-if="watches.length" class="pager" style="margin:0 0 0.85rem">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <div class="pager-actions">
           <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
             Clear filters
           </button>
@@ -204,12 +248,25 @@ onMounted(async () => {
           </template>
         </div>
       </div>
-      <div class="table-scroll">
+      <div class="mobile-filters mobile-only">
+        <label>Search
+          <input v-model="search" type="search" placeholder="Set, name, or theme" />
+        </label>
+        <label>Status
+          <select v-model="filters.status">
+            <option value="">All</option>
+            <option value="true">Watching</option>
+            <option value="false">Paused</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll desktop-only">
         <table>
           <thead>
             <tr>
               <th><button class="sort-btn" type="button" @click="sortBy('set')">Set{{ sortMark("set") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('name')">Name{{ sortMark("name") }}</button></th>
+              <th><button class="sort-btn" type="button" @click="sortBy('median')">Median{{ sortMark("median") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('status')">Status{{ sortMark("status") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('theme')">Theme{{ sortMark("theme") }}</button></th>
               <th>
@@ -227,6 +284,7 @@ onMounted(async () => {
             <tr>
               <th><input v-model="filters.set" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.name" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.median" class="column-filter" type="search" placeholder="Filter" /></th>
               <th>
                 <select v-model="filters.status" class="column-filter">
                   <option value="">All</option>
@@ -258,7 +316,20 @@ onMounted(async () => {
             <tr v-for="watch in visible" :key="watch.id">
               <td>{{ watch.setNumber }}</td>
               <td><router-link :to="`/watches/${watch.id}`">{{ watch.name }}</router-link></td>
-              <td><span class="badge" :class="{ ok: watch.enabled }">{{ statusLabel(watch.enabled) }}</span></td>
+              <td>{{ money(watch.medianPrice) }}</td>
+              <td>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    :checked="watch.enabled"
+                    :disabled="!!toggling[watch.id]"
+                    :aria-label="watch.enabled ? 'Pause market watch' : 'Enable market watch'"
+                    @change="toggleEnabled(watch)"
+                  />
+                  <span class="switch-track" aria-hidden="true"></span>
+                  <span class="switch-label">{{ statusLabel(watch.enabled) }}</span>
+                </label>
+              </td>
               <td>{{ watch.theme || "—" }}</td>
               <td>{{ scanFrequency(watch.ebayScanIntervalMinutes) }}</td>
               <td>{{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</td>
@@ -267,14 +338,40 @@ onMounted(async () => {
               </td>
             </tr>
             <tr v-if="!visible.length">
-              <td colspan="7" class="muted">{{ watches.length ? "No watches match those filters." : "No sets watched yet. Add a LEGO reference to begin." }}</td>
+              <td colspan="8" class="muted">{{ watches.length ? "No watches match those filters." : "No sets watched yet. Add a LEGO reference to begin." }}</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <div class="list-cards mobile-only">
+        <article v-for="watch in visible" :key="watch.id" class="list-card">
+          <h3><router-link :to="`/watches/${watch.id}`">{{ watch.name }}</router-link></h3>
+          <div class="list-card-meta muted">{{ watch.setNumber }} · {{ watch.theme || "No theme" }} · {{ money(watch.medianPrice) }}</div>
+          <label class="switch">
+            <input
+              type="checkbox"
+              :checked="watch.enabled"
+              :disabled="!!toggling[watch.id]"
+              :aria-label="watch.enabled ? 'Pause market watch' : 'Enable market watch'"
+              @change="toggleEnabled(watch)"
+            />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-label">{{ statusLabel(watch.enabled) }}</span>
+          </label>
+          <div class="list-card-meta muted">
+            <span>eBay {{ scanFrequency(watch.ebayScanIntervalMinutes) }}</span>
+            <span>BrickLink {{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</span>
+          </div>
+          <div class="list-card-actions">
+            <router-link class="btn secondary compact" :to="`/watches/${watch.id}`">Open</router-link>
+            <button class="btn danger compact" type="button" @click="remove(watch)">Delete</button>
+          </div>
+        </article>
+        <p v-if="!visible.length" class="muted">{{ watches.length ? "No watches match those filters." : "No sets watched yet. Add a LEGO reference to begin." }}</p>
+      </div>
       <div v-if="totalPages > 1" class="pager">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem">
+        <div class="pager-actions">
           <button class="btn secondary compact" type="button" :disabled="page <= 0" @click="previous">Previous</button>
           <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages" @click="next">Next</button>
         </div>

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { api, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, type Catalog, type InventoryItem } from "../api";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { api, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, quantityForStockStatus, type Catalog, type InventoryItem } from "../api";
 import RichTextEditor from "./RichTextEditor.vue";
 import ShopifyCollectionsField from "./ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "./EbayStoreCategoryField.vue";
+import ScanProgressModal from "./ScanProgressModal.vue";
+import ChannelLogo from "./ChannelLogo.vue";
+import StockStatusButtons from "./StockStatusButtons.vue";
+import { confirmStockStatusChange } from "../confirm";
 
 const emit = defineEmits<{
   close: [];
@@ -14,8 +18,26 @@ const setNumber = ref("");
 const catalog = ref<Catalog | null>(null);
 const error = ref("");
 const saving = ref(false);
+const uploadIndex = ref(0);
+const uploadTotal = ref(0);
+const uploadName = ref("");
 const editorKey = ref(0);
 const pendingPhotos = ref<{ file: File; url: string }[]>([]);
+
+const uploadTitle = computed(() => {
+  if (!uploadTotal.value) return "Saving item";
+  return uploadTotal.value === 1 ? "Uploading photo" : "Uploading photos";
+});
+const uploadMessage = computed(() => {
+  if (!uploadTotal.value) return "Creating the listing…";
+  const current = Math.min(uploadIndex.value + 1, uploadTotal.value);
+  const name = uploadName.value ? ` · ${uploadName.value}` : "";
+  return `Uploading ${current} of ${uploadTotal.value}${name}`;
+});
+const uploadPercent = computed(() => {
+  if (!uploadTotal.value) return null;
+  return Math.round(((uploadIndex.value + 1) / uploadTotal.value) * 100);
+});
 
 const addPhotos = (event: Event) => {
   const files = (event.target as HTMLInputElement).files;
@@ -38,7 +60,8 @@ const form = reactive({
   ebayPrice: "",
   bricklinkPrice: "",
   shopifyPrice: "",
-  quantity: 1,
+  quantity: 0,
+  stockStatus: "IN_TRANSIT",
   cost: "",
   itemType: "SET",
   condition: "NEW_SEALED",
@@ -83,6 +106,13 @@ watch(
   }
 );
 
+const setFormStockStatus = async (next: string) => {
+  if (form.stockStatus === next) return;
+  if (!(await confirmStockStatusChange(next))) return;
+  form.quantity = quantityForStockStatus(form.stockStatus, Number(form.quantity || 0), next);
+  form.stockStatus = next;
+};
+
 const lookup = async (refresh = false) => {
   error.value = "";
   try {
@@ -117,6 +147,7 @@ const save = async () => {
       bricklinkPrice: Number(form.bricklinkPrice),
       shopifyPrice: Number(form.shopifyPrice),
       quantity: Number(form.quantity),
+      stockStatus: form.stockStatus,
       cost: form.cost ? Number(form.cost) : null,
       itemType: form.itemType,
       condition: form.condition,
@@ -130,9 +161,12 @@ const save = async () => {
       packageHeight: form.packageHeight ? Number(form.packageHeight) : null,
       notes: form.notes,
     });
-    for (const photo of pendingPhotos.value) {
+    for (let i = 0; i < pendingPhotos.value.length; i++) {
+      uploadIndex.value = i;
+      uploadTotal.value = pendingPhotos.value.length;
+      uploadName.value = pendingPhotos.value[i].file.name;
       const data = new FormData();
-      data.append("file", photo.file);
+      data.append("file", pendingPhotos.value[i].file);
       await api.post(`/api/inventory/${created.id}/photos`, data);
     }
     emit("saved", created);
@@ -140,6 +174,9 @@ const save = async () => {
     error.value = (e as Error).message;
   } finally {
     saving.value = false;
+    uploadIndex.value = 0;
+    uploadTotal.value = 0;
+    uploadName.value = "";
   }
 };
 
@@ -209,13 +246,25 @@ onUnmounted(() => {
 
           <div class="card grid">
             <div class="grid three">
-              <label>eBay price (default 45% margin) <input v-model="form.ebayPrice" type="number" step="0.01" required /></label>
-              <label>BrickLink price (default 40% margin) <input v-model="form.bricklinkPrice" type="number" step="0.01" required /></label>
-              <label>Shopify price (default 32% margin) <input v-model="form.shopifyPrice" type="number" step="0.01" required /></label>
+              <label>
+                <span class="channel-field-label"><ChannelLogo platform="EBAY" :height="16" /> price (default 45% margin)</span>
+                <input v-model="form.ebayPrice" type="number" step="0.01" required />
+              </label>
+              <label>
+                <span class="channel-field-label"><ChannelLogo platform="BRICKLINK" :height="16" /> price (default 40% margin)</span>
+                <input v-model="form.bricklinkPrice" type="number" step="0.01" required />
+              </label>
+              <label>
+                <span class="channel-field-label"><ChannelLogo platform="SHOPIFY" :height="16" /> price (default 32% margin)</span>
+                <input v-model="form.shopifyPrice" type="number" step="0.01" required />
+              </label>
             </div>
-            <div class="grid three">
+            <div class="grid four">
               <label>Cost <input v-model="form.cost" type="number" step="0.01" /></label>
-              <label>Quantity <input v-model="form.quantity" type="number" min="1" /></label>
+              <label>Stock status
+                <StockStatusButtons :model-value="form.stockStatus" @update:model-value="setFormStockStatus" />
+              </label>
+              <label>Quantity <input v-model="form.quantity" type="number" min="0" /></label>
               <label>eBay Minimum offer (default 90% eBay price) <input v-model="form.minimumOffer" type="number" step="0.01" /></label>
             </div>
             <div class="grid four">
@@ -258,7 +307,7 @@ onUnmounted(() => {
           <div class="card grid">
             <h3>Photos</h3>
             <p class="muted">Add listing photos now. The first one is used as the BrickLink photo.</p>
-            <input type="file" accept="image/*" multiple @change="addPhotos" />
+            <input type="file" accept="image/*" multiple :disabled="saving" @change="addPhotos" />
             <div v-if="pendingPhotos.length" class="photos" style="margin-top:0.75rem">
               <div v-for="(photo, index) in pendingPhotos" :key="photo.url" class="photo-tile">
                 <img
@@ -292,5 +341,11 @@ onUnmounted(() => {
         </div>
       </form>
     </div>
+    <ScanProgressModal
+      :open="saving"
+      :title="uploadTitle"
+      :message="uploadMessage"
+      :percent="uploadPercent"
+    />
   </Teleport>
 </template>

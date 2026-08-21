@@ -13,6 +13,8 @@ import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.settings.AlertMailer;
 import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatch;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +48,12 @@ public class BuyingOpportunityService {
 
     public List<BuyingOpportunity> list() {
         return opportunities.findAllByOrderByCreatedAtDesc();
+    }
+
+    public Page<BuyingOpportunity> list(int page, int size) {
+        int pageSize = Math.min(10_000, Math.max(1, size));
+        int pageIndex = Math.max(0, page);
+        return opportunities.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
     }
 
     public long unreadCount() {

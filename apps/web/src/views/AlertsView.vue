@@ -15,6 +15,14 @@ type AlertEvent = {
   emailed: boolean;
 };
 
+type AlertsPage = {
+  items: AlertEvent[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+};
+
 const TYPE_OPTIONS = [
   { value: "", label: "All" },
   { value: "BUYING_OPPORTUNITY", label: "BUYING OPPORTUNITY" },
@@ -22,6 +30,7 @@ const TYPE_OPTIONS = [
   { value: "PRICE_LOW", label: "PRICE LOW" },
 ];
 
+const PAGE_SIZE = 20;
 const emptyFilters = () => ({
   when: "",
   type: "",
@@ -31,11 +40,16 @@ const emptyFilters = () => ({
   read: "",
 });
 
-const alerts = ref<AlertEvent[]>([]);
+const items = ref<AlertEvent[]>([]);
+const page = ref(0);
+const total = ref(0);
+const totalPages = ref(1);
+const unreadCount = ref(0);
 const filters = ref(emptyFilters());
 const markingAll = ref(false);
+const loading = ref(false);
+const error = ref("");
 const refreshUnread = inject<() => Promise<void>>("refreshUnread", async () => {});
-const unreadCount = computed(() => alerts.value.filter((alert) => !alert.read).length);
 
 const typeLabel = (type: string) => (type || "").replaceAll("_", " ");
 
@@ -51,8 +65,6 @@ const whenLabel = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
-const error = ref("");
-
 const contains = (value: string | number | null | undefined, needle: string) => {
   if (!needle.trim()) return true;
   const haystack = value == null ? "" : String(value);
@@ -61,15 +73,15 @@ const contains = (value: string | number | null | undefined, needle: string) => 
 
 const typeOptions = computed(() => {
   const known = new Set(TYPE_OPTIONS.map((option) => option.value).filter(Boolean));
-  const extra = [...new Set(alerts.value.map((alert) => alert.type))]
+  const extra = [...new Set(items.value.map((alert) => alert.type))]
     .filter((type) => type && !known.has(type))
     .sort()
     .map((type) => ({ value: type, label: typeLabel(type) }));
   return [...TYPE_OPTIONS, ...extra];
 });
 
-const filtered = computed(() =>
-  alerts.value.filter((alert) =>
+const visible = computed(() =>
+  items.value.filter((alert) =>
     contains(whenLabel(alert.createdAt), filters.value.when)
     && (!filters.value.type || alert.type === filters.value.type)
     && (!filters.value.platform || alert.platform === filters.value.platform)
@@ -83,24 +95,65 @@ const listingHref = (url?: string) => !!url && url.startsWith("/") && !url.start
 
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
+const rangeLabel = computed(() => {
+  if (!total.value) return "0 alerts";
+  const start = page.value * PAGE_SIZE + 1;
+  const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
+  const pages = totalPages.value > 1 ? ` · page ${page.value + 1} of ${totalPages.value}` : "";
+  return `${start}–${end} of ${total.value}${pages}`;
+});
+
 const clearFilters = () => {
   filters.value = emptyFilters();
 };
 
-const load = async () => {
+const loadUnread = async () => {
+  const count = await api.get<{ count: number }>("/api/alerts/unread-count").catch(() => ({ count: 0 }));
+  unreadCount.value = count.count;
+};
+
+const load = async (pageIndex = page.value) => {
+  if (loading.value) return;
+  loading.value = true;
   error.value = "";
   try {
-    alerts.value = await api.get<AlertEvent[]>("/api/alerts");
+    const result = await api.get<AlertsPage>(`/api/alerts?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const pages = Math.max(1, result.totalPages);
+    const nextPage = Math.min(pageIndex, pages - 1);
+    items.value = result.items;
+    total.value = result.total;
+    totalPages.value = pages;
+    page.value = nextPage;
+    await loadUnread();
+    if (nextPage !== pageIndex && result.total > 0) {
+      loading.value = false;
+      await load(nextPage);
+      return;
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "Could not load alerts";
+  } finally {
+    loading.value = false;
   }
 };
 
-onMounted(load);
+const previous = () => {
+  if (page.value <= 0 || loading.value) return;
+  void load(page.value - 1);
+};
+
+const next = () => {
+  if (page.value + 1 >= totalPages.value || loading.value) return;
+  void load(page.value + 1);
+};
+
+onMounted(() => {
+  void load(0);
+});
 
 const read = async (id: string) => {
   await api.post(`/api/alerts/${id}/read`);
-  await load();
+  await load(page.value);
   await refreshUnread();
 };
 
@@ -109,7 +162,7 @@ const readAll = async () => {
   markingAll.value = true;
   try {
     await api.post("/api/alerts/read-all");
-    await load();
+    await load(page.value);
     await refreshUnread();
   } finally {
     markingAll.value = false;
@@ -119,7 +172,7 @@ const readAll = async () => {
 
 <template>
   <div class="grid">
-    <div style="display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap">
+    <div class="page-head">
       <div>
         <h1>Alerts</h1>
       </div>
@@ -134,13 +187,31 @@ const readAll = async () => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
-      <div v-if="alerts.length" class="pager" style="margin:0 0 0.85rem">
-        <span class="muted">{{ filtered.length }} of {{ alerts.length }} alerts</span>
-        <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
-          Clear filters
-        </button>
+      <div v-if="total" class="pager" style="margin:0 0 0.85rem">
+        <span class="muted">{{ rangeLabel }}</span>
+        <div class="pager-actions">
+          <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
+            Clear filters
+          </button>
+          <template v-if="totalPages > 1">
+            <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+            <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
+          </template>
+        </div>
       </div>
-      <div class="table-scroll">
+      <div class="mobile-filters mobile-only">
+        <label>Search
+          <input v-model="filters.alert" type="search" placeholder="Alert text" />
+        </label>
+        <label>Status
+          <select v-model="filters.read">
+            <option value="">All</option>
+            <option value="false">Unread</option>
+            <option value="true">Read</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll desktop-only">
         <table>
           <thead>
             <tr>
@@ -186,7 +257,7 @@ const readAll = async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="alert in filtered" :key="alert.id" :style="{ opacity: alert.read ? 0.55 : 1 }">
+            <tr v-for="alert in visible" :key="alert.id" :style="{ opacity: alert.read ? 0.55 : 1 }">
               <td>{{ whenLabel(alert.createdAt) }}</td>
               <td><span class="badge" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span></td>
               <td>
@@ -213,11 +284,44 @@ const readAll = async () => {
                 <span v-else class="muted">Read</span>
               </td>
             </tr>
-            <tr v-if="!filtered.length">
-              <td colspan="6" class="muted">{{ alerts.length ? "No alerts match those filters." : "No alerts yet." }}</td>
+            <tr v-if="!visible.length">
+              <td colspan="6" class="muted">
+                {{ loading
+                  ? "Loading alerts…"
+                  : items.length
+                    ? "No alerts match those filters."
+                    : "No alerts yet." }}
+              </td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="list-cards mobile-only">
+        <article v-for="alert in visible" :key="alert.id" class="list-card" :style="{ opacity: alert.read ? 0.7 : 1 }">
+          <div class="list-card-row">
+            <span class="badge" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span>
+            <ChannelLogo v-if="alert.platform" :platform="alert.platform" :height="16" />
+            <span class="muted">{{ whenLabel(alert.createdAt) }}</span>
+          </div>
+          <h3>{{ alert.title }}</h3>
+          <p v-if="alert.body" class="muted" style="margin:0">{{ alert.body }}</p>
+          <div class="list-card-actions">
+            <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact" :to="alert.url">Open listing</router-link>
+            <a v-else-if="alert.url" class="btn secondary compact" :href="alert.url" target="_blank" rel="noopener noreferrer">Open listing</a>
+            <button v-if="!alert.read" class="btn secondary compact" type="button" @click="read(alert.id)">Mark read</button>
+            <span v-else class="muted">Read</span>
+          </div>
+        </article>
+        <p v-if="!visible.length" class="muted">
+          {{ loading ? "Loading alerts…" : items.length ? "No alerts match those filters." : "No alerts yet." }}
+        </p>
+      </div>
+      <div v-if="totalPages > 1" class="pager">
+        <span class="muted">{{ rangeLabel }}</span>
+        <div class="pager-actions">
+          <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
+        </div>
       </div>
     </div>
   </div>

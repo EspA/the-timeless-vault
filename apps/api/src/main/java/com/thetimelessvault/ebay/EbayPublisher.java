@@ -38,17 +38,12 @@ public class EbayPublisher implements ChannelPublisher {
 
     @Override
     public PublishResult publish(InventoryItem item, List<String> photoUrls) {
-        if (!client.configured()) {
-            throw ApiException.unavailable("eBay client credentials are not configured");
-        }
-        if (!client.sellReady()) {
-            throw ApiException.unavailable("Connect eBay on the Settings page (OAuth refresh token missing)");
-        }
-        List<String> hostedPhotos = hostPhotos(item, photoUrls);
-        if (hostedPhotos.isEmpty()) {
-            throw ApiException.badRequest("eBay requires at least one photo");
-        }
-        client.createOrReplaceInventoryItem(item, hostedPhotos);
+        return publish(item, photoUrls, false);
+    }
+
+    public PublishResult publish(InventoryItem item, List<String> photoUrls, boolean bypassEbayCatalog) {
+        List<String> hostedPhotos = requireHostedPhotos(item, photoUrls);
+        client.createOrReplaceInventoryItem(item, hostedPhotos, !bypassEbayCatalog);
         String offerId = client.createOffer(item);
         String listingId = client.liveListingId(offerId);
         if (listingId != null) {
@@ -59,17 +54,12 @@ public class EbayPublisher implements ChannelPublisher {
 
     @Override
     public PublishResult update(InventoryItem item, ChannelListing listing, List<String> photoUrls) {
-        if (!client.configured()) {
-            throw ApiException.unavailable("eBay client credentials are not configured");
-        }
-        if (!client.sellReady()) {
-            throw ApiException.unavailable("Connect eBay on the Settings page (OAuth refresh token missing)");
-        }
-        List<String> hostedPhotos = hostPhotos(item, photoUrls);
-        if (hostedPhotos.isEmpty()) {
-            throw ApiException.badRequest("eBay requires at least one photo");
-        }
-        client.createOrReplaceInventoryItem(item, hostedPhotos);
+        return update(item, listing, photoUrls, false);
+    }
+
+    public PublishResult update(InventoryItem item, ChannelListing listing, List<String> photoUrls, boolean bypassEbayCatalog) {
+        List<String> hostedPhotos = requireHostedPhotos(item, photoUrls);
+        client.createOrReplaceInventoryItem(item, hostedPhotos, !bypassEbayCatalog);
         String offerId = client.createOffer(item);
         String listingId = client.liveListingId(offerId);
         String liveUrl = listingId != null ? EbayClient.listingUrl(listingId) : listing.getLiveUrl();
@@ -81,12 +71,23 @@ public class EbayPublisher implements ChannelPublisher {
     }
 
     public void syncInventory(InventoryItem item) {
-        List<String> hostedPhotos = hostPhotos(item, List.of());
+        List<String> hostedPhotos = requireHostedPhotos(item, List.of());
+        client.createOrReplaceInventoryItem(item, hostedPhotos);
+        client.createOffer(item);
+    }
+
+    private List<String> requireHostedPhotos(InventoryItem item, List<String> photoUrls) {
+        if (!client.configured()) {
+            throw ApiException.unavailable("eBay client credentials are not configured");
+        }
+        if (!client.sellReady()) {
+            throw ApiException.unavailable("Connect eBay on the Settings page (OAuth refresh token missing)");
+        }
+        List<String> hostedPhotos = hostPhotos(item, photoUrls);
         if (hostedPhotos.isEmpty()) {
             throw ApiException.badRequest("eBay requires at least one photo");
         }
-        client.createOrReplaceInventoryItem(item, hostedPhotos);
-        client.createOffer(item);
+        return hostedPhotos;
     }
 
     private List<String> hostPhotos(InventoryItem item, List<String> photoUrls) {

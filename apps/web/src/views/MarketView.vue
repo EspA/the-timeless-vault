@@ -187,6 +187,29 @@ const combinedMedian = computed(() => weightedMean(
   { value: bricklinkMedian.value, count: dash.value?.bricklink?.count ?? 0 }
 ));
 
+const averageMedian = computed(() => {
+  const medians = [ebayMedian.value, bricklinkMedian.value]
+    .filter((value): value is number => value != null && !Number.isNaN(Number(value)));
+  if (!medians.length) {
+    return null;
+  }
+  return medians.reduce((sum, value) => sum + value, 0) / medians.length;
+});
+
+const recommendedMaxPrice = computed(() => {
+  if (averageMedian.value == null) {
+    return null;
+  }
+  return Math.round(averageMedian.value * 0.75 * 100) / 100;
+});
+
+const useRecommendedMaxPrice = () => {
+  if (recommendedMaxPrice.value == null) {
+    return;
+  }
+  maxPriceInput.value = recommendedMaxPrice.value;
+};
+
 const feedback = (row: Listing) => {
   if (row.sellerFeedbackScore == null && !row.sellerFeedbackPercentage) {
     return "—";
@@ -482,8 +505,8 @@ onMounted(async () => {
     <p v-if="filterMessage" class="muted">{{ filterMessage }}</p>
     <p v-if="!watches.length" class="muted">No sets are watched yet. Add one with <router-link to="/watches">New item watch</router-link>.</p>
     <div class="card grid">
-      <div style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap">
-        <label style="flex:1">Watched set
+      <div class="toolbar">
+        <label>Watched set
           <select :value="selected" :disabled="!!scanning" @change="loadDash(($event.target as HTMLSelectElement).value)">
             <option v-for="watch in watches" :key="watch.catalogId" :value="watch.catalogId">
               {{ watch.setNumber }} {{ watch.name }}
@@ -507,8 +530,8 @@ onMounted(async () => {
           :to="`/watches/${selectedWatch.id}`"
         >Market filters</router-link>
       </div>
-      <div v-if="selectedWatch" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap">
-        <label style="max-width:12rem">Min price
+      <div v-if="selectedWatch" class="toolbar">
+        <label>Min price
           <input
             :value="minPriceInput ?? ''"
             type="number"
@@ -518,7 +541,7 @@ onMounted(async () => {
             @input="minPriceInput = parsePrice(($event.target as HTMLInputElement).value)"
           />
         </label>
-        <label style="max-width:12rem">Max price
+        <label>Max price
           <input
             :value="maxPriceInput ?? ''"
             type="number"
@@ -528,6 +551,15 @@ onMounted(async () => {
             @input="maxPriceInput = parsePrice(($event.target as HTMLInputElement).value)"
           />
         </label>
+        <button
+          v-if="recommendedMaxPrice != null"
+          class="btn secondary"
+          type="button"
+          :disabled="!!scanning"
+          @click="useRecommendedMaxPrice"
+        >
+          Use recommended {{ money(recommendedMaxPrice) }}
+        </button>
         <button
           class="btn gold"
           type="button"
@@ -544,7 +576,7 @@ onMounted(async () => {
       <div class="card grid">
         <p v-if="dash.ebayError" class="error">{{ dash.ebayError }}</p>
         <p v-if="dash.bricklinkError" class="error">{{ dash.bricklinkError }}</p>
-        <div class="grid two">
+        <div class="grid three">
           <div class="stat">
             <span class="stat-value hero">{{ money(combinedMedian) }}</span>
             <span class="stat-label">Median</span>
@@ -552,6 +584,10 @@ onMounted(async () => {
           <div class="stat">
             <span class="stat-value hero">{{ money(combinedAverage) }}</span>
             <span class="stat-label">Average</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value hero">{{ money(recommendedMaxPrice) }}</span>
+            <span class="stat-label">Max recommended</span>
           </div>
         </div>
         <div class="platform-stats">
@@ -616,7 +652,7 @@ onMounted(async () => {
         </div>
         <div v-if="listingTab === 'ebay'">
         <p v-if="dash.ebayError" class="error">{{ dash.ebayError }}</p>
-        <div class="table-scroll">
+        <div class="table-scroll desktop-only">
           <table>
             <thead>
               <tr>
@@ -678,6 +714,24 @@ onMounted(async () => {
             </tbody>
           </table>
         </div>
+        <div class="list-cards mobile-only">
+          <article v-for="row in ebayListings" :key="row.id" class="list-card listing-card" :style="{ fontWeight: row.own ? '700' : '400' }">
+            <img v-if="row.imageUrl" class="listing-thumb" :src="row.imageUrl" :alt="row.title || 'Listing photo'" />
+            <span v-else class="muted">—</span>
+            <div class="grid" style="gap:0.35rem">
+              <h3>
+                <a v-if="row.url" :href="row.url" target="_blank">{{ row.title || "Untitled" }}</a>
+                <span v-else>{{ row.title || "—" }}</span>
+              </h3>
+              <div class="list-card-meta">
+                <strong>{{ money(totalCost(row)) }}</strong>
+                <span class="muted">{{ money(row.price) }} + {{ shipping(row) }}</span>
+              </div>
+              <div class="list-card-meta muted">{{ row.seller || "—" }} · {{ feedback(row) }}</div>
+            </div>
+          </article>
+          <p v-if="!ebaySorted.length" class="muted">{{ dash.ebayListings.length ? "No eBay listings match those filters." : "No eBay listings in this scan." }}</p>
+        </div>
         <div v-if="ebaySorted.length || ebayFilterCount" class="pager">
           <span class="muted">{{ rangeLabel(ebayPage, ebaySorted.length) }}{{ ebayFilterCount ? ` · ${dash.ebayListings.length} total` : "" }}</span>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -691,7 +745,7 @@ onMounted(async () => {
         </div>
         <div v-else>
         <p v-if="dash.bricklinkError" class="error">{{ dash.bricklinkError }}</p>
-        <div class="table-scroll">
+        <div class="table-scroll desktop-only">
           <table>
             <thead>
               <tr>
@@ -750,6 +804,24 @@ onMounted(async () => {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="list-cards mobile-only">
+          <article v-for="row in bricklinkListings" :key="row.id" class="list-card listing-card">
+            <img v-if="row.imageUrl" class="listing-thumb" :src="row.imageUrl" :alt="row.title || 'Listing photo'" />
+            <span v-else class="muted">—</span>
+            <div class="grid" style="gap:0.35rem">
+              <h3>
+                <a v-if="row.url" :href="row.url" target="_blank">{{ row.title || "—" }}</a>
+                <span v-else>{{ row.title || "—" }}</span>
+              </h3>
+              <div class="list-card-meta">
+                <strong>{{ money(row.price) }}</strong>
+                <span class="muted">{{ row.condition }} · Qty {{ row.quantity ?? "—" }}</span>
+              </div>
+              <div class="list-card-meta muted">{{ row.seller }} · {{ row.sellerCountry || "—" }}</div>
+            </div>
+          </article>
+          <p v-if="!bricklinkSorted.length" class="muted">{{ dash.bricklinkListings.length ? "No BrickLink listings match those filters." : (dash.bricklinkError || "No BrickLink listings in this scan.") }}</p>
         </div>
         <div v-if="bricklinkSorted.length || bricklinkFilterCount" class="pager">
           <span class="muted">{{ rangeLabel(bricklinkPage, bricklinkSorted.length) }}{{ bricklinkFilterCount ? ` · ${dash.bricklinkListings.length} total` : "" }}</span>

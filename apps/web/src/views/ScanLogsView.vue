@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { api } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 
@@ -25,7 +25,6 @@ type ScanLogsPage = {
 };
 
 const PAGE_SIZE = 20;
-const FETCH_SIZE = 10_000;
 const REFRESH_MS = 60_000;
 const emptyFilters = () => ({
   when: "",
@@ -37,8 +36,10 @@ const emptyFilters = () => ({
   notes: "",
 });
 
-const allItems = ref<ScanLog[]>([]);
+const items = ref<ScanLog[]>([]);
 const page = ref(0);
+const total = ref(0);
+const totalPages = ref(1);
 const error = ref("");
 const loading = ref(false);
 const filters = ref(emptyFilters());
@@ -58,8 +59,8 @@ const contains = (value: string | number | null | undefined, needle: string) => 
   return haystack.toLowerCase().includes(needle.trim().toLowerCase());
 };
 
-const filtered = computed(() =>
-  allItems.value.filter((row) =>
+const visible = computed(() =>
+  items.value.filter((row) =>
     contains(whenLabel(row.scannedAt), filters.value.when)
     && (!filters.value.platform || row.platform === filters.value.platform)
     && contains(`${row.setNumber} ${row.setName || ""}`, filters.value.set)
@@ -70,28 +71,33 @@ const filtered = computed(() =>
   )
 );
 
-const total = computed(() => filtered.value.length);
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
-const items = computed(() => {
-  const start = page.value * PAGE_SIZE;
-  return filtered.value.slice(start, start + PAGE_SIZE);
-});
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const rangeLabel = computed(() => {
   if (!total.value) return "0 scans";
   const start = page.value * PAGE_SIZE + 1;
   const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
-  return `${start}–${end} of ${total.value}`;
+  const pages = totalPages.value > 1 ? ` · page ${page.value + 1} of ${totalPages.value}` : "";
+  return `${start}–${end} of ${total.value}${pages}`;
 });
 
-const load = async () => {
+const load = async (pageIndex = page.value) => {
   if (loading.value) return;
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<ScanLogsPage>(`/api/scan-logs?page=0&size=${FETCH_SIZE}`);
-    allItems.value = result.items;
+    const result = await api.get<ScanLogsPage>(`/api/scan-logs?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const pages = Math.max(1, result.totalPages);
+    const nextPage = Math.min(pageIndex, pages - 1);
+    items.value = result.items;
+    total.value = result.total;
+    totalPages.value = pages;
+    page.value = nextPage;
+    if (nextPage !== pageIndex && result.total > 0) {
+      loading.value = false;
+      await load(nextPage);
+      return;
+    }
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -100,31 +106,23 @@ const load = async () => {
 };
 
 const previous = () => {
-  if (page.value <= 0) return;
-  page.value -= 1;
+  if (page.value <= 0 || loading.value) return;
+  void load(page.value - 1);
 };
 
 const next = () => {
-  if (page.value + 1 >= totalPages.value) return;
-  page.value += 1;
+  if (page.value + 1 >= totalPages.value || loading.value) return;
+  void load(page.value + 1);
 };
 
 const clearFilters = () => {
   filters.value = emptyFilters();
 };
 
-watch(filters, () => {
-  page.value = 0;
-}, { deep: true });
-
-watch(totalPages, (pages) => {
-  if (page.value >= pages) page.value = Math.max(0, pages - 1);
-});
-
 onMounted(() => {
-  void load();
+  void load(0);
   timer = setInterval(() => {
-    if (!document.hidden) void load();
+    if (!document.hidden) void load(page.value);
   }, REFRESH_MS);
 });
 
@@ -140,9 +138,9 @@ onUnmounted(() => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
-      <div v-if="allItems.length" class="pager" style="margin:0 0 0.85rem">
+      <div v-if="total" class="pager" style="margin:0 0 0.85rem">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <div class="pager-actions">
           <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
             Clear filters
           </button>
@@ -152,7 +150,19 @@ onUnmounted(() => {
           </template>
         </div>
       </div>
-      <div class="table-scroll">
+      <div class="mobile-filters mobile-only">
+        <label>Search
+          <input v-model="filters.set" type="search" placeholder="Set number or name" />
+        </label>
+        <label>Status
+          <select v-model="filters.status">
+            <option value="">All</option>
+            <option value="SUCCESS">Success</option>
+            <option value="FAILED">Failed</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll desktop-only">
         <table>
           <thead>
             <tr>
@@ -193,7 +203,7 @@ onUnmounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in items" :key="row.id">
+            <tr v-for="row in visible" :key="row.id">
               <td>{{ whenLabel(row.scannedAt) }}</td>
               <td><ChannelLogo :platform="row.platform" :height="16" /></td>
               <td>
@@ -211,11 +221,11 @@ onUnmounted(() => {
               <td>{{ row.listingCount ?? "—" }}</td>
               <td class="muted">{{ row.message || "—" }}</td>
             </tr>
-            <tr v-if="!items.length">
+            <tr v-if="!visible.length">
               <td colspan="7" class="muted">
                 {{ loading
                   ? "Loading scans…"
-                  : allItems.length
+                  : items.length
                     ? "No scans match those filters."
                     : "No scans recorded yet." }}
               </td>
@@ -223,9 +233,31 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
+      <div class="list-cards mobile-only">
+        <article v-for="row in visible" :key="row.id" class="list-card">
+          <div class="list-card-row">
+            <ChannelLogo :platform="row.platform" :height="16" />
+            <span class="badge" :class="{ ok: row.status === 'SUCCESS', bad: row.status === 'FAILED' }">
+              {{ row.status === "SUCCESS" ? "Success" : "Failed" }}
+            </span>
+            <span class="muted">{{ whenLabel(row.scannedAt) }}</span>
+          </div>
+          <h3>
+            <router-link v-if="row.catalogId" :to="`/market/${row.catalogId}`">
+              {{ row.setNumber }} {{ row.setName }}
+            </router-link>
+            <span v-else>{{ row.setNumber }} {{ row.setName }}</span>
+          </h3>
+          <div class="list-card-meta muted">{{ triggerLabel(row.trigger) }} · {{ row.listingCount ?? "—" }} listings</div>
+          <p v-if="row.message" class="muted" style="margin:0">{{ row.message }}</p>
+        </article>
+        <p v-if="!visible.length" class="muted">
+          {{ loading ? "Loading scans…" : items.length ? "No scans match those filters." : "No scans recorded yet." }}
+        </p>
+      </div>
       <div v-if="totalPages > 1" class="pager">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem">
+        <div class="pager-actions">
           <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
           <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
         </div>

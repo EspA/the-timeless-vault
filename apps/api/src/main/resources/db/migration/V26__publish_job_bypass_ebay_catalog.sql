@@ -1,0 +1,2 @@
+ALTER TABLE publish_job
+    ADD COLUMN IF NOT EXISTS bypass_ebay_catalog BOOLEAN NOT NULL DEFAULT FALSE;

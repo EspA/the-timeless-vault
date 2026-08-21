@@ -4,6 +4,7 @@ import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.ItemCondition;
 import com.thetimelessvault.common.ItemType;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.common.StockStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -54,7 +55,7 @@ public class InventoryItem {
     private BigDecimal shopifyPrice;
 
     @Column(nullable = false)
-    private int quantity = 1;
+    private int quantity = 0;
 
     private BigDecimal cost;
 
@@ -65,6 +66,10 @@ public class InventoryItem {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ItemCondition condition = ItemCondition.NEW_SEALED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_status", nullable = false)
+    private StockStatus stockStatus = StockStatus.IN_TRANSIT;
 
     @Column(name = "shopify_collection_ids", columnDefinition = "text")
     private String shopifyCollectionIds;
@@ -195,6 +200,30 @@ public class InventoryItem {
 
     public void setQuantity(int quantity) {
         this.quantity = quantity;
+    }
+
+    public StockStatus getStockStatus() {
+        return stockStatus;
+    }
+
+    public void setStockStatus(StockStatus stockStatus) {
+        this.stockStatus = stockStatus;
+    }
+
+    public void applyStockAndQuantity(StockStatus nextStatus, Integer requestedQuantity) {
+        StockStatus previous = stockStatus == null ? StockStatus.IN_TRANSIT : stockStatus;
+        int previousQuantity = quantity;
+        if (requestedQuantity != null) {
+            quantity = Math.max(0, requestedQuantity);
+        }
+        if (nextStatus != null) {
+            stockStatus = nextStatus;
+        }
+        if (stockStatus == StockStatus.SOLD || stockStatus == StockStatus.IN_TRANSIT) {
+            quantity = 0;
+        } else if (stockStatus == StockStatus.IN_STOCK && previous != StockStatus.IN_STOCK) {
+            quantity = Math.max(quantity, previousQuantity + 1);
+        }
     }
 
     public BigDecimal getCost() {

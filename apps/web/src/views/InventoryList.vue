@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { api, CONDITIONS, visibilityStatusLabel, type InventoryItem } from "../api";
-import { askConfirm } from "../confirm";
+import { api, CONDITIONS, quantityForStockStatus, STOCK_STATUSES, visibilityStatusLabel, type InventoryItem } from "../api";
+import { askConfirm, confirmStockStatusChange } from "../confirm";
 import ItemNewModal from "../components/ItemNewModal.vue";
+import StockStatusButtons from "../components/StockStatusButtons.vue";
 
 const router = useRouter();
 const adding = ref(false);
 
-type Column = "sku" | "set" | "title" | "created" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
+type Column = "sku" | "set" | "title" | "created" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
 const items = ref<InventoryItem[]>([]);
 const error = ref("");
+const stockBusyId = ref("");
+const search = ref("");
 const sort = ref<Sort>({ key: "created", dir: "desc" });
 const filters = ref({
   sku: "",
@@ -23,6 +26,7 @@ const filters = ref({
   bricklinkPrice: "",
   shopifyPrice: "",
   cost: "",
+  stockStatus: "",
   quantity: "",
   condition: "",
   shopify: "",
@@ -55,6 +59,8 @@ const valueFor = (item: InventoryItem, key: Column): string | number | null => {
       return item.shopifyPrice ?? item.price;
     case "cost":
       return item.cost ?? null;
+    case "stockStatus":
+      return item.stockStatus ?? "";
     case "quantity":
       return item.quantity;
     case "condition":
@@ -101,11 +107,18 @@ const filtered = computed(() =>
     && contains(item.bricklinkPrice ?? item.price, filters.value.bricklinkPrice)
     && contains(item.shopifyPrice ?? item.price, filters.value.shopifyPrice)
     && contains(item.cost ?? "", filters.value.cost)
+    && (!filters.value.stockStatus || item.stockStatus === filters.value.stockStatus)
     && contains(item.quantity, filters.value.quantity)
     && (!filters.value.condition || item.condition === filters.value.condition)
     && matchesStatus(item.shopifyStatus, filters.value.shopify)
     && matchesStatus(item.bricklinkStatus, filters.value.bricklink)
     && matchesStatus(item.ebayStatus, filters.value.ebay)
+    && (
+      !search.value.trim()
+      || contains(item.sku, search.value)
+      || contains(item.catalog.setNumber, search.value)
+      || contains(item.title, search.value)
+    )
   )
 );
 
@@ -152,6 +165,7 @@ const clearFilters = () => {
     bricklinkPrice: "",
     shopifyPrice: "",
     cost: "",
+    stockStatus: "",
     quantity: "",
     condition: "",
     shopify: "",
@@ -162,6 +176,30 @@ const clearFilters = () => {
 
 const load = async () => {
   items.value = await api.get<InventoryItem[]>("/api/inventory");
+};
+
+const setStockStatus = async (item: InventoryItem, next: string) => {
+  if (item.stockStatus === next || stockBusyId.value) return;
+  if (!(await confirmStockStatusChange(next))) return;
+  const previousStatus = item.stockStatus;
+  const previousQuantity = item.quantity;
+  item.stockStatus = next;
+  item.quantity = quantityForStockStatus(previousStatus, previousQuantity, next);
+  stockBusyId.value = item.id;
+  error.value = "";
+  try {
+    const updated = await api.put<InventoryItem>(`/api/inventory/${item.id}`, { stockStatus: next });
+    const index = items.value.findIndex((row) => row.id === item.id);
+    if (index >= 0) {
+      items.value[index] = updated;
+    }
+  } catch (e) {
+    item.stockStatus = previousStatus;
+    item.quantity = previousQuantity;
+    error.value = (e as Error).message;
+  } finally {
+    stockBusyId.value = "";
+  }
 };
 
 const remove = async (item: InventoryItem) => {
@@ -193,7 +231,7 @@ onMounted(async () => {
 
 <template>
   <div class="grid">
-    <div style="display:flex;justify-content:space-between;align-items:end">
+    <div class="page-head">
       <h1>Inventory</h1>
       <button class="btn gold" type="button" @click="adding = true">Add item</button>
     </div>
@@ -205,7 +243,18 @@ onMounted(async () => {
           Clear filters
         </button>
       </div>
-      <div class="table-scroll">
+      <div class="mobile-filters mobile-only">
+        <label>Search
+          <input v-model="search" type="search" placeholder="Title, SKU, or set" />
+        </label>
+        <label>Status
+          <select v-model="filters.stockStatus">
+            <option value="">All</option>
+            <option v-for="status in STOCK_STATUSES" :key="status.value" :value="status.value">{{ status.label }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll desktop-only">
         <table>
           <thead>
             <tr>
@@ -216,6 +265,7 @@ onMounted(async () => {
               <th><button class="sort-btn" type="button" @click="sortBy('bricklinkPrice')">BrickLink ${{ sortMark("bricklinkPrice") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('shopifyPrice')">Shopify ${{ sortMark("shopifyPrice") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('cost')">Cost{{ sortMark("cost") }}</button></th>
+              <th><button class="sort-btn" type="button" @click="sortBy('stockStatus')">Status{{ sortMark("stockStatus") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('quantity')">Quantity{{ sortMark("quantity") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('condition')">Condition{{ sortMark("condition") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('shopify')">Shopify{{ sortMark("shopify") }}</button></th>
@@ -232,6 +282,12 @@ onMounted(async () => {
               <th><input v-model="filters.bricklinkPrice" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.shopifyPrice" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.cost" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th>
+                <select v-model="filters.stockStatus" class="column-filter">
+                  <option value="">All</option>
+                  <option v-for="status in STOCK_STATUSES" :key="status.value" :value="status.value">{{ status.label }}</option>
+                </select>
+              </th>
               <th><input v-model="filters.quantity" class="column-filter" type="search" placeholder="Filter" /></th>
               <th>
                 <select v-model="filters.condition" class="column-filter">
@@ -267,6 +323,14 @@ onMounted(async () => {
               <td>${{ item.bricklinkPrice ?? item.price }}</td>
               <td>${{ item.shopifyPrice ?? item.price }}</td>
               <td>{{ item.cost != null ? `$${item.cost}` : "—" }}</td>
+              <td>
+                <StockStatusButtons
+                  compact
+                  :model-value="item.stockStatus"
+                  :disabled="!!stockBusyId"
+                  @update:model-value="setStockStatus(item, $event)"
+                />
+              </td>
               <td>{{ item.quantity }}</td>
               <td><span class="badge">{{ item.condition }}</span></td>
               <td>
@@ -299,10 +363,49 @@ onMounted(async () => {
               </td>
             </tr>
             <tr v-if="!visible.length">
-              <td colspan="14" class="muted">{{ items.length ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
+              <td colspan="15" class="muted">{{ items.length ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="list-cards mobile-only">
+        <article v-for="item in visible" :key="item.id" class="list-card">
+          <h3><router-link :to="`/inventory/${item.id}`">{{ item.title }}</router-link></h3>
+          <div class="list-card-meta muted">{{ item.catalog.setNumber }} · {{ item.sku }} · Qty {{ item.quantity }}</div>
+          <StockStatusButtons
+            compact
+            :model-value="item.stockStatus"
+            :disabled="!!stockBusyId"
+            @update:model-value="setStockStatus(item, $event)"
+          />
+          <div class="list-card-prices">
+            <span><span class="muted">eBay</span>${{ item.ebayPrice ?? item.price }}</span>
+            <span><span class="muted">BrickLink</span>${{ item.bricklinkPrice ?? item.price }}</span>
+            <span><span class="muted">Shopify</span>${{ item.shopifyPrice ?? item.price }}</span>
+          </div>
+          <div class="list-card-row">
+            <span
+              v-if="item.shopifyStatus"
+              class="badge"
+              :class="{ ok: item.shopifyStatus === 'ACTIVE', warn: item.shopifyStatus === 'UNLISTED' }"
+            >Shopify {{ visibilityStatusLabel(item.shopifyStatus) }}</span>
+            <span
+              v-if="item.bricklinkStatus"
+              class="badge"
+              :class="{ ok: item.bricklinkStatus === 'ACTIVE', warn: item.bricklinkStatus === 'UNLISTED' }"
+            >BrickLink {{ visibilityStatusLabel(item.bricklinkStatus) }}</span>
+            <span
+              v-if="item.ebayStatus"
+              class="badge"
+              :class="{ ok: item.ebayStatus === 'ACTIVE', warn: item.ebayStatus === 'UNLISTED' }"
+            >eBay {{ visibilityStatusLabel(item.ebayStatus) }}</span>
+          </div>
+          <div class="list-card-actions">
+            <router-link class="btn secondary compact" :to="`/inventory/${item.id}`">Open</router-link>
+            <button class="btn danger compact" type="button" @click="remove(item)">Delete</button>
+          </div>
+        </article>
+        <p v-if="!visible.length" class="muted">{{ items.length ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</p>
       </div>
     </div>
     <ItemNewModal v-if="adding" @close="adding = false" @saved="onSaved" />

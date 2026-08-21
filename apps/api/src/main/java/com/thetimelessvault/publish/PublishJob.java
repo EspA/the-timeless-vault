@@ -48,6 +48,9 @@ public class PublishJob {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    @Column(name = "bypass_ebay_catalog", nullable = false)
+    private boolean bypassEbayCatalog = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -56,12 +59,17 @@ public class PublishJob {
     }
 
     public static PublishJob queued(InventoryItem item, Platform platform, ListingAction action) {
+        return queued(item, platform, action, false);
+    }
+
+    public static PublishJob queued(InventoryItem item, Platform platform, ListingAction action, boolean bypassEbayCatalog) {
         PublishJob job = new PublishJob();
         job.id = UUID.randomUUID();
         job.inventoryItem = item;
         job.platform = platform;
         job.status = JobStatus.QUEUED;
         job.action = action == null ? ListingAction.CREATE : action;
+        job.bypassEbayCatalog = bypassEbayCatalog;
         job.createdAt = Instant.now();
         return job;
     }
@@ -97,6 +105,10 @@ public class PublishJob {
 
     public ListingAction getAction() {
         return action == null ? ListingAction.CREATE : action;
+    }
+
+    public boolean isBypassEbayCatalog() {
+        return bypassEbayCatalog;
     }
 
     public JobStatus getStatus() {

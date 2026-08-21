@@ -128,7 +128,7 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
 <template>
   <p v-if="error && !watch" class="error">{{ error }}</p>
   <div v-if="watch" class="grid">
-    <div style="display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap">
+    <div class="page-head">
       <div>
         <p class="muted">{{ watch.setNumber }}</p>
         <h1>{{ watch.name }}</h1>

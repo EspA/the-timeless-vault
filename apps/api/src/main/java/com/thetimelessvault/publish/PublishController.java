@@ -28,7 +28,7 @@ public class PublishController {
         this.publishService = publishService;
     }
 
-    public record PublishRequest(Set<Platform> platforms) {
+    public record PublishRequest(Set<Platform> platforms, Boolean bypassEbayCatalog) {
     }
 
     public record ListingView(
@@ -79,7 +79,11 @@ public class PublishController {
 
     @PostMapping("/publish")
     public List<JobView> publish(@PathVariable UUID id, @RequestBody(required = false) PublishRequest request) {
-        List<PublishJob> jobs = publishService.enqueue(id, request == null ? Set.of() : request.platforms());
+        List<PublishJob> jobs = publishService.enqueue(
+                id,
+                request == null ? Set.of() : request.platforms(),
+                request != null && Boolean.TRUE.equals(request.bypassEbayCatalog())
+        );
         publishService.runJobs(jobs.stream().map(PublishJob::getId).toList());
         return jobs.stream().map(JobView::from).toList();
     }
@@ -92,8 +96,16 @@ public class PublishController {
     }
 
     @PostMapping("/publish/{platform}/retry")
-    public JobView retry(@PathVariable UUID id, @PathVariable Platform platform) {
-        List<PublishJob> jobs = publishService.enqueueRetry(id, platform);
+    public JobView retry(
+            @PathVariable UUID id,
+            @PathVariable Platform platform,
+            @RequestBody(required = false) PublishRequest request
+    ) {
+        List<PublishJob> jobs = publishService.enqueueRetry(
+                id,
+                platform,
+                request != null && Boolean.TRUE.equals(request.bypassEbayCatalog())
+        );
         publishService.runJobs(jobs.stream().map(PublishJob::getId).toList());
         return JobView.from(jobs.getFirst());
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { api } from "../api";
+import ChannelLogo from "../components/ChannelLogo.vue";
 
 type ListingAction = "CREATE" | "UPDATE" | "ACTIVATE" | "DEACTIVATE" | "DELETE";
 type ListingLogStatus = "SUCCESS" | "FAILED";
@@ -27,7 +28,6 @@ type ListingLogsPage = {
 };
 
 const PAGE_SIZE = 20;
-const FETCH_SIZE = 10_000;
 const REFRESH_MS = 60_000;
 const emptyFilters = () => ({
   when: "",
@@ -38,19 +38,14 @@ const emptyFilters = () => ({
   notes: "",
 });
 
-const allItems = ref<ListingLog[]>([]);
+const items = ref<ListingLog[]>([]);
 const page = ref(0);
+const total = ref(0);
+const totalPages = ref(1);
 const error = ref("");
 const loading = ref(false);
 const filters = ref(emptyFilters());
 let timer: ReturnType<typeof setInterval> | undefined;
-
-const platformLabel = (platform: string) => {
-  if (platform === "EBAY") return "eBay";
-  if (platform === "BRICKLINK") return "BrickLink";
-  if (platform === "SHOPIFY") return "Shopify";
-  return platform;
-};
 
 const actionLabel = (action: ListingAction) => {
   if (action === "CREATE") return "Create listing";
@@ -75,8 +70,8 @@ const contains = (value: string | number | null | undefined, needle: string) => 
   return haystack.toLowerCase().includes(needle.trim().toLowerCase());
 };
 
-const filtered = computed(() =>
-  allItems.value.filter((row) =>
+const visible = computed(() =>
+  items.value.filter((row) =>
     contains(whenLabel(row.loggedAt), filters.value.when)
     && (!filters.value.platform || row.platform === filters.value.platform)
     && contains(itemLabel(row), filters.value.item)
@@ -86,12 +81,6 @@ const filtered = computed(() =>
   )
 );
 
-const total = computed(() => filtered.value.length);
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
-const items = computed(() => {
-  const start = page.value * PAGE_SIZE;
-  return filtered.value.slice(start, start + PAGE_SIZE);
-});
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const rangeLabel = computed(() => {
@@ -102,13 +91,23 @@ const rangeLabel = computed(() => {
   return `${start}–${end} of ${total.value}${pages}`;
 });
 
-const load = async () => {
+const load = async (pageIndex = page.value) => {
   if (loading.value) return;
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<ListingLogsPage>(`/api/listing-logs?page=0&size=${FETCH_SIZE}`);
-    allItems.value = result.items;
+    const result = await api.get<ListingLogsPage>(`/api/listing-logs?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const pages = Math.max(1, result.totalPages);
+    const nextPage = Math.min(pageIndex, pages - 1);
+    items.value = result.items;
+    total.value = result.total;
+    totalPages.value = pages;
+    page.value = nextPage;
+    if (nextPage !== pageIndex && result.total > 0) {
+      loading.value = false;
+      await load(nextPage);
+      return;
+    }
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -117,31 +116,23 @@ const load = async () => {
 };
 
 const previous = () => {
-  if (page.value <= 0) return;
-  page.value -= 1;
+  if (page.value <= 0 || loading.value) return;
+  void load(page.value - 1);
 };
 
 const next = () => {
-  if (page.value + 1 >= totalPages.value) return;
-  page.value += 1;
+  if (page.value + 1 >= totalPages.value || loading.value) return;
+  void load(page.value + 1);
 };
 
 const clearFilters = () => {
   filters.value = emptyFilters();
 };
 
-watch(filters, () => {
-  page.value = 0;
-}, { deep: true });
-
-watch(totalPages, (pages) => {
-  if (page.value >= pages) page.value = Math.max(0, pages - 1);
-});
-
 onMounted(() => {
-  void load();
+  void load(0);
   timer = setInterval(() => {
-    if (!document.hidden) void load();
+    if (!document.hidden) void load(page.value);
   }, REFRESH_MS);
 });
 
@@ -157,17 +148,31 @@ onUnmounted(() => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
-      <div v-if="allItems.length" class="pager" style="margin:0 0 0.85rem">
+      <div v-if="total" class="pager" style="margin:0 0 0.85rem">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <div class="pager-actions">
           <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
             Clear filters
           </button>
-          <button class="btn secondary compact" type="button" :disabled="page <= 0" @click="previous">Previous</button>
-          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages" @click="next">Next</button>
+          <template v-if="totalPages > 1">
+            <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+            <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
+          </template>
         </div>
       </div>
-      <div class="table-scroll">
+      <div class="mobile-filters mobile-only">
+        <label>Search
+          <input v-model="filters.item" type="search" placeholder="Item, SKU, or set" />
+        </label>
+        <label>Status
+          <select v-model="filters.status">
+            <option value="">All</option>
+            <option value="SUCCESS">Success</option>
+            <option value="FAILED">Failed</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll desktop-only">
         <table>
           <thead>
             <tr>
@@ -210,9 +215,9 @@ onUnmounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in items" :key="row.id">
+            <tr v-for="row in visible" :key="row.id">
               <td>{{ whenLabel(row.loggedAt) }}</td>
-              <td><span class="badge">{{ platformLabel(row.platform) }}</span></td>
+              <td><ChannelLogo :platform="row.platform" :height="16" /></td>
               <td>
                 <router-link v-if="row.inventoryItemId" :to="`/inventory/${row.inventoryItemId}`">
                   {{ itemLabel(row) }}
@@ -227,11 +232,11 @@ onUnmounted(() => {
               </td>
               <td class="muted">{{ row.message || "—" }}</td>
             </tr>
-            <tr v-if="!items.length">
+            <tr v-if="!visible.length">
               <td colspan="6" class="muted">
                 {{ loading
                   ? "Loading listing actions…"
-                  : allItems.length
+                  : items.length
                     ? "No listing actions match those filters."
                     : "No listing actions recorded yet." }}
               </td>
@@ -239,11 +244,33 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
-      <div v-if="allItems.length" class="pager">
+      <div class="list-cards mobile-only">
+        <article v-for="row in visible" :key="row.id" class="list-card">
+          <div class="list-card-row">
+            <ChannelLogo :platform="row.platform" :height="16" />
+            <span class="badge" :class="{ ok: row.status === 'SUCCESS', bad: row.status === 'FAILED' }">
+              {{ row.status === "SUCCESS" ? "Success" : "Failed" }}
+            </span>
+            <span class="muted">{{ whenLabel(row.loggedAt) }}</span>
+          </div>
+          <h3>
+            <router-link v-if="row.inventoryItemId" :to="`/inventory/${row.inventoryItemId}`">
+              {{ itemLabel(row) }}
+            </router-link>
+            <span v-else>{{ itemLabel(row) }}</span>
+          </h3>
+          <div class="list-card-meta muted">{{ actionLabel(row.action) }}</div>
+          <p v-if="row.message" class="muted" style="margin:0">{{ row.message }}</p>
+        </article>
+        <p v-if="!visible.length" class="muted">
+          {{ loading ? "Loading listing actions…" : items.length ? "No listing actions match those filters." : "No listing actions recorded yet." }}
+        </p>
+      </div>
+      <div v-if="totalPages > 1" class="pager">
         <span class="muted">{{ rangeLabel }}</span>
-        <div style="display:flex;gap:0.5rem">
-          <button class="btn secondary compact" type="button" :disabled="page <= 0" @click="previous">Previous</button>
-          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages" @click="next">Next</button>
+        <div class="pager-actions">
+          <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
         </div>
       </div>
     </div>

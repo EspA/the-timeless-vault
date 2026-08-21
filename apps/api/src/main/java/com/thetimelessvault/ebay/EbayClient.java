@@ -88,7 +88,16 @@ public class EbayClient {
     }
 
     public void createOrReplaceInventoryItem(InventoryItem item, List<String> photoUrls) {
-        EbayCatalogTemplate template = resolveCatalogTemplate(item);
+        createOrReplaceInventoryItem(item, photoUrls, true);
+    }
+
+    public void createOrReplaceInventoryItem(InventoryItem item, List<String> photoUrls, boolean useEbayCatalog) {
+        EbayCatalogTemplate template = useEbayCatalog
+                ? resolveCatalogTemplate(item)
+                : EbayCatalogTemplate.fromCatalog(item);
+        if (!useEbayCatalog) {
+            log.info("Bypassing eBay catalog product for set {}; using vault item specifics", item.getCatalogItem().getSetNumber());
+        }
         try {
             putInventoryItem(item, photoUrls, template);
         } catch (ApiException e) {

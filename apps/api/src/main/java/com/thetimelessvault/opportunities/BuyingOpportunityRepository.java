@@ -1,6 +1,8 @@
 package com.thetimelessvault.opportunities;
 
 import com.thetimelessvault.market.ScanTrigger;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,6 +15,8 @@ public interface BuyingOpportunityRepository extends JpaRepository<BuyingOpportu
     Optional<BuyingOpportunity> findByDedupeKeyAndScanTrigger(String dedupeKey, ScanTrigger scanTrigger);
 
     List<BuyingOpportunity> findAllByOrderByCreatedAtDesc();
+
+    Page<BuyingOpportunity> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     List<BuyingOpportunity> findByReadAtIsNull();
 

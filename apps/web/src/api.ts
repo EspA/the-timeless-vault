@@ -107,6 +107,7 @@ export type InventoryItem = {
   bricklinkPrice?: number;
   shopifyPrice?: number;
   quantity: number;
+  stockStatus: string;
   cost?: number;
   itemType: string;
   condition: string;
@@ -389,6 +390,7 @@ export type SetWatch = {
   ebayScannedAt?: string;
   bricklinkCurrentValueNew?: number | null;
   bricklinkScannedAt?: string;
+  medianPrice?: number | null;
   enabled: boolean;
   ebaySearchQuery?: string;
   ebayFeedbackMin: number;
@@ -424,3 +426,27 @@ export const CONDITIONS = [
   "USED_COMPLETE",
   "USED_INCOMPLETE",
 ];
+
+export const STOCK_STATUSES = [
+  { value: "IN_TRANSIT", label: "In transit", shortLabel: "Transit" },
+  { value: "IN_STOCK", label: "In stock", shortLabel: "In stock" },
+  { value: "SOLD", label: "Sold", shortLabel: "Sold" },
+] as const;
+
+export type StockStatusValue = (typeof STOCK_STATUSES)[number]["value"];
+
+export const stockStatusLabel = (status?: string) =>
+  STOCK_STATUSES.find((option) => option.value === status)?.label ?? status ?? "—";
+
+export const quantityForStockStatus = (
+  previousStatus: string | undefined,
+  previousQuantity: number,
+  nextStatus: string
+) => {
+  if (nextStatus === "SOLD" || nextStatus === "IN_TRANSIT") return 0;
+  const quantity = Number.isFinite(previousQuantity) ? previousQuantity : 0;
+  if (nextStatus === "IN_STOCK" && previousStatus !== "IN_STOCK") {
+    return quantity + 1;
+  }
+  return Math.max(0, quantity);
+};

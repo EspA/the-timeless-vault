@@ -1,5 +1,7 @@
 package com.thetimelessvault.inventory;
 
+import com.thetimelessvault.common.StockStatus;
+import com.thetimelessvault.publish.PublishService;
 import com.thetimelessvault.storage.ObjectStorage;
 import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
@@ -25,11 +27,18 @@ import java.util.UUID;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final PublishService publishService;
     private final PhotoRepository photos;
     private final ObjectStorage storage;
 
-    public InventoryController(InventoryService inventoryService, PhotoRepository photos, ObjectStorage storage) {
+    public InventoryController(
+            InventoryService inventoryService,
+            PublishService publishService,
+            PhotoRepository photos,
+            ObjectStorage storage
+    ) {
         this.inventoryService = inventoryService;
+        this.publishService = publishService;
         this.photos = photos;
         this.storage = storage;
     }
@@ -51,6 +60,11 @@ public class InventoryController {
 
     @PutMapping("/inventory/{id}")
     public InventoryDtos.InventoryView update(@PathVariable UUID id, @RequestBody InventoryDtos.UpdateRequest request) {
+        InventoryItem current = inventoryService.get(id);
+        boolean becomingSold = request.stockStatus() == StockStatus.SOLD && current.getStockStatus() != StockStatus.SOLD;
+        if (becomingSold) {
+            publishService.deactivatePublishedListings(id);
+        }
         return inventoryService.toView(inventoryService.update(id, request));
     }
 

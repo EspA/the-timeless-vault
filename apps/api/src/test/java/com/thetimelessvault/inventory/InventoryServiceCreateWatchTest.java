@@ -84,6 +84,7 @@ class InventoryServiceCreateWatchTest {
                 null,
                 ItemType.SET,
                 ItemCondition.NEW_SEALED,
+                null,
                 List.of(),
                 null,
                 null,

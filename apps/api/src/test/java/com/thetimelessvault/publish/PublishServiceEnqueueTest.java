@@ -97,6 +97,19 @@ class PublishServiceEnqueueTest {
     }
 
     @Test
+    void createListingCanBypassEbayCatalog() {
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.empty());
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jobs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PublishJob> queued = service.enqueue(item.getId(), Set.of(Platform.EBAY), true);
+
+        assertEquals(1, queued.size());
+        org.junit.jupiter.api.Assertions.assertTrue(queued.getFirst().isBypassEbayCatalog());
+    }
+
+    @Test
     void retryStillQueuesWhenListingExists() {
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY))

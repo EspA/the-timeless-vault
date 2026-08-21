@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -48,9 +49,28 @@ public class BuyingOpportunitiesController {
         }
     }
 
+    public record AlertsPageView(
+            List<BuyingOpportunityView> items,
+            int page,
+            int size,
+            long total,
+            int totalPages
+    ) {
+    }
+
     @GetMapping
-    public List<BuyingOpportunityView> list() {
-        return opportunities.list().stream().map(BuyingOpportunityView::from).toList();
+    public AlertsPageView list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        var result = opportunities.list(page, size);
+        return new AlertsPageView(
+                result.getContent().stream().map(BuyingOpportunityView::from).toList(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages()
+        );
     }
 
     @GetMapping("/unread-count")

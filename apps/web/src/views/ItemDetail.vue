@@ -2,11 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, ApiError, CONDITIONS, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
-import { askAlert, askConfirm } from "../confirm";
+import { askAlert, askConfirm, confirmStockStatusChange } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "../components/EbayStoreCategoryField.vue";
 import ChannelLogo from "../components/ChannelLogo.vue";
+import ScanProgressModal from "../components/ScanProgressModal.vue";
+import StockStatusButtons from "../components/StockStatusButtons.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -14,6 +16,7 @@ const item = ref<InventoryItem | null>(null);
 const listings = ref<ChannelListing[]>([]);
 const error = ref("");
 const saving = ref(false);
+const stockBusy = ref(false);
 const justSaved = ref(false);
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 const platforms = ref(["SHOPIFY", "BRICKLINK", "EBAY"]);
@@ -29,6 +32,22 @@ const jobStatus = ref<Record<string, string>>({});
 type MarketSnapshot = { min?: number; avg?: number; median?: number; max?: number; count?: number; scannedAt?: string };
 type MarketDashboard = { ebay?: MarketSnapshot | null; bricklink?: MarketSnapshot | null };
 const market = ref<MarketDashboard | null>(null);
+const uploading = ref(false);
+const uploadIndex = ref(0);
+const uploadTotal = ref(0);
+const uploadName = ref("");
+
+const uploadTitle = computed(() => uploadTotal.value === 1 ? "Uploading photo" : "Uploading photos");
+const uploadMessage = computed(() => {
+  if (!uploadTotal.value) return "Uploading to storage…";
+  const current = Math.min(uploadIndex.value + 1, uploadTotal.value);
+  const name = uploadName.value ? ` · ${uploadName.value}` : "";
+  return `Uploading ${current} of ${uploadTotal.value}${name}`;
+});
+const uploadPercent = computed(() => {
+  if (!uploadTotal.value) return 0;
+  return Math.round(((uploadIndex.value + 1) / uploadTotal.value) * 100);
+});
 
 const loadMarket = async (catalogId?: string) => {
   if (!catalogId) {
@@ -80,6 +99,26 @@ watch(
     item.value.minimumOffer = offer === "" ? undefined : Number(offer);
   }
 );
+
+const setStockStatus = async (next: string) => {
+  if (!item.value || item.value.stockStatus === next || stockBusy.value) return;
+  if (!(await confirmStockStatusChange(next))) return;
+  stockBusy.value = true;
+  error.value = "";
+  try {
+    const updated = await api.put<InventoryItem>(`/api/inventory/${item.value.id}`, { stockStatus: next });
+    item.value.stockStatus = updated.stockStatus;
+    item.value.quantity = updated.quantity;
+    item.value.shopifyStatus = updated.shopifyStatus;
+    item.value.bricklinkStatus = updated.bricklinkStatus;
+    item.value.ebayStatus = updated.ebayStatus;
+    listings.value = await api.get<ChannelListing[]>(`/api/inventory/${item.value.id}/listings`);
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    stockBusy.value = false;
+  }
+};
 
 const save = async () => {
   if (!item.value) return;
@@ -149,12 +188,30 @@ const marketScanLabel = computed(() => {
 });
 
 const upload = async (event: Event) => {
-  const files = (event.target as HTMLInputElement).files;
-  if (!files || !item.value) return;
-  for (const file of Array.from(files)) {
-    const data = new FormData();
-    data.append("file", file);
-    await api.post(`/api/inventory/${item.value.id}/photos`, data);
+  const input = event.target as HTMLInputElement;
+  const files = input.files;
+  if (!files?.length || !item.value || uploading.value) return;
+  uploading.value = true;
+  uploadTotal.value = files.length;
+  uploadIndex.value = 0;
+  uploadName.value = "";
+  error.value = "";
+  try {
+    const list = Array.from(files);
+    for (let i = 0; i < list.length; i++) {
+      uploadIndex.value = i;
+      uploadName.value = list[i].name;
+      const data = new FormData();
+      data.append("file", list[i]);
+      await api.post(`/api/inventory/${item.value.id}/photos`, data);
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not upload photos";
+  } finally {
+    input.value = "";
+    uploading.value = false;
+    uploadTotal.value = 0;
+    uploadName.value = "";
   }
   await load();
 };
@@ -295,15 +352,15 @@ const openEbayCatalogReview = async (kind: "publish" | "retry") => {
   }
 };
 
-const acceptEbayCatalog = async () => {
+const acceptEbayCatalog = async (bypassEbayCatalog = false) => {
   const kind = pendingPublishKind.value;
   showEbayCatalog.value = false;
   pendingPublishKind.value = null;
   if (kind === "retry") {
-    await runRetry("EBAY");
+    await runRetry("EBAY", bypassEbayCatalog);
     return;
   }
-  await runPublish(platforms.value);
+  await runPublish(platforms.value, bypassEbayCatalog);
 };
 
 const rejectEbayCatalog = () => {
@@ -324,15 +381,19 @@ const publish = async () => {
   await runPublish(platforms.value);
 };
 
-const runPublish = async (selected: string[]) => {
+const runPublish = async (selected: string[], bypassEbayCatalog = false) => {
   if (!item.value || publishing.value || !selected.length) return;
   if (await warnIfAlreadyCreated(selected)) return;
   startPublishLog(`Publishing ${selected.join(", ")}…`);
   try {
     await save();
     logLine("Item saved. Queuing channel jobs…");
+    if (bypassEbayCatalog && selected.includes("EBAY")) {
+      logLine("eBay: using vault listing details, not the catalog product.");
+    }
     const jobs = await api.post<PublishJob[]>(`/api/inventory/${item.value.id}/publish`, {
       platforms: selected,
+      bypassEbayCatalog,
     });
     for (const job of jobs) {
       jobStatus.value[job.id] = job.status;
@@ -364,11 +425,13 @@ const retry = async (platform: string) => {
   await runRetry(platform);
 };
 
-const runRetry = async (platform: string) => {
+const runRetry = async (platform: string, bypassEbayCatalog = false) => {
   if (!item.value || publishing.value) return;
   startPublishLog(`Retrying ${platform}…`);
   try {
-    const job = await api.post<PublishJob>(`/api/inventory/${item.value.id}/publish/${platform}/retry`);
+    const job = await api.post<PublishJob>(`/api/inventory/${item.value.id}/publish/${platform}/retry`, {
+      bypassEbayCatalog,
+    });
     jobStatus.value[job.id] = job.status;
     logLine(`${job.platform}: queued`);
     await waitForJobs([job.id]);
@@ -542,9 +605,16 @@ const remove = async () => {
 
 <template>
   <div v-if="item" class="grid">
-    <div>
-      <p class="muted">{{ item.catalog.setNumber }} · {{ item.sku }}</p>
-      <h1>{{ item.title }}</h1>
+    <div class="page-head">
+      <div>
+        <p class="muted">{{ item.catalog.setNumber }} · {{ item.sku }}</p>
+        <h1>{{ item.title }}</h1>
+      </div>
+      <StockStatusButtons
+        :model-value="item.stockStatus"
+        :disabled="stockBusy"
+        @update:model-value="setStockStatus"
+      />
     </div>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -596,7 +666,7 @@ const remove = async () => {
       </div>
       <div class="grid three">
         <label>Cost <input v-model.number="item.cost" type="number" step="0.01" /></label>
-        <label>Quantity <input v-model.number="item.quantity" type="number" /></label>
+        <label>Quantity <input v-model.number="item.quantity" type="number" min="0" /></label>
         <label>eBay Minimum offer (default 90% eBay price) <input v-model.number="item.minimumOffer" type="number" step="0.01" /></label>
       </div>
       <div class="grid four">
@@ -629,7 +699,7 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Photos</h3>
-      <input type="file" accept="image/*" multiple @change="upload" />
+      <input type="file" accept="image/*" multiple :disabled="uploading" @change="upload" />
       <div class="photos">
         <div v-for="photo in item.photos" :key="photo.id" class="photo-tile">
           <img
@@ -831,9 +901,23 @@ const remove = async () => {
           </tbody>
         </table>
         <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
-          <button class="btn gold" type="button" @click="acceptEbayCatalog">Continue publishing</button>
+          <button class="btn gold" type="button" @click="acceptEbayCatalog(false)">
+            {{ ebayCatalog.catalogMatch ? "Use catalog product" : "Continue publishing" }}
+          </button>
+          <button
+            v-if="ebayCatalog.catalogMatch"
+            class="btn secondary"
+            type="button"
+            @click="acceptEbayCatalog(true)"
+          >
+            Use my listing details
+          </button>
           <button class="btn secondary" type="button" @click="rejectEbayCatalog">Cancel</button>
         </div>
+        <p v-if="ebayCatalog.catalogMatch" class="muted">
+          Use catalog product keeps eBay’s ePID and item specifics. Use my listing details
+          publishes with this item’s title, photos, description, and specifics from the vault.
+        </p>
       </template>
     </div>
   </div>
@@ -852,4 +936,10 @@ const remove = async () => {
       <button class="btn secondary" type="button" :disabled="publishing" @click="showPublishLog = false">Close</button>
     </div>
   </div>
+  <ScanProgressModal
+    :open="uploading"
+    :title="uploadTitle"
+    :message="uploadMessage"
+    :percent="uploadPercent"
+  />
 </template>

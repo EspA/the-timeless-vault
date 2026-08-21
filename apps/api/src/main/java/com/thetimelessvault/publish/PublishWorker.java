@@ -3,6 +3,7 @@ package com.thetimelessvault.publish;
 import com.thetimelessvault.alerts.PriceGuard;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.common.ApiException;
+import com.thetimelessvault.ebay.EbayPublisher;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.InventoryService;
 import com.thetimelessvault.inventory.ChannelPrice;
@@ -57,9 +58,17 @@ public class PublishWorker {
         try {
             List<String> photos = inventoryService.photoUrls(item);
             ChannelPublisher publisher = publishers.get(job.getPlatform());
-            PublishResult result = action == ListingAction.UPDATE
-                    ? publisher.update(item, listing, photos)
-                    : publisher.publish(item, photos);
+            boolean bypassEbayCatalog = job.isBypassEbayCatalog();
+            PublishResult result;
+            if (publisher instanceof EbayPublisher ebay) {
+                result = action == ListingAction.UPDATE
+                        ? ebay.update(item, listing, photos, bypassEbayCatalog)
+                        : ebay.publish(item, photos, bypassEbayCatalog);
+            } else {
+                result = action == ListingAction.UPDATE
+                        ? publisher.update(item, listing, photos)
+                        : publisher.publish(item, photos);
+            }
             applyResult(listing, result, item, action);
             listings.save(listing);
             priceGuards.findByChannelListingId(listing.getId())

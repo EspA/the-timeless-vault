@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.ItemCondition;
 import com.thetimelessvault.common.ItemType;
+import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.common.ThemeMapper;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -76,10 +77,11 @@ public final class InventoryDtos {
             @NotNull @DecimalMin("0.01") BigDecimal ebayPrice,
             @NotNull @DecimalMin("0.01") BigDecimal bricklinkPrice,
             @NotNull @DecimalMin("0.01") BigDecimal shopifyPrice,
-            @Min(1) Integer quantity,
+            @Min(0) Integer quantity,
             BigDecimal cost,
             ItemType itemType,
             ItemCondition condition,
+            StockStatus stockStatus,
             List<String> shopifyCollectionIds,
             String ebayStoreCategory,
             BigDecimal minimumOffer,
@@ -100,10 +102,11 @@ public final class InventoryDtos {
             @DecimalMin("0.01") BigDecimal ebayPrice,
             @DecimalMin("0.01") BigDecimal bricklinkPrice,
             @DecimalMin("0.01") BigDecimal shopifyPrice,
-            @Min(1) Integer quantity,
+            @Min(0) Integer quantity,
             BigDecimal cost,
             ItemType itemType,
             ItemCondition condition,
+            StockStatus stockStatus,
             List<String> shopifyCollectionIds,
             String ebayStoreCategory,
             BigDecimal minimumOffer,
@@ -204,6 +207,7 @@ public final class InventoryDtos {
             BigDecimal bricklinkPrice,
             BigDecimal shopifyPrice,
             int quantity,
+            StockStatus stockStatus,
             BigDecimal cost,
             ItemType itemType,
             ItemCondition condition,
