@@ -85,6 +85,7 @@ public class SecurityConfig {
                                 "/buying-opportunities",
                         "/listing-logs",
                         "/sales",
+                        "/sales-ledger",
                         "/settings",
                         "/webhooks/ebay/**"
                         ).permitAll()

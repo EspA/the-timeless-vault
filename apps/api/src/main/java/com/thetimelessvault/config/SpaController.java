@@ -20,6 +20,8 @@ public class SpaController {
             "/alerts",
             "/buying-opportunities",
             "/listing-logs",
+            "/sales",
+            "/sales-ledger",
             "/settings"
     })
     public String spa() {

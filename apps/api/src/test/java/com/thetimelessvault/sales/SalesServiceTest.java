@@ -36,6 +36,7 @@ import static org.mockito.Mockito.when;
 class SalesServiceTest {
 
     @Mock SaleRepository sales;
+    @Mock SaleIgnoreRepository ignores;
     @Mock InventoryItemRepository items;
     @Mock ChannelListingRepository listings;
     @Mock CatalogService catalogService;
@@ -49,7 +50,7 @@ class SalesServiceTest {
     @BeforeEach
     void setUp() {
         service = new SalesService(
-                sales, items, listings, catalogService, settings, publishService, new ChannelFeeRates(settings));
+                sales, ignores, items, listings, catalogService, settings, publishService, new ChannelFeeRates(settings));
         catalog = CatalogItem.create("75192-1");
         catalog.setName("Millennium Falcon");
         existing = InventoryItem.create(catalog, "TTV-75192-1-AAAA");
@@ -203,25 +204,40 @@ class SalesServiceTest {
     }
 
     @Test
-    void deleteRemovesSale() {
-        java.util.UUID id = existing.getId();
-        when(sales.existsById(id)).thenReturn(true);
+    void deleteRemovesSaleAndIgnoresChannelOrder() {
+        ChannelSale incoming = sale("TTV-75192-1-AAAA", null);
+        Sale existingSale = Sale.create(existing, incoming, false);
+        when(sales.findById(existingSale.getId())).thenReturn(Optional.of(existingSale));
+        when(ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(
+                Platform.EBAY, "12-345", "li-1")).thenReturn(false);
 
-        service.delete(id);
+        service.delete(existingSale.getId());
 
-        verify(sales).deleteById(id);
+        verify(ignores).save(any());
+        verify(sales).delete(existingSale);
+    }
+
+    @Test
+    void importSaleSkipsIgnoredChannelOrders() {
+        when(ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(
+                Platform.EBAY, "12-345", "li-1")).thenReturn(true);
+
+        assertFalse(service.importSale(sale("TTV-75192-1-AAAA", null)));
+        verify(sales, never()).save(any());
+        verify(items, never()).save(any());
     }
 
     @Test
     void deleteMissingSaleThrows() {
         java.util.UUID id = java.util.UUID.randomUUID();
-        when(sales.existsById(id)).thenReturn(false);
+        when(sales.findById(id)).thenReturn(Optional.empty());
 
         org.junit.jupiter.api.Assertions.assertThrows(
                 com.thetimelessvault.common.ApiException.class,
                 () -> service.delete(id)
         );
-        verify(sales, never()).deleteById(any());
+        verify(sales, never()).delete(any());
+        verify(ignores, never()).save(any());
     }
 
     private static ChannelSale sale(String sku, String listingId) {

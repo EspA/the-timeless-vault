@@ -172,6 +172,35 @@ export type SalesPage = {
   lastSyncedAt?: string;
 };
 
+export type LedgerSale = {
+  kind: "SET" | "MINIFIG";
+  itemNumber?: string;
+  name?: string;
+  theme?: string;
+  subtheme?: string;
+  year?: number;
+  currency: string;
+  salePriceTotal: number;
+  salePriceUnit: number;
+  salePriceShipping: number;
+  salePriceFees: number;
+  saleQuantity: number;
+  saleCondition?: string;
+  saleDate?: string;
+  buyDate?: string;
+  buyCondition?: string;
+  buyPrice: number;
+  profit: number;
+};
+
+export type SalesLedgerPage = {
+  items: LedgerSale[];
+  total: number;
+  revenue: number;
+  profit: number;
+  fetchedAt?: string;
+};
+
 export const visibilityStatusLabel = (status?: string | null) => {
   if (status === "ACTIVE") return "Active";
   if (status === "UNLISTED") return "Inactive";

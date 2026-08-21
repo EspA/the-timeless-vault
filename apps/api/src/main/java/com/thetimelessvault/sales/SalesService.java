@@ -38,6 +38,7 @@ public class SalesService {
     private static final Logger log = LoggerFactory.getLogger(SalesService.class);
 
     private final SaleRepository sales;
+    private final SaleIgnoreRepository ignores;
     private final InventoryItemRepository items;
     private final ChannelListingRepository listings;
     private final CatalogService catalogService;
@@ -47,6 +48,7 @@ public class SalesService {
 
     public SalesService(
             SaleRepository sales,
+            SaleIgnoreRepository ignores,
             InventoryItemRepository items,
             ChannelListingRepository listings,
             CatalogService catalogService,
@@ -55,6 +57,7 @@ public class SalesService {
             ChannelFeeRates feeRates
     ) {
         this.sales = sales;
+        this.ignores = ignores;
         this.items = items;
         this.listings = listings;
         this.catalogService = catalogService;
@@ -78,6 +81,9 @@ public class SalesService {
     @Transactional
     public boolean importSale(ChannelSale incoming) {
         if (incoming == null || incoming.orderId() == null) {
+            return false;
+        }
+        if (ignored(incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
             return false;
         }
         Optional<Sale> existing = sales.findByPlatformAndExternalOrderIdAndExternalLineId(
@@ -129,10 +135,9 @@ public class SalesService {
 
     @Transactional
     public void delete(UUID id) {
-        if (!sales.existsById(id)) {
-            throw ApiException.notFound("Sale not found");
-        }
-        sales.deleteById(id);
+        Sale sale = sales.findById(id).orElseThrow(() -> ApiException.notFound("Sale not found"));
+        ignore(sale.getPlatform(), sale.getExternalOrderId(), sale.getExternalLineId());
+        sales.delete(sale);
     }
 
     @Transactional
@@ -144,6 +149,7 @@ public class SalesService {
                 incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
             throw ApiException.conflict("A sale for that channel order already exists");
         }
+        clearIgnore(incoming.platform(), incoming.orderId(), incoming.identityLineId());
         InventoryItem item = resolveItem(incoming);
         boolean created = false;
         if (item == null) {
@@ -176,6 +182,22 @@ public class SalesService {
             String currency,
             Instant soldAt
     ) {
+    }
+
+    private void ignore(Platform platform, String orderId, String lineId) {
+        if (ignored(platform, orderId, lineId)) {
+            return;
+        }
+        ignores.save(SaleIgnore.of(platform, orderId, lineId));
+    }
+
+    private void clearIgnore(Platform platform, String orderId, String lineId) {
+        ignores.findByPlatformAndExternalOrderIdAndExternalLineId(platform, orderId, lineId)
+                .ifPresent(ignores::delete);
+    }
+
+    private boolean ignored(Platform platform, String orderId, String lineId) {
+        return ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(platform, orderId, lineId);
     }
 
     InventoryItem resolveItem(ChannelSale incoming) {

@@ -132,7 +132,7 @@ const onAdded = async () => {
 const remove = async (row: Sale) => {
   const label = itemLabel(row);
   const confirmed = await askConfirm(
-    `Delete ${label} from sales? The inventory item will be kept. Channel orders can be pulled again on the next sync.`,
+    `Delete ${label} from sales? The inventory item will be kept. Sync will not bring this channel order back.`,
     { title: "Delete sale" }
   );
   if (!confirmed) return;
@@ -178,7 +178,7 @@ onUnmounted(() => {
   <div class="grid">
     <div class="toolbar">
       <div>
-        <h1>Sales</h1>
+        <h1>Last Sales</h1>
         <p class="muted">{{ syncedLabel }}</p>
       </div>
       <div class="pager-actions">

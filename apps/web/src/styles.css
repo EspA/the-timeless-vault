@@ -1121,6 +1121,181 @@ th .sort-btn { width: 100%; }
   flex-wrap: wrap;
 }
 
+.ledger-year {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 7.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--slate);
+}
+
+.ledger-year select {
+  min-width: 7.5rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--field-ink);
+}
+
+.ledger-toolbar .pager-actions {
+  align-items: end;
+}
+
+.ledger-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.ledger-stats > div {
+  min-width: 0;
+}
+
+.ledger-stats p {
+  margin: 0;
+}
+
+.ledger-stat {
+  margin: 0.15rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.ledger-stat.negative,
+td.negative {
+  color: var(--wine);
+}
+
+.ledger-chart-card {
+  overflow: hidden;
+}
+
+.ledger-chart-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ledger-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 720 / 220;
+  max-height: 16rem;
+}
+
+.ledger-compact table {
+  min-width: 0;
+}
+
+.ledger-chart line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.ledger-chart text {
+  fill: var(--slate);
+  font-size: 10px;
+}
+
+.ledger-chart .series-revenue,
+.ledger-chart .series-profit {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.ledger-chart .ledger-bar { fill: var(--gold); }
+.ledger-chart .ledger-bar-count {
+  fill: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ledger-chart .ledger-axis {
+  fill: var(--slate);
+  font-size: 10px;
+}
+.ledger-chart .series-revenue { stroke: var(--slate); }
+.ledger-chart .series-profit { stroke: var(--ok); }
+.ledger-chart .series-revenue-area {
+  fill: var(--slate);
+  fill-opacity: 0.18;
+  stroke: none;
+}
+.ledger-chart .series-profit-area {
+  fill: var(--ok);
+  fill-opacity: 0.22;
+  stroke: none;
+}
+
+.ledger-chart-hover {
+  cursor: crosshair;
+}
+
+.ledger-chart .series-revenue-dot {
+  fill: var(--slate);
+  stroke: var(--card);
+  stroke-width: 1.5;
+}
+
+.ledger-chart .series-profit-dot {
+  fill: var(--ok);
+  stroke: var(--card);
+  stroke-width: 1.5;
+}
+
+.ledger-chart .series-revenue-dot.active,
+.ledger-chart .series-profit-dot.active {
+  stroke-width: 2;
+}
+
+.ledger-hover line {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.28;
+}
+
+.ledger-dot-value {
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.ledger-chart .series-revenue-value { fill: var(--slate); }
+.ledger-chart .series-profit-value { fill: var(--ok); }
+
+.ledger-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.25rem;
+  margin-top: 0.5rem;
+  color: var(--slate);
+  font-size: 0.88rem;
+}
+
+.ledger-legend .swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.35rem;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.ledger-legend .swatch.sales { background: var(--gold); }
+.ledger-legend .swatch.revenue { background: var(--slate); }
+.ledger-legend .swatch.profit { background: var(--ok); }
+
+.capitalize {
+  text-transform: capitalize;
+}
+
 .mobile-bar,
 .nav-scrim {
   display: none;
@@ -1382,6 +1557,54 @@ th .sort-btn { width: 100%; }
     min-width: 40rem;
   }
 
+  .ledger-compact table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .ledger-page .ledger-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ledger-page .ledger-toolbar .pager-actions {
+    width: 100%;
+  }
+
+  .ledger-page .ledger-toolbar .pager-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .ledger-page .ledger-toolbar .ledger-year {
+    flex: 1 1 8rem;
+  }
+
+  .ledger-page .ledger-toolbar .ledger-year select {
+    width: 100%;
+  }
+
+  .ledger-page .ledger-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .ledger-page .ledger-stat {
+    font-size: 1.1rem;
+  }
+
+  .ledger-chart {
+    max-height: none;
+    min-width: 34rem;
+    width: max(100%, 34rem);
+    height: 12.5rem;
+  }
+
+  .ledger-page h1 {
+    font-size: 1.45rem;
+  }
+
   .listing-title {
     min-width: 12rem;
     max-width: 18rem;
@@ -1469,5 +1692,31 @@ th .sort-btn { width: 100%; }
   .settings-add-row {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .ledger-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-stats > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .ledger-stat {
+    margin: 0;
+    text-align: right;
+  }
+
+  .ledger-page .mobile-filters {
+    grid-template-columns: 1fr;
   }
 }

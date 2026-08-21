@@ -53,4 +53,35 @@ public class BrickEconomyClient {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not parse BrickEconomy response");
         }
     }
+
+    public JsonNode getSalesLedger() {
+        return get("/salesledger");
+    }
+
+    private JsonNode get(String path, Object... uriVars) {
+        if (!config.configured()) {
+            throw ApiException.unavailable("BrickEconomy API key is not configured");
+        }
+        ResponseEntity<String> response = restClient.get()
+                .uri(path, uriVars)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, (req, res) -> {
+                    throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "BrickEconomy daily quota exceeded (100/day)");
+                })
+                .onStatus(status -> status.value() == 400 || status.value() == 404, (req, res) -> {
+                    throw ApiException.notFound("BrickEconomy sales ledger was not found");
+                })
+                .toEntity(String.class);
+        try {
+            JsonNode root = mapper.readTree(response.getBody());
+            if (root.has("data")) {
+                return root.get("data");
+            }
+            return root;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not parse BrickEconomy response");
+        }
+    }
 }
