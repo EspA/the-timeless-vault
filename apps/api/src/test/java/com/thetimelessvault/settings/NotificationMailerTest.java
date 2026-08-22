@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AlertMailerTest {
+class NotificationMailerTest {
 
     @Mock
     AppSettingRepository settings;
@@ -31,25 +31,25 @@ class AlertMailerTest {
     JavaMailSender mailSender;
 
     AppProperties properties;
-    AlertMailer mailer;
+    NotificationMailer mailer;
 
     @BeforeEach
     void setUp() {
         properties = new AppProperties();
         properties.setAlertToEmail("from-env@example.com");
-        mailer = new AlertMailer(settings, properties, mailSender, "localhost", 1025, "", "");
+        mailer = new NotificationMailer(settings, properties, mailSender, "localhost", 1025, "", "");
     }
 
     @Test
     void usesEnvWhenSettingMissing() {
-        when(settings.findById(AlertMailer.TO_KEY)).thenReturn(Optional.empty());
+        when(settings.findById(NotificationMailer.TO_KEY)).thenReturn(Optional.empty());
         assertEquals("from-env@example.com", mailer.recipient());
     }
 
     @Test
     void prefersSavedSetting() {
-        when(settings.findById(AlertMailer.TO_KEY))
-                .thenReturn(Optional.of(new AppSetting(AlertMailer.TO_KEY, "saved@example.com")));
+        when(settings.findById(NotificationMailer.TO_KEY))
+                .thenReturn(Optional.of(new AppSetting(NotificationMailer.TO_KEY, "saved@example.com")));
         assertEquals("saved@example.com", mailer.recipient());
     }
 
@@ -57,7 +57,7 @@ class AlertMailerTest {
     void treatsMailpitAsCatcherUntilSmtpCredentialsExist() {
         assertTrue(mailer.usesCatcher());
         assertFalse(mailer.deliversToInbox());
-        AlertMailer gmail = new AlertMailer(
+        NotificationMailer gmail = new NotificationMailer(
                 settings, properties, mailSender, "smtp.gmail.com", 587, "you@gmail.com", "app-password");
         assertFalse(gmail.usesCatcher());
         assertTrue(gmail.deliversToInbox());
@@ -65,7 +65,7 @@ class AlertMailerTest {
 
     @Test
     void sendsOnlyOverSmtp() {
-        when(settings.findById(AlertMailer.TO_KEY)).thenReturn(Optional.empty());
+        when(settings.findById(NotificationMailer.TO_KEY)).thenReturn(Optional.empty());
         mailer.send("New listing", "Spider Droid appeared on eBay.");
         ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(sent.capture());
@@ -76,6 +76,6 @@ class AlertMailerTest {
 
     @Test
     void rejectsInvalidAddress() {
-        assertThrows(ApiException.class, () -> AlertMailer.validateAddress("not-an-email"));
+        assertThrows(ApiException.class, () -> NotificationMailer.validateAddress("not-an-email"));
     }
 }

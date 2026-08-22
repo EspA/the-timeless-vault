@@ -11,13 +11,13 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-public class AlertService {
+public class WatchService {
 
     private final WatchRuleRepository watchRules;
     private final PriceGuardRepository priceGuards;
     private final WatchDefaults watchDefaults;
 
-    public AlertService(
+    public WatchService(
             WatchRuleRepository watchRules,
             PriceGuardRepository priceGuards,
             WatchDefaults watchDefaults

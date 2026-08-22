@@ -15,6 +15,7 @@ import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.InventoryItemRepository;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
+import com.thetimelessvault.opportunities.BuyingOpportunityService;
 import com.thetimelessvault.publish.PublishService;
 import com.thetimelessvault.settings.ChannelFeeRates;
 import org.slf4j.Logger;
@@ -44,6 +45,7 @@ public class SalesService {
     private final CatalogService catalogService;
     private final AppSettingRepository settings;
     private final PublishService publishService;
+    private final BuyingOpportunityService opportunities;
     private final ChannelFeeRates feeRates;
 
     public SalesService(
@@ -54,6 +56,7 @@ public class SalesService {
             CatalogService catalogService,
             AppSettingRepository settings,
             PublishService publishService,
+            BuyingOpportunityService opportunities,
             ChannelFeeRates feeRates
     ) {
         this.sales = sales;
@@ -63,6 +66,7 @@ public class SalesService {
         this.catalogService = catalogService;
         this.settings = settings;
         this.publishService = publishService;
+        this.opportunities = opportunities;
         this.feeRates = feeRates;
     }
 
@@ -164,6 +168,7 @@ public class SalesService {
                 deactivateListings(item, incoming.platform());
                 markSold(item);
             }
+            opportunities.recordNewSale(saved, item);
             return saved;
         } catch (DataIntegrityViolationException e) {
             throw ApiException.conflict("A sale for that channel order already exists");

@@ -9,6 +9,7 @@ import EbayStoreCategoryField from "../components/EbayStoreCategoryField.vue";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import ScanProgressModal from "../components/ScanProgressModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
+import PhotoCapture from "../components/PhotoCapture.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -194,28 +195,24 @@ const marketScanLabel = computed(() => {
   return `Last scan ${parsed.toLocaleString()}`;
 });
 
-const upload = async (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const files = input.files;
-  if (!files?.length || !item.value || uploading.value) return;
+const upload = async (files: File[]) => {
+  if (!files.length || !item.value || uploading.value) return;
   uploading.value = true;
   uploadTotal.value = files.length;
   uploadIndex.value = 0;
   uploadName.value = "";
   error.value = "";
   try {
-    const list = Array.from(files);
-    for (let i = 0; i < list.length; i++) {
+    for (let i = 0; i < files.length; i++) {
       uploadIndex.value = i;
-      uploadName.value = list[i].name;
+      uploadName.value = files[i].name;
       const data = new FormData();
-      data.append("file", list[i]);
+      data.append("file", files[i]);
       await api.post(`/api/inventory/${item.value.id}/photos`, data);
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "Could not upload photos";
   } finally {
-    input.value = "";
     uploading.value = false;
     uploadTotal.value = 0;
     uploadName.value = "";
@@ -818,7 +815,7 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Photos</h3>
-      <input type="file" accept="image/*" multiple :disabled="uploading" @change="upload" />
+      <PhotoCapture :disabled="uploading" @files="upload" />
       <div class="photos">
         <div v-for="photo in item.photos" :key="photo.id" class="photo-tile">
           <img

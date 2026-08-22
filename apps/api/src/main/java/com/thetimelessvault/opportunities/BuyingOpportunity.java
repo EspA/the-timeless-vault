@@ -24,6 +24,7 @@ public class BuyingOpportunity {
     public static final String TYPE_BUYING_OPPORTUNITY = "BUYING_OPPORTUNITY";
     public static final String TYPE_PRICE_HIGH = "PRICE_HIGH";
     public static final String TYPE_PRICE_LOW = "PRICE_LOW";
+    public static final String TYPE_NEW_SALE = "NEW_SALE";
 
     @Id
     private UUID id;

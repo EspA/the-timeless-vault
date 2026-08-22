@@ -3,11 +3,14 @@ package com.thetimelessvault.opportunities;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
+import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
 import com.thetimelessvault.market.MarketSnapshot;
 import com.thetimelessvault.market.ScanTrigger;
-import com.thetimelessvault.settings.AlertMailer;
+import com.thetimelessvault.sales.ChannelSale;
+import com.thetimelessvault.sales.Sale;
+import com.thetimelessvault.settings.NotificationMailer;
 import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatch;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +21,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,7 +36,7 @@ import static org.mockito.Mockito.when;
 class BuyingOpportunityServiceRecordNewListingTest {
 
     @Mock BuyingOpportunityRepository opportunities;
-    @Mock AlertMailer alertMailer;
+    @Mock NotificationMailer notificationMailer;
     @Mock PhotoRepository photos;
     @Mock ObjectStorage storage;
 
@@ -46,7 +51,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
     void setUp() {
         service = new BuyingOpportunityService(
                 opportunities,
-                alertMailer,
+                notificationMailer,
                 new AppProperties(),
                 photos,
                 storage
@@ -74,7 +79,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
     void firstAutomaticSightingCreatesAnOpportunityEvenWhenAManualOneAlreadyExists() {
         when(opportunities.findByDedupeKeyAndScanTrigger(dedupe, ScanTrigger.AUTOMATIC)).thenReturn(Optional.empty());
         when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(alertMailer.sendQuietly(any(), any(), any())).thenReturn(false);
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(false);
 
         service.recordNewListing(catalog, Platform.EBAY, listing, watch);
 
@@ -103,13 +108,13 @@ class BuyingOpportunityServiceRecordNewListingTest {
         listing.setImageUrl("https://i.ebayimg.com/photo.jpg");
         when(opportunities.findByDedupeKeyAndScanTrigger(dedupe, ScanTrigger.AUTOMATIC)).thenReturn(Optional.empty());
         when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(alertMailer.sendQuietly(any(), any(), any())).thenReturn(true);
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(true);
 
         service.recordNewListing(catalog, Platform.EBAY, listing, watch, new BigDecimal("358.00"));
 
         ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
-        verify(alertMailer).sendQuietly(subject.capture(), any(), html.capture());
+        verify(notificationMailer).sendQuietly(subject.capture(), any(), html.capture());
         assertTrue(subject.getValue().contains("BUYING OPPORTUNITY"));
         assertTrue(html.getValue().contains("75017-1 / Duel on Geonosis"));
         assertTrue(html.getValue().contains("$315.00"));
@@ -148,5 +153,68 @@ class BuyingOpportunityServiceRecordNewListingTest {
     void deleteNewListingsRemovesWatchHistoryOnly() {
         service.deleteNewListings(catalog.getId());
         verify(opportunities).deleteByCatalogItem_IdAndType(catalog.getId(), BuyingOpportunity.TYPE_BUYING_OPPORTUNITY);
+    }
+
+    @Test
+    void recordNewSaleCreatesANewSaleNotification() {
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
+        Sale sale = Sale.create(item, new ChannelSale(
+                Platform.EBAY,
+                "12-345",
+                "li-1",
+                item.getSku(),
+                null,
+                "LEGO 75017 Duel on Geonosis",
+                "75017-1",
+                1,
+                new BigDecimal("315.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        ), false);
+        when(opportunities.findByDedupeKey("SALE:EBAY:12-345:li-1")).thenReturn(Optional.empty());
+        when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(photos.findByInventoryItemIdOrderBySortOrderAscCreatedAtAsc(item.getId())).thenReturn(List.of());
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(false);
+
+        service.recordNewSale(sale, item);
+
+        ArgumentCaptor<BuyingOpportunity> saved = ArgumentCaptor.forClass(BuyingOpportunity.class);
+        verify(opportunities).save(saved.capture());
+        assertEquals(BuyingOpportunity.TYPE_NEW_SALE, saved.getValue().getType());
+        assertEquals("SALE:EBAY:12-345:li-1", saved.getValue().getDedupeKey());
+        assertEquals("New eBay sale of 75017-1 Duel on Geonosis", saved.getValue().getTitle());
+        assertEquals("https://www.ebay.com/sh/ord/details?orderid=12-345", saved.getValue().getUrl());
+        assertTrue(saved.getValue().getBody().contains("$315.00"));
+        assertTrue(saved.getValue().getBody().contains("order 12-345"));
+    }
+
+    @Test
+    void recordNewSaleSkipsDuplicateOrderLines() {
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
+        Sale sale = Sale.create(item, new ChannelSale(
+                Platform.EBAY,
+                "12-345",
+                "li-1",
+                item.getSku(),
+                null,
+                "LEGO 75017 Duel on Geonosis",
+                "75017-1",
+                1,
+                new BigDecimal("315.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        ), false);
+        when(opportunities.findByDedupeKey("SALE:EBAY:12-345:li-1"))
+                .thenReturn(Optional.of(BuyingOpportunity.create(BuyingOpportunity.TYPE_NEW_SALE, "already", "SALE:EBAY:12-345:li-1")));
+
+        service.recordNewSale(sale, item);
+
+        verify(opportunities, never()).save(any());
     }
 }

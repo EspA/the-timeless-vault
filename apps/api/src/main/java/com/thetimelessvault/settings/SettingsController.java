@@ -37,7 +37,7 @@ public class SettingsController {
     private final AppSettingRepository appSettings;
     private final ObjectStorage storage;
     private final WatchDefaults watchDefaults;
-    private final AlertMailer alertMailer;
+    private final NotificationMailer notificationMailer;
     private final PriceGuardDefaults priceGuardDefaults;
     private final ChannelFeeRates channelFeeRates;
     private final EbayStoreCategorySettings storeCategorySettings;
@@ -51,7 +51,7 @@ public class SettingsController {
             AppSettingRepository appSettings,
             ObjectStorage storage,
             WatchDefaults watchDefaults,
-            AlertMailer alertMailer,
+            NotificationMailer notificationMailer,
             PriceGuardDefaults priceGuardDefaults,
             ChannelFeeRates channelFeeRates,
             EbayStoreCategorySettings storeCategorySettings
@@ -64,7 +64,7 @@ public class SettingsController {
         this.appSettings = appSettings;
         this.storage = storage;
         this.watchDefaults = watchDefaults;
-        this.alertMailer = alertMailer;
+        this.notificationMailer = notificationMailer;
         this.priceGuardDefaults = priceGuardDefaults;
         this.channelFeeRates = channelFeeRates;
         this.storeCategorySettings = storeCategorySettings;
@@ -96,7 +96,7 @@ public class SettingsController {
         health.put("ebayPoliciesReady", ebayPoliciesReady);
         health.put("ebaySellError", ebaySellError);
         health.put("storage", storage.mode());
-        health.putAll(alertMailer.status());
+        health.putAll(notificationMailer.status());
         health.put("ebayStoreCategories", storeCategorySettings.list());
         health.put("ebayBuyerPostalCode", ebayClient.buyerPostalCode());
         health.put("ebayDefaultExcludeWords", watchDefaults.excludeWords());
@@ -109,16 +109,16 @@ public class SettingsController {
         return health;
     }
 
-    @PutMapping("/settings/alert-email")
-    public Map<String, Object> saveAlertEmail(@RequestBody(required = false) Map<String, String> body) {
-        String email = alertMailer.saveRecipient(body == null ? "" : body.get("email"));
-        return Map.of("email", email, "mailDeliversToInbox", alertMailer.deliversToInbox());
+    @PutMapping({"/settings/notification-email", "/settings/alert-email"})
+    public Map<String, Object> saveNotificationEmail(@RequestBody(required = false) Map<String, String> body) {
+        String email = notificationMailer.saveRecipient(body == null ? "" : body.get("email"));
+        return Map.of("email", email, "mailDeliversToInbox", notificationMailer.deliversToInbox());
     }
 
-    @PostMapping("/settings/alert-email/test")
-    public Map<String, String> sendTestAlertEmail() {
-        alertMailer.sendTest();
-        return Map.of("status", "sent", "email", alertMailer.recipient());
+    @PostMapping({"/settings/notification-email/test", "/settings/alert-email/test"})
+    public Map<String, String> sendTestNotificationEmail() {
+        notificationMailer.sendTest();
+        return Map.of("status", "sent", "email", notificationMailer.recipient());
     }
 
     @PutMapping("/settings/ebay-buyer-postal-code")

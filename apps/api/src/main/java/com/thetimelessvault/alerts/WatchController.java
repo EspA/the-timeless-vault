@@ -16,14 +16,14 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
-public class AlertController {
+public class WatchController {
 
-    private final AlertService alertService;
+    private final WatchService watchService;
     private final CatalogService catalogService;
     private final ChannelListingRepository listings;
 
-    public AlertController(AlertService alertService, CatalogService catalogService, ChannelListingRepository listings) {
-        this.alertService = alertService;
+    public WatchController(WatchService watchService, CatalogService catalogService, ChannelListingRepository listings) {
+        this.watchService = watchService;
         this.catalogService = catalogService;
         this.listings = listings;
     }
@@ -76,19 +76,19 @@ public class AlertController {
 
     @GetMapping("/watch-rules")
     public List<WatchView> watchRules() {
-        return alertService.watchRules().stream().map(WatchView::from).toList();
+        return watchService.watchRules().stream().map(WatchView::from).toList();
     }
 
     @GetMapping("/watch-rules/{catalogId}")
     public WatchView watchRule(@PathVariable UUID catalogId) {
         var catalog = catalogService.get(catalogId);
-        return WatchView.from(catalog, alertService.watchRule(catalogId));
+        return WatchView.from(catalog, watchService.watchRule(catalogId));
     }
 
     @PutMapping("/watch-rules/{catalogId}")
     public WatchView upsertWatch(@PathVariable UUID catalogId, @RequestBody WatchRequest request) {
         var catalog = catalogService.get(catalogId);
-        return WatchView.from(catalog, alertService.upsertWatch(
+        return WatchView.from(catalog, watchService.upsertWatch(
                 catalog,
                 request.enabled(),
                 request.ebaySearchQuery(),
@@ -99,12 +99,12 @@ public class AlertController {
 
     @GetMapping("/price-guards")
     public List<GuardView> guards() {
-        return alertService.priceGuards().stream().map(GuardView::from).toList();
+        return watchService.priceGuards().stream().map(GuardView::from).toList();
     }
 
     @PutMapping("/price-guards/{listingId}")
     public GuardView upsertGuard(@PathVariable UUID listingId, @RequestBody GuardRequest request) {
-        return GuardView.from(alertService.upsertGuard(
+        return GuardView.from(watchService.upsertGuard(
                 listings.findById(listingId).orElseThrow(),
                 request.enabled(),
                 request.highPercent(),

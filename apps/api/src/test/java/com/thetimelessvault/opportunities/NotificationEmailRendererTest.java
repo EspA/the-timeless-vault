@@ -9,13 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class AlertEmailRendererTest {
+class NotificationEmailRendererTest {
 
     private static final Instant SCANNED = Instant.parse("2026-08-19T23:54:00Z");
 
     @Test
     void buyingOpportunityIncludesTagPricePercentAndListingLink() {
-        AlertEmail email = new AlertEmail(
+        NotificationEmail email = new NotificationEmail(
                 BuyingOpportunity.TYPE_BUYING_OPPORTUNITY,
                 "75017-1",
                 "Duel on Geonosis",
@@ -30,7 +30,7 @@ class AlertEmailRendererTest {
                 SCANNED
         );
 
-        String html = AlertEmailRenderer.html(email);
+        String html = NotificationEmailRenderer.html(email);
         assertTrue(html.contains("BUYING OPPORTUNITY"));
         assertTrue(html.contains("75017-1 / Duel on Geonosis"));
         assertTrue(html.contains("$315.00"));
@@ -47,17 +47,17 @@ class AlertEmailRendererTest {
         assertFalse(html.contains("Adjust price"));
         assertEquals(
                 "[The Timeless Vault] BUYING OPPORTUNITY · eBay · 75017-1 / Duel on Geonosis",
-                AlertEmailRenderer.subject(email)
+                NotificationEmailRenderer.subject(email)
         );
-        assertTrue(AlertEmailRenderer.text(email).contains("Scanned Aug 19, 2026"));
-        assertTrue(AlertEmailRenderer.text(email).contains("eBay"));
-        assertTrue(AlertEmailRenderer.text(email).contains("Seller brickshop"));
-        assertTrue(AlertEmailRenderer.text(email).contains("Feedback 1,842 / 99.8%"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Scanned Aug 19, 2026"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("eBay"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Seller brickshop"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Feedback 1,842 / 99.8%"));
     }
 
     @Test
     void bricklinkBuyingOpportunityShowsCountry() {
-        AlertEmail email = new AlertEmail(
+        NotificationEmail email = new NotificationEmail(
                 BuyingOpportunity.TYPE_BUYING_OPPORTUNITY,
                 "75017-1",
                 "Duel on Geonosis",
@@ -72,24 +72,24 @@ class AlertEmailRendererTest {
                 SCANNED
         );
 
-        String html = AlertEmailRenderer.html(email);
+        String html = NotificationEmailRenderer.html(email);
         assertTrue(html.contains("bricklink-logo.png"));
         assertTrue(html.contains("alt=\"BrickLink\""));
         assertTrue(html.contains("kaden50"));
         assertTrue(html.contains("Country United Kingdom"));
         assertFalse(html.contains("Feedback"));
-        assertTrue(AlertEmailRenderer.text(email).contains("BrickLink"));
-        assertTrue(AlertEmailRenderer.text(email).contains("Seller kaden50"));
-        assertTrue(AlertEmailRenderer.text(email).contains("Country United Kingdom"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("BrickLink"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Seller kaden50"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Country United Kingdom"));
         assertEquals(
                 "[The Timeless Vault] BUYING OPPORTUNITY · BrickLink · 75017-1 / Duel on Geonosis",
-                AlertEmailRenderer.subject(email)
+                NotificationEmailRenderer.subject(email)
         );
     }
 
     @Test
     void priceGuardAddsInventoryLink() {
-        AlertEmail email = new AlertEmail(
+        NotificationEmail email = new NotificationEmail(
                 BuyingOpportunity.TYPE_PRICE_HIGH,
                 "10195-1",
                 "Republic Dropship with AT-OT Walker",
@@ -104,7 +104,7 @@ class AlertEmailRendererTest {
                 SCANNED
         );
 
-        String html = AlertEmailRenderer.html(email);
+        String html = NotificationEmailRenderer.html(email);
         assertTrue(html.contains("PRICE HIGH"));
         assertTrue(html.contains("ebay-logo.png"));
         assertTrue(html.contains("alt=\"eBay\""));
@@ -117,21 +117,21 @@ class AlertEmailRendererTest {
 
     @Test
     void formatsPercentAgainstMedian() {
-        assertEquals("-12%", AlertEmailRenderer.percentVsMedian(new BigDecimal("315.00"), new BigDecimal("358.00")));
-        assertEquals("+18%", AlertEmailRenderer.percentVsMedian(new BigDecimal("890.00"), new BigDecimal("754.00")));
-        assertEquals("$315.00", AlertEmailRenderer.money(new BigDecimal("315.00")));
-        assertEquals("Feedback 1,842 / 99.8%", AlertEmailRenderer.feedback(1842, "99.8"));
-        assertEquals("Feedback 12 / 100%", AlertEmailRenderer.feedback(12, "100%"));
+        assertEquals("-12%", NotificationEmailRenderer.percentVsMedian(new BigDecimal("315.00"), new BigDecimal("358.00")));
+        assertEquals("+18%", NotificationEmailRenderer.percentVsMedian(new BigDecimal("890.00"), new BigDecimal("754.00")));
+        assertEquals("$315.00", NotificationEmailRenderer.money(new BigDecimal("315.00")));
+        assertEquals("Feedback 1,842 / 99.8%", NotificationEmailRenderer.feedback(1842, "99.8"));
+        assertEquals("Feedback 12 / 100%", NotificationEmailRenderer.feedback(12, "100%"));
         assertEquals(
                 "https://admin.thetimelessvault.com/email/ebay-logo.png",
-                AlertEmailRenderer.platformLogoSrc("EBAY", "https://admin.thetimelessvault.com/")
+                NotificationEmailRenderer.platformLogoSrc("EBAY", "https://admin.thetimelessvault.com/")
         );
-        assertEquals("/email/bricklink-logo.png", AlertEmailRenderer.platformLogoSrc("BRICKLINK", null));
+        assertEquals("/email/bricklink-logo.png", NotificationEmailRenderer.platformLogoSrc("BRICKLINK", null));
     }
 
     @Test
     void escapesHtmlInSetName() {
-        AlertEmail email = new AlertEmail(
+        NotificationEmail email = new NotificationEmail(
                 BuyingOpportunity.TYPE_PRICE_LOW,
                 "1",
                 "Foo <script>",
@@ -145,7 +145,7 @@ class AlertEmailRendererTest {
                 null,
                 SCANNED
         );
-        assertTrue(AlertEmailRenderer.html(email).contains("Foo &lt;script&gt;"));
-        assertFalse(AlertEmailRenderer.html(email).contains("Foo <script>"));
+        assertTrue(NotificationEmailRenderer.html(email).contains("Foo &lt;script&gt;"));
+        assertFalse(NotificationEmailRenderer.html(email).contains("Foo <script>"));
     }
 }

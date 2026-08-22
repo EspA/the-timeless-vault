@@ -3,7 +3,7 @@ import { computed, inject, onMounted, ref } from "vue";
 import { api } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 
-type AlertEvent = {
+type NotificationEvent = {
   id: string;
   type: string;
   platform?: string;
@@ -15,8 +15,8 @@ type AlertEvent = {
   emailed: boolean;
 };
 
-type AlertsPage = {
-  items: AlertEvent[];
+type NotificationsPage = {
+  items: NotificationEvent[];
   page: number;
   size: number;
   total: number;
@@ -28,6 +28,7 @@ const TYPE_OPTIONS = [
   { value: "BUYING_OPPORTUNITY", label: "BUYING OPPORTUNITY" },
   { value: "PRICE_HIGH", label: "PRICE HIGH" },
   { value: "PRICE_LOW", label: "PRICE LOW" },
+  { value: "NEW_SALE", label: "NEW SALE" },
 ];
 
 const PAGE_SIZE = 20;
@@ -40,7 +41,7 @@ const emptyFilters = () => ({
   read: "",
 });
 
-const items = ref<AlertEvent[]>([]);
+const items = ref<NotificationEvent[]>([]);
 const page = ref(0);
 const total = ref(0);
 const totalPages = ref(1);
@@ -56,6 +57,7 @@ const typeLabel = (type: string) => (type || "").replaceAll("_", " ");
 const typeBadge = (type: string) => {
   if (type === "BUYING_OPPORTUNITY") return "ok";
   if (type === "PRICE_HIGH" || type === "PRICE_LOW") return "price";
+  if (type === "NEW_SALE") return "ok";
   return "";
 };
 
@@ -93,10 +95,15 @@ const visible = computed(() =>
 
 const listingHref = (url?: string) => !!url && url.startsWith("/") && !url.startsWith("//");
 
+const linkLabel = (alert: NotificationEvent) => {
+  if (alert.type !== "NEW_SALE") return "Open listing";
+  return listingHref(alert.url) ? "Open item" : "Open order";
+};
+
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const rangeLabel = computed(() => {
-  if (!total.value) return "0 alerts";
+  if (!total.value) return "0 notifications";
   const start = page.value * PAGE_SIZE + 1;
   const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
   const pages = totalPages.value > 1 ? ` · page ${page.value + 1} of ${totalPages.value}` : "";
@@ -108,7 +115,7 @@ const clearFilters = () => {
 };
 
 const loadUnread = async () => {
-  const count = await api.get<{ count: number }>("/api/alerts/unread-count").catch(() => ({ count: 0 }));
+  const count = await api.get<{ count: number }>("/api/notifications/unread-count").catch(() => ({ count: 0 }));
   unreadCount.value = count.count;
 };
 
@@ -117,7 +124,7 @@ const load = async (pageIndex = page.value) => {
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<AlertsPage>(`/api/alerts?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const result = await api.get<NotificationsPage>(`/api/notifications?page=${pageIndex}&size=${PAGE_SIZE}`);
     const pages = Math.max(1, result.totalPages);
     const nextPage = Math.min(pageIndex, pages - 1);
     items.value = result.items;
@@ -131,7 +138,7 @@ const load = async (pageIndex = page.value) => {
       return;
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "Could not load alerts";
+    error.value = e instanceof Error ? e.message : "Could not load notifications";
   } finally {
     loading.value = false;
   }
@@ -152,7 +159,7 @@ onMounted(() => {
 });
 
 const read = async (id: string) => {
-  await api.post(`/api/alerts/${id}/read`);
+  await api.post(`/api/notifications/${id}/read`);
   await load(page.value);
   await refreshUnread();
 };
@@ -161,7 +168,7 @@ const readAll = async () => {
   if (!unreadCount.value || markingAll.value) return;
   markingAll.value = true;
   try {
-    await api.post("/api/alerts/read-all");
+    await api.post("/api/notifications/read-all");
     await load(page.value);
     await refreshUnread();
   } finally {
@@ -174,7 +181,7 @@ const readAll = async () => {
   <div class="grid">
     <div class="page-head">
       <div>
-        <h1>Alerts</h1>
+        <h1>Notifications</h1>
       </div>
       <button
         class="btn secondary compact"
@@ -201,7 +208,7 @@ const readAll = async () => {
       </div>
       <div class="mobile-filters mobile-only">
         <label>Search
-          <input v-model="filters.alert" type="search" placeholder="Alert text" />
+          <input v-model="filters.alert" type="search" placeholder="Notification text" />
         </label>
         <label>Status
           <select v-model="filters.read">
@@ -218,7 +225,7 @@ const readAll = async () => {
               <th>When</th>
               <th>Type</th>
               <th>Platform</th>
-              <th>Alert</th>
+              <th>Notification</th>
               <th>Email</th>
               <th>Status</th>
             </tr>
@@ -267,8 +274,8 @@ const readAll = async () => {
               <td>
                 <strong>{{ alert.title }}</strong>
                 <div class="muted">{{ alert.body }}</div>
-                <router-link v-if="alert.url && listingHref(alert.url)" :to="alert.url">Open listing</router-link>
-                <a v-else-if="alert.url" :href="alert.url" target="_blank" rel="noopener noreferrer">Open listing</a>
+                <router-link v-if="alert.url && listingHref(alert.url)" :to="alert.url">{{ linkLabel(alert) }}</router-link>
+                <a v-else-if="alert.url" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
               </td>
               <td>
                 <input
@@ -287,10 +294,10 @@ const readAll = async () => {
             <tr v-if="!visible.length">
               <td colspan="6" class="muted">
                 {{ loading
-                  ? "Loading alerts…"
+                  ? "Loading notifications…"
                   : items.length
-                    ? "No alerts match those filters."
-                    : "No alerts yet." }}
+                    ? "No notifications match those filters."
+                    : "No notifications yet." }}
               </td>
             </tr>
           </tbody>
@@ -306,14 +313,14 @@ const readAll = async () => {
           <h3>{{ alert.title }}</h3>
           <p v-if="alert.body" class="muted" style="margin:0">{{ alert.body }}</p>
           <div class="list-card-actions">
-            <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact" :to="alert.url">Open listing</router-link>
-            <a v-else-if="alert.url" class="btn secondary compact" :href="alert.url" target="_blank" rel="noopener noreferrer">Open listing</a>
+            <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact" :to="alert.url">{{ linkLabel(alert) }}</router-link>
+            <a v-else-if="alert.url" class="btn secondary compact" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
             <button v-if="!alert.read" class="btn secondary compact" type="button" @click="read(alert.id)">Mark read</button>
             <span v-else class="muted">Read</span>
           </div>
         </article>
         <p v-if="!visible.length" class="muted">
-          {{ loading ? "Loading alerts…" : items.length ? "No alerts match those filters." : "No alerts yet." }}
+          {{ loading ? "Loading notifications…" : items.length ? "No notifications match those filters." : "No notifications yet." }}
         </p>
       </div>
       <div v-if="totalPages > 1" class="pager">

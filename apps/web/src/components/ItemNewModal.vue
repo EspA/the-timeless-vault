@@ -7,6 +7,7 @@ import EbayStoreCategoryField from "./EbayStoreCategoryField.vue";
 import ScanProgressModal from "./ScanProgressModal.vue";
 import ChannelLogo from "./ChannelLogo.vue";
 import StockStatusButtons from "./StockStatusButtons.vue";
+import PhotoCapture from "./PhotoCapture.vue";
 import { confirmStockStatusChange } from "../confirm";
 
 const emit = defineEmits<{
@@ -39,13 +40,10 @@ const uploadPercent = computed(() => {
   return Math.round(((uploadIndex.value + 1) / uploadTotal.value) * 100);
 });
 
-const addPhotos = (event: Event) => {
-  const files = (event.target as HTMLInputElement).files;
-  if (!files) return;
-  for (const file of Array.from(files)) {
+const addPhotos = (files: File[]) => {
+  for (const file of files) {
     pendingPhotos.value.push({ file, url: URL.createObjectURL(file) });
   }
-  (event.target as HTMLInputElement).value = "";
 };
 
 const removePhoto = (index: number) => {
@@ -306,8 +304,8 @@ onUnmounted(() => {
 
           <div class="card grid">
             <h3>Photos</h3>
-            <p class="muted">Add listing photos now. The first one is used as the BrickLink photo.</p>
-            <input type="file" accept="image/*" multiple :disabled="saving" @change="addPhotos" />
+            <p class="muted">Take photos with this device or choose from the library. The first one is used as the BrickLink photo.</p>
+            <PhotoCapture :disabled="saving" @files="addPhotos" />
             <div v-if="pendingPhotos.length" class="photos" style="margin-top:0.75rem">
               <div v-for="(photo, index) in pendingPhotos" :key="photo.url" class="photo-tile">
                 <img

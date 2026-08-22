@@ -4,8 +4,8 @@ import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
-import com.thetimelessvault.opportunities.AlertEmail;
-import com.thetimelessvault.opportunities.AlertEmailRenderer;
+import com.thetimelessvault.opportunities.NotificationEmail;
+import com.thetimelessvault.opportunities.NotificationEmailRenderer;
 import com.thetimelessvault.opportunities.BuyingOpportunity;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
@@ -23,11 +23,11 @@ import java.util.Locale;
 import java.util.Map;
 
 @Service
-public class AlertMailer {
+public class NotificationMailer {
 
     public static final String TO_KEY = "alert.to_email";
 
-    private static final Logger log = LoggerFactory.getLogger(AlertMailer.class);
+    private static final Logger log = LoggerFactory.getLogger(NotificationMailer.class);
 
     private final AppSettingRepository settings;
     private final AppProperties properties;
@@ -37,7 +37,7 @@ public class AlertMailer {
     private final String mailUsername;
     private final String mailPassword;
 
-    public AlertMailer(
+    public NotificationMailer(
             AppSettingRepository settings,
             AppProperties properties,
             JavaMailSender mailSender,
@@ -75,6 +75,7 @@ public class AlertMailer {
     public Map<String, Object> status() {
         boolean catcher = usesCatcher();
         return Map.of(
+                "notificationTo", recipient(),
                 "alertTo", recipient(),
                 "mailFrom", properties.getMailFrom() == null ? "" : properties.getMailFrom(),
                 "mailHost", mailHost,
@@ -92,7 +93,7 @@ public class AlertMailer {
             send(subject, textBody, htmlBody);
             return true;
         } catch (Exception e) {
-            log.warn("Could not send alert email", e);
+            log.warn("Could not send notification email", e);
             return false;
         }
     }
@@ -104,14 +105,14 @@ public class AlertMailer {
     public void send(String subject, String textBody, String htmlBody) {
         String to = recipient();
         if (to.isBlank()) {
-            throw ApiException.badRequest("Set an alert email in Settings first.");
+            throw ApiException.badRequest("Set a notification email in Settings first.");
         }
         validateAddress(to);
         sendSmtp(to, subject, textBody, htmlBody);
     }
 
     public void sendTest() {
-        AlertEmail sample = new AlertEmail(
+        NotificationEmail sample = new NotificationEmail(
                 BuyingOpportunity.TYPE_BUYING_OPPORTUNITY,
                 "75017-1",
                 "Duel on Geonosis",
@@ -126,10 +127,10 @@ public class AlertMailer {
                 Instant.now()
         );
         send(
-                "Test alert from The Timeless Vault",
-                "If you received this, alert email is working.\n\nRecipient: " + recipient()
-                        + "\n\n" + AlertEmailRenderer.text(sample),
-                AlertEmailRenderer.html(sample, properties.getBaseUrl())
+                "Test notification from The Timeless Vault",
+                "If you received this, notification email is working.\n\nRecipient: " + recipient()
+                        + "\n\n" + NotificationEmailRenderer.text(sample),
+                NotificationEmailRenderer.html(sample, properties.getBaseUrl())
         );
     }
 

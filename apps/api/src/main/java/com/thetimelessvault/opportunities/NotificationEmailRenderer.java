@@ -8,7 +8,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-public final class AlertEmailRenderer {
+public final class NotificationEmailRenderer {
 
     private static final String INK = "#1b1410";
     private static final String PAPER = "#f4efe4";
@@ -25,10 +25,10 @@ public final class AlertEmailRenderer {
     private static final DateTimeFormatter SCAN_DATE = DateTimeFormatter.ofPattern("MMM d, yyyy, h:mm a z", Locale.US)
             .withZone(SCAN_ZONE);
 
-    private AlertEmailRenderer() {
+    private NotificationEmailRenderer() {
     }
 
-    public static String subject(AlertEmail email) {
+    public static String subject(NotificationEmail email) {
         String heading = heading(email);
         String platform = platformLabel(email.platform());
         StringBuilder subject = new StringBuilder("[The Timeless Vault] ").append(email.typeLabel());
@@ -41,7 +41,7 @@ public final class AlertEmailRenderer {
         return subject.toString();
     }
 
-    public static String text(AlertEmail email) {
+    public static String text(NotificationEmail email) {
         StringBuilder body = new StringBuilder();
         body.append(email.typeLabel()).append("\n\n");
         String heading = heading(email);
@@ -87,13 +87,13 @@ public final class AlertEmailRenderer {
         return body.toString().trim() + "\n";
     }
 
-    public static String html(AlertEmail email) {
+    public static String html(NotificationEmail email) {
         return html(email, null);
     }
 
-    public static String html(AlertEmail email, String assetBaseUrl) {
-        String badgeBg = email.buyingOpportunity() ? BADGE_OK : BADGE_PRICE;
-        String badgeInk = email.buyingOpportunity() ? BADGE_OK_INK : GOLD_INK;
+    public static String html(NotificationEmail email, String assetBaseUrl) {
+        String badgeBg = email.buyingOpportunity() || email.newSale() ? BADGE_OK : BADGE_PRICE;
+        String badgeInk = email.buyingOpportunity() || email.newSale() ? BADGE_OK_INK : GOLD_INK;
         String heading = heading(email);
         StringBuilder priceHtml = new StringBuilder();
         if (email.price() != null && !email.price().isBlank()) {
@@ -239,7 +239,7 @@ public final class AlertEmailRenderer {
         return "Feedback " + scoreText + " / " + pct;
     }
 
-    private static String platformBadge(AlertEmail email, String assetBaseUrl) {
+    private static String platformBadge(NotificationEmail email, String assetBaseUrl) {
         String src = platformLogoSrc(email.platform(), assetBaseUrl);
         if (src.isBlank()) {
             return "";
@@ -284,7 +284,7 @@ public final class AlertEmailRenderer {
         return new int[] {60, 24};
     }
 
-    private static String sellerHtml(AlertEmail email) {
+    private static String sellerHtml(NotificationEmail email) {
         if (!email.buyingOpportunity()) {
             return "";
         }
@@ -310,7 +310,7 @@ public final class AlertEmailRenderer {
         return html.toString();
     }
 
-    private static String heading(AlertEmail email) {
+    private static String heading(NotificationEmail email) {
         String setNumber = email.setNumber() == null ? "" : email.setNumber().trim();
         String setName = email.setName() == null ? "" : email.setName().trim();
         if (!setNumber.isBlank() && !setName.isBlank()) {

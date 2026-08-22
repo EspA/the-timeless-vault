@@ -9,6 +9,7 @@ import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.InventoryItemRepository;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
+import com.thetimelessvault.opportunities.BuyingOpportunityService;
 import com.thetimelessvault.publish.PublishService;
 import com.thetimelessvault.settings.ChannelFeeRates;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,7 @@ class SalesServiceTest {
     @Mock CatalogService catalogService;
     @Mock AppSettingRepository settings;
     @Mock PublishService publishService;
+    @Mock BuyingOpportunityService opportunities;
 
     SalesService service;
     CatalogItem catalog;
@@ -50,7 +52,7 @@ class SalesServiceTest {
     @BeforeEach
     void setUp() {
         service = new SalesService(
-                sales, ignores, items, listings, catalogService, settings, publishService, new ChannelFeeRates(settings));
+                sales, ignores, items, listings, catalogService, settings, publishService, opportunities, new ChannelFeeRates(settings));
         catalog = CatalogItem.create("75192-1");
         catalog.setName("Millennium Falcon");
         existing = InventoryItem.create(catalog, "TTV-75192-1-AAAA");
@@ -78,6 +80,7 @@ class SalesServiceTest {
         assertEquals(existing.getId(), captor.getValue().getInventoryItemId());
         verify(publishService).deactivatePublishedListingsAfterSale(existing.getId(), Platform.EBAY);
         verify(items).save(existing);
+        verify(opportunities).recordNewSale(any(), eq(existing));
     }
 
     @Test
@@ -99,6 +102,7 @@ class SalesServiceTest {
         assertEquals(0, existing.getQuantity());
         verify(publishService).deactivatePublishedListingsAfterSale(existing.getId(), Platform.EBAY);
         verify(items).save(existing);
+        verify(opportunities).recordNewSale(any(), eq(existing));
     }
 
     @Test
@@ -121,6 +125,7 @@ class SalesServiceTest {
         verify(sales).save(saleCaptor.capture());
         assertTrue(saleCaptor.getValue().isInventoryCreated());
         verify(publishService, never()).deactivatePublishedListingsAfterSale(any(), any());
+        verify(opportunities).recordNewSale(any(), any());
     }
 
     @Test
@@ -133,6 +138,7 @@ class SalesServiceTest {
         assertFalse(service.importSale(sale("TTV-75192-1-AAAA", null)));
         verify(items, never()).save(any());
         verify(publishService, never()).deactivatePublishedListingsAfterSale(any(), any());
+        verify(opportunities, never()).recordNewSale(any(), any());
     }
 
     @Test
@@ -163,6 +169,7 @@ class SalesServiceTest {
         assertEquals(0, existing.getQuantity());
         assertFalse(saved.isInventoryCreated());
         verify(publishService).deactivatePublishedListingsAfterSale(existing.getId(), Platform.BRICKLINK);
+        verify(opportunities).recordNewSale(any(), eq(existing));
     }
 
     @Test
@@ -225,6 +232,7 @@ class SalesServiceTest {
         assertFalse(service.importSale(sale("TTV-75192-1-AAAA", null)));
         verify(sales, never()).save(any());
         verify(items, never()).save(any());
+        verify(opportunities, never()).recordNewSale(any(), any());
     }
 
     @Test

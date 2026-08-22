@@ -1,6 +1,6 @@
 package com.thetimelessvault.opportunities;
 
-public record AlertEmail(
+public record NotificationEmail(
         String type,
         String setNumber,
         String setName,
@@ -18,6 +18,10 @@ public record AlertEmail(
         return BuyingOpportunity.TYPE_BUYING_OPPORTUNITY.equals(type);
     }
 
+    boolean newSale() {
+        return BuyingOpportunity.TYPE_NEW_SALE.equals(type);
+    }
+
     boolean priceGuard() {
         return BuyingOpportunity.TYPE_PRICE_HIGH.equals(type)
                 || BuyingOpportunity.TYPE_PRICE_LOW.equals(type);
@@ -25,7 +29,7 @@ public record AlertEmail(
 
     String typeLabel() {
         if (type == null || type.isBlank()) {
-            return "ALERT";
+            return "NOTIFICATION";
         }
         return type.replace('_', ' ');
     }

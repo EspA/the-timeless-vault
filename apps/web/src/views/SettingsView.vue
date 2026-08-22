@@ -58,7 +58,7 @@ const loadStoreCategories = async () => {
 onMounted(async () => {
   await loadHealth();
   buyerPostalCode.value = String(health.value?.ebayBuyerPostalCode || "");
-  alertTo.value = String(health.value?.alertTo || "");
+  alertTo.value = String(health.value?.notificationTo || health.value?.alertTo || "");
   highPercent.value = String(health.value?.priceGuardHighPercent ?? "15");
   lowPercent.value = String(health.value?.priceGuardLowPercent ?? "15");
   bricklinkFeePercent.value = String(health.value?.bricklinkFeePercent ?? "5.4");
@@ -144,28 +144,28 @@ const saveDefaultExcludeWords = async () => {
   }
 };
 
-const saveAlertEmail = async () => {
+const saveNotificationEmail = async () => {
   alertBusy.value = true;
   alertMessage.value = "";
   alertError.value = "";
   try {
-    const saved = await api.put<{ email: string }>("/api/settings/alert-email", { email: alertTo.value });
+    const saved = await api.put<{ email: string }>("/api/settings/notification-email", { email: alertTo.value });
     alertTo.value = saved.email;
-    alertMessage.value = "Alert email saved.";
+    alertMessage.value = "Notification email saved.";
     await loadHealth();
   } catch (e) {
-    alertError.value = e instanceof Error ? e.message : "Could not save alert email";
+    alertError.value = e instanceof Error ? e.message : "Could not save notification email";
   } finally {
     alertBusy.value = false;
   }
 };
 
-const sendTestAlertEmail = async () => {
+const sendTestNotificationEmail = async () => {
   alertTestBusy.value = true;
   alertMessage.value = "";
   alertError.value = "";
   try {
-    const sent = await api.post<{ email: string }>("/api/settings/alert-email/test");
+    const sent = await api.post<{ email: string }>("/api/settings/notification-email/test");
     alertMessage.value = `Test email sent to ${sent.email}.`;
   } catch (e) {
     alertError.value = e instanceof Error ? e.message : "Could not send test email";
@@ -333,19 +333,19 @@ const onThemeToggle = (event: Event) => {
     </div>
 
     <div class="card grid">
-      <h3>Alert email</h3>
-      <label>Send alerts to
+      <h3>Notification email</h3>
+      <label>Send notifications to
         <input v-model="alertTo" type="email" placeholder="you@gmail.com" />
       </label>
       <p class="muted">
-        Alerts are emailed here. Local SMTP is Mailpit at
+        Notifications are emailed here. Local SMTP is Mailpit at
         <a href="http://localhost:8025" target="_blank">localhost:8025</a>.
       </p>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
-        <button class="btn gold" type="button" :disabled="alertBusy" @click="saveAlertEmail">
-          {{ alertBusy ? "Saving…" : "Save alert email" }}
+        <button class="btn gold" type="button" :disabled="alertBusy" @click="saveNotificationEmail">
+          {{ alertBusy ? "Saving…" : "Save notification email" }}
         </button>
-        <button class="btn secondary" type="button" :disabled="alertTestBusy || !alertTo.trim()" @click="sendTestAlertEmail">
+        <button class="btn secondary" type="button" :disabled="alertTestBusy || !alertTo.trim()" @click="sendTestNotificationEmail">
           {{ alertTestBusy ? "Sending…" : "Send test email" }}
         </button>
       </div>

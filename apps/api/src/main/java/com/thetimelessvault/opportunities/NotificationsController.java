@@ -14,12 +14,12 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/alerts")
-public class BuyingOpportunitiesController {
+@RequestMapping({"/api/notifications", "/api/alerts"})
+public class NotificationsController {
 
     private final BuyingOpportunityService opportunities;
 
-    public BuyingOpportunitiesController(BuyingOpportunityService opportunities) {
+    public NotificationsController(BuyingOpportunityService opportunities) {
         this.opportunities = opportunities;
     }
 
@@ -49,7 +49,7 @@ public class BuyingOpportunitiesController {
         }
     }
 
-    public record AlertsPageView(
+    public record NotificationsPageView(
             List<BuyingOpportunityView> items,
             int page,
             int size,
@@ -59,12 +59,12 @@ public class BuyingOpportunitiesController {
     }
 
     @GetMapping
-    public AlertsPageView list(
+    public NotificationsPageView list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         var result = opportunities.list(page, size);
-        return new AlertsPageView(
+        return new NotificationsPageView(
                 result.getContent().stream().map(BuyingOpportunityView::from).toList(),
                 result.getNumber(),
                 result.getSize(),

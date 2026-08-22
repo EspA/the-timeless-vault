@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class MarketScanServiceAlertFingerprintTest {
+class MarketScanServiceNotificationFingerprintTest {
 
     @Mock SetWatchRepository setWatches;
     @Mock CatalogItemRepository catalogItems;

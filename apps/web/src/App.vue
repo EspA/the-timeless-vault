@@ -23,7 +23,7 @@ const toggleNav = () => {
 
 const refreshUnread = async () => {
   if (!authenticated.value) return;
-  const count = await api.get<{ count: number }>("/api/alerts/unread-count").catch(() => ({ count: 0 }));
+  const count = await api.get<{ count: number }>("/api/notifications/unread-count").catch(() => ({ count: 0 }));
   unread.value = count.count;
 };
 
@@ -72,8 +72,23 @@ onUnmounted(() => {
         <span></span>
         <span></span>
       </button>
-      <img class="brand-logo" src="/logos/ttl-logo.png" alt="" />
+      <router-link to="/" class="brand-home" aria-label="Home">
+        <img class="brand-logo" src="/logos/ttl-logo.png" alt="" />
+      </router-link>
       <p class="brand-mark">The Timeless Vault</p>
+      <router-link
+        to="/notifications"
+        class="mobile-notify"
+        :aria-label="unread ? `${unread} unread notifications` : 'Notifications'"
+      >
+        <svg class="mobile-notify-bell" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M12 2a6 6 0 0 0-6 6v3.1c0 .7-.2 1.3-.6 1.9L4 15.6c-.5.7 0 1.7.9 1.7h14.2c.9 0 1.4-1 .9-1.7l-1.4-2.6c-.4-.6-.6-1.2-.6-1.9V8a6 6 0 0 0-6-6Zm0 20a2.8 2.8 0 0 0 2.7-2H9.3A2.8 2.8 0 0 0 12 22Z"
+          />
+        </svg>
+        <span v-if="unread" class="mobile-notify-count">{{ unread }}</span>
+      </router-link>
     </header>
     <button
       v-if="navOpen"
@@ -84,7 +99,9 @@ onUnmounted(() => {
     />
     <aside id="app-sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <img class="brand-logo" src="/logos/ttl-logo.png" alt="The Timeless Vault" />
+        <router-link to="/" class="brand-home" aria-label="Home">
+          <img class="brand-logo" src="/logos/ttl-logo.png" alt="The Timeless Vault" />
+        </router-link>
         <div>
           <p class="brand-mark">The Timeless Vault</p>
           <p class="brand-sub">
@@ -93,6 +110,12 @@ onUnmounted(() => {
         </div>
       </div>
       <nav>
+        <div class="nav-group">
+          <router-link to="/notifications">
+            Notifications
+            <span v-if="unread" class="badge unread">{{ unread }}</span>
+          </router-link>
+        </div>
         <div class="nav-group">
           <p class="nav-label">Inventory</p>
           <router-link to="/inventory">Inventory</router-link>
@@ -108,10 +131,6 @@ onUnmounted(() => {
           <router-link to="/watches">Items watch</router-link>
           <router-link to="/market">Market Monitoring</router-link>
           <router-link to="/scan-logs">Scan logs</router-link>
-          <router-link to="/alerts">
-            Alerts
-            <span v-if="unread" class="badge">{{ unread }}</span>
-          </router-link>
         </div>
         <div class="nav-group">
           <p class="nav-label">Sales Channels</p>
