@@ -9,6 +9,8 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryItem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,6 +28,9 @@ import java.util.Set;
 
 @Component
 public class ShopifyClient {
+
+    private static final Logger log = LoggerFactory.getLogger(ShopifyClient.class);
+    private static final String STOREFRONT_URL = "https://thetimelessvault.com/products/";
 
     private final AppProperties.Shopify config;
     private final ObjectMapper mapper;
@@ -50,6 +55,89 @@ public class ShopifyClient {
 
     public String shopHost() {
         return config.shopHost();
+    }
+
+    public static String listingUrl(String handle) {
+        if (handle == null || handle.isBlank()) {
+            return null;
+        }
+        return STOREFRONT_URL + handle.trim();
+    }
+
+    public List<ShopifyActiveListing> listActiveProducts() {
+        try {
+            return listActiveProductsAdmin();
+        } catch (ApiException e) {
+            log.warn("Shopify admin product list failed, using the public catalog: {}", e.getMessage());
+            return listActiveProductsStorefront();
+        }
+    }
+
+    private List<ShopifyActiveListing> listActiveProductsAdmin() {
+        List<ShopifyActiveListing> listings = new ArrayList<>();
+        String cursor = null;
+        boolean hasNext = true;
+        while (hasNext) {
+            ObjectNode variables = mapper.createObjectNode();
+            if (cursor != null) {
+                variables.put("cursor", cursor);
+            } else {
+                variables.putNull("cursor");
+            }
+            JsonNode connection = graphql("""
+                    query Products($cursor: String) {
+                      products(first: 50, after: $cursor, query: "status:ACTIVE AND inventory_total:1") {
+                        pageInfo { hasNextPage endCursor }
+                        nodes {
+                          id
+                          title
+                          handle
+                          status
+                          onlineStoreUrl
+                          variants(first: 10) {
+                            nodes { sku price inventoryQuantity }
+                          }
+                        }
+                      }
+                    }
+                    """, variables).path("products");
+            listings.addAll(ShopifyProducts.parseAdmin(connection.path("nodes")));
+            hasNext = connection.path("pageInfo").path("hasNextPage").asBoolean(false);
+            cursor = connection.path("pageInfo").path("endCursor").asText(null);
+            if (cursor == null || cursor.isBlank()) {
+                hasNext = false;
+            }
+        }
+        return listings;
+    }
+
+    private List<ShopifyActiveListing> listActiveProductsStorefront() {
+        if (config.shopHost().isBlank()) {
+            throw ApiException.unavailable("Shopify is not configured");
+        }
+        List<ShopifyActiveListing> listings = new ArrayList<>();
+        for (int page = 1; page <= 20; page++) {
+            String url = "https://" + config.shopHost() + "/products.json?limit=250&page=" + page;
+            try {
+                String raw = restClient.get()
+                        .uri(url)
+                        .header("Accept", "application/json")
+                        .header("User-Agent", "TheTimelessVault/1.0")
+                        .retrieve()
+                        .body(String.class);
+                JsonNode root = mapper.readTree(raw == null ? "{}" : raw);
+                JsonNode products = root.path("products");
+                listings.addAll(ShopifyProducts.parseStorefront(products));
+                if (!products.isArray() || products.size() < 250) {
+                    break;
+                }
+            } catch (ApiException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not read Shopify products");
+            }
+        }
+        return listings;
     }
 
     public JsonNode listOrdersSince(java.time.Instant since, String cursor) {
@@ -353,6 +441,28 @@ public class ShopifyClient {
         setOnHandQuantity(inventoryItemId, Math.max(item.getQuantity(), 0));
         replaceMedia(productId, current, photoUrls, item.getTitle());
         return updated;
+    }
+
+    public JsonNode lookupProduct(String productId, String handle) {
+        if (productId != null && !productId.isBlank()) {
+            return getProduct(productId);
+        }
+        if (handle == null || handle.isBlank()) {
+            throw ApiException.badRequest("Shopify product id or handle is missing");
+        }
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("query", "handle:" + handle.trim());
+        JsonNode nodes = graphql("""
+                query ProductsByHandle($query: String!) {
+                  products(first: 1, query: $query) {
+                    nodes { id handle status onlineStoreUrl }
+                  }
+                }
+                """, variables).path("products").path("nodes");
+        if (!nodes.isArray() || nodes.isEmpty() || nodes.path(0).path("id").asText("").isBlank()) {
+            throw ApiException.notFound("Shopify product not found");
+        }
+        return nodes.path(0);
     }
 
     private JsonNode getProduct(String productId) {

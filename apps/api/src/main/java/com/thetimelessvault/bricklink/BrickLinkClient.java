@@ -88,6 +88,13 @@ public class BrickLinkClient {
         return request("POST", "/inventories", inventoryRequest(item).toString());
     }
 
+    public JsonNode getInventory(String inventoryId) {
+        if (inventoryId == null || inventoryId.isBlank()) {
+            throw ApiException.badRequest("BrickLink inventory id is missing");
+        }
+        return request("GET", "/inventories/" + inventoryId.trim(), null);
+    }
+
     public JsonNode updateInventory(String inventoryId, InventoryItem item) {
         if (inventoryId == null || inventoryId.isBlank()) {
             throw ApiException.badRequest("BrickLink inventory id is missing");

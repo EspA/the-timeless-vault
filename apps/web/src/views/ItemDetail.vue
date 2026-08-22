@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, ApiError, CONDITIONS, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
 import { askAlert, askConfirm, confirmStockStatusChange } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
@@ -20,6 +20,11 @@ const stockBusy = ref(false);
 const justSaved = ref(false);
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 const platforms = ref(["SHOPIFY", "BRICKLINK", "EBAY"]);
+const showLinkListing = ref(false);
+const linkPlatform = ref("BRICKLINK");
+const linkReference = ref("");
+const linkError = ref("");
+const linking = ref(false);
 const publishing = ref(false);
 const showPublishLog = ref(false);
 const showEbayCatalog = ref(false);
@@ -32,6 +37,8 @@ const jobStatus = ref<Record<string, string>>({});
 type MarketSnapshot = { min?: number; avg?: number; median?: number; max?: number; count?: number; scannedAt?: string };
 type MarketDashboard = { ebay?: MarketSnapshot | null; bricklink?: MarketSnapshot | null };
 const market = ref<MarketDashboard | null>(null);
+const refreshingCatalog = ref(false);
+const editorKey = ref(0);
 const uploading = ref(false);
 const uploadIndex = ref(0);
 const uploadTotal = ref(0);
@@ -476,6 +483,59 @@ const selectedUpdatable = computed(() =>
 
 const updateSelected = () => updateListings(selectedUpdatable.value);
 
+const linkHint = computed(() => {
+  if (linkPlatform.value === "EBAY") return "eBay listing URL or item id, for example https://www.ebay.com/itm/227311449843";
+  if (linkPlatform.value === "SHOPIFY") return "Shopify product URL, handle, or product id";
+  return "BrickLink listing URL or inventory id, for example https://www.bricklink.com/v2/inventory_detail.page?invID=525841562";
+});
+
+const openLinkListing = () => {
+  linkError.value = "";
+  linkReference.value = "";
+  const selected = platforms.value[0];
+  if (selected) linkPlatform.value = selected;
+  showLinkListing.value = true;
+};
+
+const submitLinkListing = async (replaceExisting = false) => {
+  if (!item.value || linking.value) return;
+  const reference = linkReference.value.trim();
+  if (!reference) {
+    linkError.value = "Paste a listing URL or id";
+    return;
+  }
+  linking.value = true;
+  linkError.value = "";
+  try {
+    await api.post<ChannelListing>(`/api/inventory/${item.value.id}/listings/link`, {
+      platform: linkPlatform.value,
+      reference,
+      replaceExisting,
+    });
+    showLinkListing.value = false;
+    await load();
+  } catch (e) {
+    const err = e as ApiError;
+    if (err.status === 409 && !replaceExisting) {
+      const confirmed = await askConfirm(err.message, {
+        title: "Replace listing link",
+        confirmLabel: "Link here",
+        cancelLabel: "Cancel",
+        variant: "gold",
+      });
+      if (confirmed) {
+        linking.value = false;
+        await submitLinkListing(true);
+        return;
+      }
+    } else {
+      linkError.value = err.message;
+    }
+  } finally {
+    linking.value = false;
+  }
+};
+
 const updateListing = (listing: ChannelListing) => {
   if (!canUpdateListing(listing)) return;
   return updateListings([listing]);
@@ -588,6 +648,46 @@ const deleteEbayListing = async (listing: ChannelListing) => {
   });
 };
 
+const applyCatalogRefresh = (catalog: Catalog) => {
+  if (!item.value) return;
+  const previousGenerated = brickLinkShortDescriptionFromHtml(item.value.description || "");
+  item.value.catalog = catalog;
+  if (item.value.condition === "NEW_SEALED") {
+    item.value.title = defaultListingTitle(catalog);
+  }
+  item.value.description = applyCatalogToDescription(item.value.description || "", catalog);
+  editorKey.value += 1;
+  const generatedShort = brickLinkShortDescriptionFromHtml(item.value.description || "");
+  if (!item.value.shortDescription || item.value.shortDescription === previousGenerated) {
+    item.value.shortDescription = generatedShort;
+  }
+  item.value.ebayStoreCategory = catalog.suggestedEbayStoreCategory;
+  const pkg = catalog.bricklinkPackage?.shipping;
+  if (pkg) {
+    item.value.packageLbs = pkg.lbs ?? 0;
+    item.value.packageOz = 0;
+    item.value.packageLength = pkg.length != null ? Number(pkg.length) : undefined;
+    item.value.packageWidth = pkg.width != null ? Number(pkg.width) : undefined;
+    item.value.packageHeight = pkg.height != null ? Number(pkg.height) : undefined;
+  }
+};
+
+const reloadItemInfo = async () => {
+  if (!item.value || refreshingCatalog.value) return;
+  refreshingCatalog.value = true;
+  error.value = "";
+  try {
+    const catalog = await api.get<Catalog>(
+      `/api/catalog/lookup?setNumber=${encodeURIComponent(item.value.catalog.setNumber)}&refresh=true`
+    );
+    applyCatalogRefresh(catalog);
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    refreshingCatalog.value = false;
+  }
+};
+
 const remove = async () => {
   if (!item.value) return;
   if (!(await askConfirm(`Delete "${item.value.title}" from inventory? This cannot be undone.`, { title: "Delete item" }))) {
@@ -620,12 +720,22 @@ const remove = async () => {
 
     <div class="grid save-fields" :class="{ flash: justSaved }">
     <div class="card grid">
+      <div class="form-modal-lookup">
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="refreshingCatalog || saving"
+          @click="reloadItemInfo"
+        >
+          {{ refreshingCatalog ? "Reloading…" : "Reload Item Info" }}
+        </button>
+      </div>
       <label>Title
         <input v-model="item.title" :maxlength="LISTING_TITLE_MAX" />
         <span class="muted">{{ (item.title || "").length }}/{{ LISTING_TITLE_MAX }}</span>
       </label>
       <label>Description
-        <RichTextEditor v-model="item.description" />
+        <RichTextEditor :key="editorKey" v-model="item.description" />
       </label>
       <label>Short description (BrickLink)
         <textarea class="short-description" v-model="item.shortDescription" maxlength="255" rows="2" />
@@ -688,6 +798,15 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Shipping Dimensions and Weight</h3>
+      <p v-if="item.catalog.bricklinkPackage?.original" class="muted">
+        BrickLink original:
+        {{ item.catalog.bricklinkPackage.original.lbs }} lb
+        {{ item.catalog.bricklinkPackage.original.oz }} oz
+        ·
+        {{ item.catalog.bricklinkPackage.original.length }} ×
+        {{ item.catalog.bricklinkPackage.original.width }} ×
+        {{ item.catalog.bricklinkPackage.original.height }} in
+      </p>
       <div class="grid five">
         <label>lbs <input v-model.number="item.packageLbs" type="number" /></label>
         <label>oz <input v-model.number="item.packageOz" type="number" /></label>
@@ -757,6 +876,9 @@ const remove = async () => {
           @click="updateSelected"
         >
           Update listings
+        </button>
+        <button class="btn secondary" type="button" :disabled="publishing || linking" @click="openLinkListing">
+          Link existing listing
         </button>
       </div>
       <table>
@@ -919,6 +1041,34 @@ const remove = async () => {
           publishes with this item’s title, photos, description, and specifics from the vault.
         </p>
       </template>
+    </div>
+  </div>
+  <div v-if="showLinkListing" class="modal-backdrop" @click.self="linking ? undefined : (showLinkListing = false)">
+    <div class="modal card grid">
+      <h3>Link existing listing</h3>
+      <p class="muted">
+        Attach a listing that already exists on the channel. This does not publish a new listing.
+      </p>
+      <label>
+        Channel
+        <select v-model="linkPlatform">
+          <option value="BRICKLINK">BrickLink</option>
+          <option value="EBAY">eBay</option>
+          <option value="SHOPIFY">Shopify</option>
+        </select>
+      </label>
+      <label>
+        Listing URL or id
+        <input v-model="linkReference" type="text" :placeholder="linkHint" @keydown.enter.prevent="submitLinkListing()" />
+      </label>
+      <p class="muted">{{ linkHint }}</p>
+      <p v-if="linkError" class="error">{{ linkError }}</p>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn gold" type="button" :disabled="linking" @click="submitLinkListing()">
+          {{ linking ? "Linking…" : "Link listing" }}
+        </button>
+        <button class="btn secondary" type="button" :disabled="linking" @click="showLinkListing = false">Cancel</button>
+      </div>
     </div>
   </div>
   <div v-if="showPublishLog" class="modal-backdrop" @click.self="publishing ? undefined : (showPublishLog = false)">

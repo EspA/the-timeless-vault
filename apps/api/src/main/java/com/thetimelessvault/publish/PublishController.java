@@ -1,5 +1,6 @@
 package com.thetimelessvault.publish;
 
+import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.ebay.EbayCatalogPreview;
 import com.thetimelessvault.common.Platform;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +24,11 @@ import java.util.UUID;
 public class PublishController {
 
     private final PublishService publishService;
+    private final ListingLinkService listingLinkService;
 
-    public PublishController(PublishService publishService) {
+    public PublishController(PublishService publishService, ListingLinkService listingLinkService) {
         this.publishService = publishService;
+        this.listingLinkService = listingLinkService;
     }
 
     public record PublishRequest(Set<Platform> platforms, Boolean bypassEbayCatalog) {
@@ -64,6 +67,9 @@ public class PublishController {
     }
 
     public record StatusRequest(String status) {
+    }
+
+    public record LinkRequest(Platform platform, String reference, Boolean replaceExisting) {
     }
 
     public record JobView(UUID id, Platform platform, String status, String error, Instant createdAt, Instant finishedAt) {
@@ -113,6 +119,19 @@ public class PublishController {
     @GetMapping("/listings")
     public List<ListingView> listings(@PathVariable UUID id) {
         return publishService.listingsFor(id).stream().map(ListingView::from).toList();
+    }
+
+    @PostMapping("/listings/link")
+    public ListingView linkExisting(@PathVariable UUID id, @RequestBody LinkRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("Listing details are required");
+        }
+        return ListingView.from(listingLinkService.link(
+                id,
+                request.platform(),
+                request.reference(),
+                Boolean.TRUE.equals(request.replaceExisting())
+        ));
     }
 
     @PutMapping("/listings/shopify/status")
