@@ -80,6 +80,10 @@ public class BrickLinkClient {
         return request("GET", "/orders/" + orderId + "/items", null);
     }
 
+    public List<BrickLinkActiveListing> listActiveSetInventories() {
+        return BrickLinkInventories.parse(request("GET", "/inventories?item_type=SET&status=Y", null));
+    }
+
     public JsonNode createInventory(InventoryItem item) {
         return request("POST", "/inventories", inventoryRequest(item).toString());
     }

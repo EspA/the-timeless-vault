@@ -32,6 +32,19 @@ public enum ItemCondition {
         return !name().startsWith("USED");
     }
 
+    public static ItemCondition fromBrickLink(String newOrUsed, String completeness) {
+        boolean used = newOrUsed != null && newOrUsed.trim().equalsIgnoreCase("U");
+        String complete = completeness == null ? "" : completeness.trim().toUpperCase();
+        if (used) {
+            return "B".equals(complete) ? USED_INCOMPLETE : USED_COMPLETE;
+        }
+        return switch (complete) {
+            case "B" -> NEW_INCOMPLETE;
+            case "C" -> NEW_COMPLETE;
+            default -> NEW_SEALED;
+        };
+    }
+
     public static ItemCondition fromEbay(String conditionId, String displayName) {
         String id = conditionId == null ? "" : conditionId.trim();
         String name = displayName == null ? "" : displayName.toLowerCase();

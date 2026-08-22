@@ -1,5 +1,6 @@
 package com.thetimelessvault.market;
 
+import com.thetimelessvault.bricklink.BrickLinkListingImportService;
 import com.thetimelessvault.ebay.EbayListingImportService;
 import com.thetimelessvault.sales.SalesSyncService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,15 +17,18 @@ public class InternalJobController {
     private final MarketScanService marketScanService;
     private final SalesSyncService salesSyncService;
     private final EbayListingImportService ebayListingImport;
+    private final BrickLinkListingImportService brickLinkListingImport;
 
     public InternalJobController(
             MarketScanService marketScanService,
             SalesSyncService salesSyncService,
-            EbayListingImportService ebayListingImport
+            EbayListingImportService ebayListingImport,
+            BrickLinkListingImportService brickLinkListingImport
     ) {
         this.marketScanService = marketScanService;
         this.salesSyncService = salesSyncService;
         this.ebayListingImport = ebayListingImport;
+        this.brickLinkListingImport = brickLinkListingImport;
     }
 
     @PostMapping("/market-scan")
@@ -43,5 +47,12 @@ public class InternalJobController {
             @RequestParam(defaultValue = "true") boolean dryRun
     ) {
         return ebayListingImport.run(dryRun);
+    }
+
+    @PostMapping("/bricklink-listing-import")
+    public BrickLinkListingImportService.Report brickLinkListingImport(
+            @RequestParam(defaultValue = "true") boolean dryRun
+    ) {
+        return brickLinkListingImport.run(dryRun);
     }
 }

@@ -43,7 +43,7 @@ public class BrickLinkPublisher implements ChannelPublisher {
         return PublishResult.bricklink(listing.getExternalId(), liveUrl, liveUrl, status);
     }
 
-    static String listingUrl(String inventoryId) {
+    public static String listingUrl(String inventoryId) {
         if (inventoryId == null || inventoryId.isBlank()) {
             return null;
         }

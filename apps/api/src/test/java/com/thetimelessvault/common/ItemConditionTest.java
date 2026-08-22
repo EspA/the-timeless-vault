@@ -16,6 +16,16 @@ class ItemConditionTest {
     }
 
     @Test
+    void mapsFromBrickLinkCodes() {
+        assertEquals(ItemCondition.NEW_SEALED, ItemCondition.fromBrickLink("N", "S"));
+        assertEquals(ItemCondition.NEW_COMPLETE, ItemCondition.fromBrickLink("N", "C"));
+        assertEquals(ItemCondition.NEW_INCOMPLETE, ItemCondition.fromBrickLink("N", "B"));
+        assertEquals(ItemCondition.USED_COMPLETE, ItemCondition.fromBrickLink("U", "C"));
+        assertEquals(ItemCondition.USED_INCOMPLETE, ItemCondition.fromBrickLink("U", "B"));
+        assertEquals(ItemCondition.NEW_SEALED, ItemCondition.fromBrickLink("N", null));
+    }
+
+    @Test
     void mapsEbayConditions() {
         assertEquals("NEW", ItemCondition.NEW_SEALED.ebayCondition());
         assertEquals("NEW_OTHER", ItemCondition.NEW_OTHER.ebayCondition());
