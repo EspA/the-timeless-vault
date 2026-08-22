@@ -5,6 +5,7 @@ import com.thetimelessvault.common.ItemCondition;
 import com.thetimelessvault.common.ItemType;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.common.StockStatus;
+import com.thetimelessvault.publish.ChannelListing;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,10 +14,13 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -32,6 +36,9 @@ public class InventoryItem {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "catalog_item_id")
     private CatalogItem catalogItem;
+
+    @OneToMany(mappedBy = "inventoryItem", fetch = FetchType.LAZY)
+    private List<ChannelListing> channelListings = new ArrayList<>();
 
     @Column(nullable = false)
     private String title;

@@ -80,6 +80,36 @@ public class EbayClient {
         return config.configured() && tokens != null && tokens.hasRefreshToken();
     }
 
+    public List<EbayActiveListing> listActiveSelling() {
+        List<EbayActiveListing> listings = new ArrayList<>();
+        int page = 1;
+        int totalPages = 1;
+        while (page <= totalPages && page <= 50) {
+            EbayActiveListings.Page parsed = EbayActiveListings.parse(getMyEbaySelling(page));
+            listings.addAll(parsed.listings());
+            totalPages = parsed.totalPages();
+            page += 1;
+        }
+        return listings;
+    }
+
+    private String getMyEbaySelling(int page) {
+        String xml = """
+                <?xml version="1.0" encoding="utf-8"?>
+                <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+                  <ErrorLanguage>en_US</ErrorLanguage>
+                  <ActiveList>
+                    <Include>true</Include>
+                    <Pagination>
+                      <EntriesPerPage>200</EntriesPerPage>
+                      <PageNumber>%d</PageNumber>
+                    </Pagination>
+                  </ActiveList>
+                </GetMyeBaySellingRequest>
+                """.formatted(page);
+        return trading("GetMyeBaySelling", xml);
+    }
+
     public JsonNode getFulfillmentOrders(Instant since) {
         ObjectNode combined = mapper.createObjectNode();
         ArrayNode orders = combined.putArray("orders");
@@ -833,6 +863,29 @@ public class EbayClient {
                     + ebayError(e.getResponseBodyAsString(), e.getStatusText()));
         } catch (Exception e) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay image upload failed");
+        }
+    }
+
+    private String trading(String callName, String xml) {
+        try {
+            String raw = restClient.post()
+                    .uri(tradingHost())
+                    .header("X-EBAY-API-CALL-NAME", callName)
+                    .header("X-EBAY-API-SITEID", "0")
+                    .header("X-EBAY-API-COMPATIBILITY-LEVEL", "1399")
+                    .header("X-EBAY-API-IAF-TOKEN", tokens.userAccessToken())
+                    .contentType(MediaType.APPLICATION_XML)
+                    .body(xml)
+                    .retrieve()
+                    .body(String.class);
+            return raw == null ? "" : raw;
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay " + callName + " failed: "
+                    + ebayError(e.getResponseBodyAsString(), e.getStatusText()));
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay " + callName + " failed");
         }
     }
 

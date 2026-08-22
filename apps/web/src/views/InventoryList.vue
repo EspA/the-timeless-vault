@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { api, CONDITIONS, quantityForStockStatus, STOCK_STATUSES, visibilityStatusLabel, type InventoryItem } from "../api";
+import { api, CONDITIONS, quantityForStockStatus, STOCK_STATUSES, visibilityStatusLabel, type InventoryItem, type InventoryPage } from "../api";
 import { askConfirm, confirmStockStatusChange } from "../confirm";
 import ItemNewModal from "../components/ItemNewModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
@@ -12,7 +12,13 @@ const adding = ref(false);
 type Column = "sku" | "set" | "title" | "created" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
+const PAGE_SIZE = 10;
+
 const items = ref<InventoryItem[]>([]);
+const page = ref(0);
+const total = ref(0);
+const totalPages = ref(1);
+const loading = ref(false);
 const error = ref("");
 const stockBusyId = ref("");
 const search = ref("");
@@ -41,39 +47,6 @@ const statusOptions = [
   { value: "none", label: "None" },
 ];
 
-const valueFor = (item: InventoryItem, key: Column): string | number | null => {
-  switch (key) {
-    case "sku":
-      return item.sku;
-    case "set":
-      return item.catalog.setNumber;
-    case "title":
-      return item.title;
-    case "created":
-      return item.createdAt ? Date.parse(item.createdAt) : null;
-    case "ebayPrice":
-      return item.ebayPrice ?? item.price;
-    case "bricklinkPrice":
-      return item.bricklinkPrice ?? item.price;
-    case "shopifyPrice":
-      return item.shopifyPrice ?? item.price;
-    case "cost":
-      return item.cost ?? null;
-    case "stockStatus":
-      return item.stockStatus ?? "";
-    case "quantity":
-      return item.quantity;
-    case "condition":
-      return item.condition;
-    case "shopify":
-      return item.shopifyStatus ?? "";
-    case "bricklink":
-      return item.bricklinkStatus ?? "";
-    case "ebay":
-      return item.ebayStatus ?? "";
-  }
-};
-
 const formatCreated = (value?: string) => {
   if (!value) return "—";
   const date = new Date(value);
@@ -85,69 +58,36 @@ const formatCreated = (value?: string) => {
   });
 };
 
-const contains = (value: string | number | null, needle: string) => {
-  if (!needle.trim()) return true;
-  const haystack = value == null ? "" : String(value);
-  return haystack.toLowerCase().includes(needle.trim().toLowerCase());
-};
+const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
-const matchesStatus = (status: string | undefined, filter: string) => {
-  if (!filter) return true;
-  if (filter === "none") return !status;
-  return status === filter;
-};
-
-const filtered = computed(() =>
-  items.value.filter((item) =>
-    contains(item.sku, filters.value.sku)
-    && contains(item.catalog.setNumber, filters.value.set)
-    && contains(item.title, filters.value.title)
-    && contains(formatCreated(item.createdAt), filters.value.created)
-    && contains(item.ebayPrice ?? item.price, filters.value.ebayPrice)
-    && contains(item.bricklinkPrice ?? item.price, filters.value.bricklinkPrice)
-    && contains(item.shopifyPrice ?? item.price, filters.value.shopifyPrice)
-    && contains(item.cost ?? "", filters.value.cost)
-    && (!filters.value.stockStatus || item.stockStatus === filters.value.stockStatus)
-    && contains(item.quantity, filters.value.quantity)
-    && (!filters.value.condition || item.condition === filters.value.condition)
-    && matchesStatus(item.shopifyStatus, filters.value.shopify)
-    && matchesStatus(item.bricklinkStatus, filters.value.bricklink)
-    && matchesStatus(item.ebayStatus, filters.value.ebay)
-    && (
-      !search.value.trim()
-      || contains(item.sku, search.value)
-      || contains(item.catalog.setNumber, search.value)
-      || contains(item.title, search.value)
-    )
-  )
-);
-
-const visible = computed(() => {
-  const rows = [...filtered.value];
-  const { key, dir } = sort.value;
-  const direction = dir === "asc" ? 1 : -1;
-  rows.sort((a, b) => {
-    const av = valueFor(a, key);
-    const bv = valueFor(b, key);
-    const aEmpty = av == null || av === "";
-    const bEmpty = bv == null || bv === "";
-    if (aEmpty && bEmpty) return 0;
-    if (aEmpty) return 1;
-    if (bEmpty) return -1;
-    if (typeof av === "number" && typeof bv === "number") {
-      return (av - bv) * direction;
-    }
-    return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" }) * direction;
-  });
-  return rows;
+const rangeLabel = computed(() => {
+  if (!total.value) return "0 items";
+  const start = page.value * PAGE_SIZE + 1;
+  const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
+  const pages = totalPages.value > 1 ? ` · page ${page.value + 1} of ${totalPages.value}` : "";
+  return `${start}–${end} of ${total.value}${pages}`;
 });
 
-const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
+const queryPath = (pageIndex: number) => {
+  const params = new URLSearchParams({
+    page: String(pageIndex),
+    size: String(PAGE_SIZE),
+    sort: sort.value.key,
+    dir: sort.value.dir,
+  });
+  if (search.value.trim()) params.set("q", search.value.trim());
+  const entries = Object.entries(filters.value) as Array<[keyof typeof filters.value, string]>;
+  for (const [key, value] of entries) {
+    if (value.trim()) params.set(key, value.trim());
+  }
+  return `/api/inventory?${params.toString()}`;
+};
 
 const sortBy = (key: Column) => {
   sort.value = sort.value.key === key
     ? { key, dir: sort.value.dir === "asc" ? "desc" : "asc" }
     : { key, dir: "asc" };
+  page.value = 0;
 };
 
 const sortMark = (key: Column) => {
@@ -172,11 +112,51 @@ const clearFilters = () => {
     bricklink: "",
     ebay: "",
   };
+  page.value = 0;
 };
 
-const load = async () => {
-  items.value = await api.get<InventoryItem[]>("/api/inventory");
+const previous = () => {
+  if (page.value <= 0 || loading.value) return;
+  void load(page.value - 1);
 };
+
+const next = () => {
+  if (page.value + 1 >= totalPages.value || loading.value) return;
+  void load(page.value + 1);
+};
+
+let requestId = 0;
+const load = async (pageIndex = page.value) => {
+  const current = ++requestId;
+  loading.value = true;
+  error.value = "";
+  try {
+    const result = await api.get<InventoryPage>(queryPath(pageIndex));
+    if (current !== requestId) return;
+    const pages = Math.max(1, result.totalPages);
+    const nextPage = Math.min(pageIndex, pages - 1);
+    items.value = result.items;
+    total.value = result.total;
+    totalPages.value = pages;
+    page.value = nextPage;
+    if (nextPage !== pageIndex && result.total > 0) {
+      await load(nextPage);
+    }
+  } catch (e) {
+    if (current !== requestId) return;
+    error.value = (e as Error).message;
+  } finally {
+    if (current === requestId) loading.value = false;
+  }
+};
+
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+watch([filters, search, sort], () => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    void load(0);
+  }, 250);
+}, { deep: true });
 
 const setStockStatus = async (item: InventoryItem, next: string) => {
   if (item.stockStatus === next || stockBusyId.value) return;
@@ -209,7 +189,7 @@ const remove = async (item: InventoryItem) => {
   error.value = "";
   try {
     await api.del(`/api/inventory/${item.id}`);
-    items.value = items.value.filter((row) => row.id !== item.id);
+    await load(page.value);
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -237,11 +217,17 @@ onMounted(async () => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
-      <div v-if="items.length" class="pager" style="margin:0 0 0.85rem">
-        <span class="muted">{{ visible.length }} of {{ items.length }} items</span>
-        <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
-          Clear filters
-        </button>
+      <div v-if="total > 0 || filterCount || search.trim()" class="pager" style="margin:0 0 0.85rem">
+        <span class="muted">{{ rangeLabel }}</span>
+        <div class="pager-actions">
+          <button v-if="filterCount || search.trim()" class="btn secondary compact" type="button" @click="clearFilters(); search = ''">
+            Clear filters
+          </button>
+          <template v-if="totalPages > 1">
+            <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+            <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
+          </template>
+        </div>
       </div>
       <div class="mobile-filters mobile-only">
         <label>Search
@@ -315,7 +301,7 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in visible" :key="item.id">
+            <tr v-for="item in items" :key="item.id">
               <td class="muted">{{ item.sku }}</td>
               <td>{{ item.catalog.setNumber }}</td>
               <td><router-link :to="`/inventory/${item.id}`">{{ item.title }}</router-link></td>
@@ -362,14 +348,14 @@ onMounted(async () => {
                 <button class="btn danger compact" type="button" @click="remove(item)">Delete</button>
               </td>
             </tr>
-            <tr v-if="!visible.length">
-              <td colspan="15" class="muted">{{ items.length ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
+            <tr v-if="!items.length">
+              <td colspan="15" class="muted">{{ loading ? "Loading…" : filterCount || search.trim() ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="list-cards mobile-only">
-        <article v-for="item in visible" :key="item.id" class="list-card">
+        <article v-for="item in items" :key="item.id" class="list-card">
           <h3><router-link :to="`/inventory/${item.id}`">{{ item.title }}</router-link></h3>
           <div class="list-card-meta muted">{{ item.catalog.setNumber }} · {{ item.sku }} · Qty {{ item.quantity }}</div>
           <StockStatusButtons
@@ -405,7 +391,14 @@ onMounted(async () => {
             <button class="btn danger compact" type="button" @click="remove(item)">Delete</button>
           </div>
         </article>
-        <p v-if="!visible.length" class="muted">{{ items.length ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</p>
+        <p v-if="!items.length" class="muted">{{ loading ? "Loading…" : filterCount || search.trim() ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</p>
+      </div>
+      <div v-if="totalPages > 1" class="pager">
+        <span class="muted">{{ rangeLabel }}</span>
+        <div class="pager-actions">
+          <button class="btn secondary compact" type="button" :disabled="page <= 0 || loading" @click="previous">Previous</button>
+          <button class="btn secondary compact" type="button" :disabled="page + 1 >= totalPages || loading" @click="next">Next</button>
+        </div>
       </div>
     </div>
     <ItemNewModal v-if="adding" @close="adding = false" @saved="onSaved" />

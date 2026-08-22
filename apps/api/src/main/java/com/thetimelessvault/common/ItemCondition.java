@@ -31,4 +31,17 @@ public enum ItemCondition {
     public boolean isNew() {
         return !name().startsWith("USED");
     }
+
+    public static ItemCondition fromEbay(String conditionId, String displayName) {
+        String id = conditionId == null ? "" : conditionId.trim();
+        String name = displayName == null ? "" : displayName.toLowerCase();
+        if ("1500".equals(id) || "1750".equals(id) || name.contains("new other") || name.contains("new with defects")) {
+            return NEW_OTHER;
+        }
+        if (id.startsWith("3") || id.startsWith("4") || id.startsWith("5") || id.startsWith("6") || id.startsWith("7")
+                || name.contains("used") || name.contains("pre-owned") || name.contains("for parts")) {
+            return USED_COMPLETE;
+        }
+        return NEW_SEALED;
+    }
 }

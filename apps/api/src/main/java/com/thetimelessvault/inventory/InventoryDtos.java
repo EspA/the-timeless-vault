@@ -231,4 +231,13 @@ public final class InventoryDtos {
             Instant updatedAt
     ) {
     }
+
+    public record InventoryPage(
+            List<InventoryView> items,
+            int page,
+            int size,
+            long total,
+            int totalPages
+    ) {
+    }
 }

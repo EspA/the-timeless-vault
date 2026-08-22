@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -44,8 +43,38 @@ public class InventoryController {
     }
 
     @GetMapping("/inventory")
-    public List<InventoryDtos.InventoryView> list() {
-        return inventoryService.list().stream().map(inventoryService::toView).toList();
+    public InventoryDtos.InventoryPage list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) String set,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String created,
+            @RequestParam(required = false) String ebayPrice,
+            @RequestParam(required = false) String bricklinkPrice,
+            @RequestParam(required = false) String shopifyPrice,
+            @RequestParam(required = false) String cost,
+            @RequestParam(required = false) String stockStatus,
+            @RequestParam(required = false) String quantity,
+            @RequestParam(required = false) String condition,
+            @RequestParam(required = false) String shopify,
+            @RequestParam(required = false) String bricklink,
+            @RequestParam(required = false) String ebay,
+            @RequestParam(defaultValue = "created") String sort,
+            @RequestParam(defaultValue = "desc") String dir
+    ) {
+        var result = inventoryService.list(page, size, new InventorySpecifications.Query(
+                q, sku, set, title, created, ebayPrice, bricklinkPrice, shopifyPrice, cost,
+                stockStatus, quantity, condition, shopify, bricklink, ebay, sort, dir
+        ));
+        return new InventoryDtos.InventoryPage(
+                result.getContent().stream().map(inventoryService::toView).toList(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                Math.max(1, result.getTotalPages())
+        );
     }
 
     @PostMapping("/inventory")

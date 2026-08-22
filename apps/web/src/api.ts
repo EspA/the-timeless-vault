@@ -131,6 +131,14 @@ export type InventoryItem = {
   updatedAt?: string;
 };
 
+export type InventoryPage = {
+  items: InventoryItem[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+};
+
 export type ChannelListing = {
   id: string;
   platform: string;

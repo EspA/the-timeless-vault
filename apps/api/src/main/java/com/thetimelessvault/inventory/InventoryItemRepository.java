@@ -1,6 +1,7 @@
 package com.thetimelessvault.inventory;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface InventoryItemRepository extends JpaRepository<InventoryItem, UUID> {
+public interface InventoryItemRepository extends JpaRepository<InventoryItem, UUID>, JpaSpecificationExecutor<InventoryItem> {
 
     @Query("select i from InventoryItem i join fetch i.catalogItem order by i.createdAt desc")
     List<InventoryItem> findAllWithCatalog();

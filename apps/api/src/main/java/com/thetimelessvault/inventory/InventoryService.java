@@ -16,6 +16,8 @@ import com.thetimelessvault.publish.ChannelListingRepository;
 import com.thetimelessvault.publish.PublishJobRepository;
 import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatchService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -178,6 +180,12 @@ public class InventoryService {
 
     public List<InventoryItem> list() {
         return items.findAllWithCatalog();
+    }
+
+    public Page<InventoryItem> list(int page, int size, InventorySpecifications.Query query) {
+        int pageSize = Math.min(10_000, Math.max(1, size));
+        int pageIndex = Math.max(0, page);
+        return items.findAll(InventorySpecifications.matching(query), PageRequest.of(pageIndex, pageSize));
     }
 
     @Transactional

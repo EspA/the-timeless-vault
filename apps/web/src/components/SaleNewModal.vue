@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { api, type InventoryItem, type Sale } from "../api";
+import { api, type InventoryItem, type InventoryPage, type Sale } from "../api";
 import ChannelLogo from "./ChannelLogo.vue";
 
 const emit = defineEmits<{
@@ -53,10 +53,8 @@ const loadStock = async () => {
   loading.value = true;
   error.value = "";
   try {
-    const items = await api.get<InventoryItem[]>("/api/inventory");
-    inStock.value = items
-      .filter((item) => item.stockStatus === "IN_STOCK")
-      .sort((a, b) => a.sku.localeCompare(b.sku, undefined, { sensitivity: "base" }));
+    const result = await api.get<InventoryPage>("/api/inventory?stockStatus=IN_STOCK&size=10000&sort=sku&dir=asc");
+    inStock.value = result.items;
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
