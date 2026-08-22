@@ -35,7 +35,7 @@ public class BrickEconomyClient {
                 .uri("/set/{setNumber}?currency=USD", setNumber)
                 .retrieve()
                 .onStatus(status -> status.value() == 429, (req, res) -> {
-                    throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "BrickEconomy daily quota exceeded (100/day)");
+                    throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "BrickEconomy daily quota exceeded (500/day)");
                 })
                 .onStatus(status -> status.value() == 400 || status.value() == 404, (req, res) -> {
                     throw ApiException.notFound("Unknown LEGO set number: " + setNumber);
@@ -66,7 +66,7 @@ public class BrickEconomyClient {
                 .uri(path, uriVars)
                 .retrieve()
                 .onStatus(status -> status.value() == 429, (req, res) -> {
-                    throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "BrickEconomy daily quota exceeded (100/day)");
+                    throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "BrickEconomy daily quota exceeded (500/day)");
                 })
                 .onStatus(status -> status.value() == 400 || status.value() == 404, (req, res) -> {
                     throw ApiException.notFound("BrickEconomy sales ledger was not found");

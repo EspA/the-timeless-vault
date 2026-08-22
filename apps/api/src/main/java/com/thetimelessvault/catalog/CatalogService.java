@@ -9,6 +9,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -27,9 +34,32 @@ public class CatalogService {
     @Transactional
     public CatalogItem lookup(String rawSetNumber, boolean forceRefresh) {
         String setNumber = normalizeSetNumber(rawSetNumber);
-        return catalogItems.findBySetNumberIgnoreCase(setNumber)
-                .filter(existing -> !forceRefresh)
-                .orElseGet(() -> refresh(setNumber));
+        List<String> candidates = setNumberCandidates(setNumber);
+        if (!forceRefresh) {
+            for (String candidate : candidates) {
+                Optional<CatalogItem> existing = catalogItems.findBySetNumberIgnoreCase(candidate);
+                if (existing.isPresent() && !isSparse(existing.get())) {
+                    return existing.get();
+                }
+            }
+        }
+        RuntimeException last = null;
+        for (String candidate : candidates) {
+            try {
+                CatalogItem refreshed = refresh(candidate);
+                if (!isSparse(refreshed)) {
+                    return refreshed;
+                }
+                log.warn("Catalog refresh for {} was missing year and piece count; trying another set number", candidate);
+            } catch (RuntimeException e) {
+                last = e;
+                log.warn("Catalog refresh failed for {}: {}", candidate, e.getMessage());
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
+        throw ApiException.notFound("Unknown LEGO set number: " + setNumber);
     }
 
     @Transactional
@@ -69,8 +99,12 @@ public class CatalogService {
         item.setTheme(text(data, "theme", null));
         item.setSubtheme(text(data, "subtheme", null));
         item.setYear(intVal(data, "year"));
-        item.setPiecesCount(intVal(data, "pieces_count"));
-        item.setMinifigsCount(intVal(data, "minifigs_count"));
+        item.setPiecesCount(firstInt(data, "pieces_count", "pieces"));
+        Integer minifigs = firstInt(data, "minifigs_count");
+        if (minifigs == null && data.has("minifigs") && data.get("minifigs").isArray()) {
+            minifigs = data.get("minifigs").size();
+        }
+        item.setMinifigsCount(minifigs);
         item.setUpc(text(data, "upc", null));
         item.setEan(text(data, "ean", null));
         item.setRetired(boolVal(data, "retired"));
@@ -96,6 +130,31 @@ public class CatalogService {
         return raw.trim();
     }
 
+    static List<String> setNumberCandidates(String setNumber) {
+        String trimmed = normalizeSetNumber(setNumber);
+        List<String> candidates = new ArrayList<>();
+        if (!trimmed.contains("-")) {
+            candidates.add(trimmed + "-1");
+            candidates.add(trimmed);
+            return candidates;
+        }
+        candidates.add(trimmed);
+        if (trimmed.matches(".*-1$")) {
+            candidates.add(trimmed.substring(0, trimmed.length() - 2));
+        }
+        return candidates;
+    }
+
+    static boolean isSparse(CatalogItem item) {
+        if (item == null) {
+            return true;
+        }
+        return item.getPiecesCount() == null
+                && item.getYear() == null
+                && item.getReleasedDate() == null
+                && item.getRetiredDate() == null;
+    }
+
     private static String text(JsonNode node, String field, String fallback) {
         JsonNode value = node.get(field);
         if (value == null || value.isNull()) {
@@ -104,12 +163,33 @@ public class CatalogService {
         return value.asText();
     }
 
+    private static Integer firstInt(JsonNode node, String... fields) {
+        for (String field : fields) {
+            Integer value = intVal(node, field);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private static Integer intVal(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        if (value == null || value.isNull()) {
+        if (value == null || value.isNull() || value.isArray()) {
             return null;
         }
-        return value.asInt();
+        if (value.isNumber()) {
+            return value.asInt();
+        }
+        String text = value.asText().replace(",", "").trim();
+        if (text.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static Boolean boolVal(JsonNode node, String field) {
@@ -125,7 +205,21 @@ public class CatalogService {
         if (text == null || text.isBlank()) {
             return null;
         }
-        return LocalDate.parse(text);
+        String trimmed = text.trim();
+        try {
+            if (trimmed.length() >= 10 && trimmed.charAt(4) == '-' && trimmed.charAt(7) == '-') {
+                return LocalDate.parse(trimmed.substring(0, 10));
+            }
+            if (trimmed.matches("\\d{4}-\\d{2}")) {
+                return LocalDate.parse(trimmed + "-01");
+            }
+            if (trimmed.matches("\\d{4}")) {
+                return LocalDate.of(Integer.parseInt(trimmed), 1, 1);
+            }
+            return YearMonth.parse(trimmed, DateTimeFormatter.ofPattern("MMMM uuuu", Locale.US)).atDay(1);
+        } catch (DateTimeParseException | NumberFormatException e) {
+            return null;
+        }
     }
 
     private static BigDecimal decimal(JsonNode node, String field) {

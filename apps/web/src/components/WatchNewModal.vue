@@ -49,6 +49,7 @@ const lookup = async (refresh = false) => {
     catalog.value = await api.get<Catalog>(
       `/api/catalog/lookup?setNumber=${encodeURIComponent(setNumber.value)}&refresh=${refresh}`
     );
+    setNumber.value = catalog.value.setNumber;
     ebaySearchQuery.value = defaultEbaySearchQuery(catalog.value);
   } catch (e) {
     error.value = (e as Error).message;

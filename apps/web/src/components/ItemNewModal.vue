@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { api, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, quantityForStockStatus, type Catalog, type InventoryItem } from "../api";
+import { api, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, quantityForStockStatus, type Catalog, type InventoryItem } from "../api";
 import RichTextEditor from "./RichTextEditor.vue";
 import ShopifyCollectionsField from "./ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "./EbayStoreCategoryField.vue";
@@ -115,8 +115,9 @@ const lookup = async (refresh = false) => {
   error.value = "";
   try {
     catalog.value = await api.get<Catalog>(`/api/catalog/lookup?setNumber=${encodeURIComponent(setNumber.value)}&refresh=${refresh}`);
+    setNumber.value = catalog.value.setNumber;
     form.title = defaultListingTitle(catalog.value);
-    form.description = applyCatalogToDescription(form.description, catalog.value);
+    form.description = defaultDescriptionHtml(catalog.value);
     editorKey.value += 1;
     form.ebayStoreCategory = catalog.value.suggestedEbayStoreCategory;
     const pkg = catalog.value.bricklinkPackage?.shipping;
@@ -304,7 +305,7 @@ onUnmounted(() => {
 
           <div class="card grid">
             <h3>Photos</h3>
-            <p class="muted">Take photos with this device or choose from the library. The first one is used as the BrickLink photo.</p>
+            <p class="muted">Take square photos with this device or choose from the library. The first one is used as the BrickLink photo.</p>
             <PhotoCapture :disabled="saving" @files="addPhotos" />
             <div v-if="pendingPhotos.length" class="photos" style="margin-top:0.75rem">
               <div v-for="(photo, index) in pendingPhotos" :key="photo.url" class="photo-tile">

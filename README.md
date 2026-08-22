@@ -48,7 +48,7 @@ Mailpit UI: [http://localhost:8025](http://localhost:8025).
 
 ## Daily workflow
 
-1. **New item** — enter a set number (`10236-1`). BrickEconomy data is cached (100 requests/day).
+1. **New item** — enter a set number (`10236-1`). BrickEconomy data is cached (500 requests/day).
 2. Edit title, description, price, condition, package, and photos.
 3. **Save**, then **Publish** to any combination of Shopify, BrickLink, and eBay.
 4. After BrickLink succeeds, use **Upload BrickLink photo** — their API cannot attach a custom image.
@@ -60,7 +60,7 @@ Price-guard emails fire when your live eBay or BrickLink price is outside ±15% 
 
 | Platform | Auth | Constraint |
 | --- | --- | --- |
-| BrickEconomy | `x-apikey` | 100 lookups/day, cached |
+| BrickEconomy | `x-apikey` | 500 lookups/day, cached |
 | Shopify | Client credentials (auto-refreshed Admin token) | GraphQL `productCreate` + variant price |
 | BrickLink | OAuth 1.0 | No photo upload; completeness `C`/`B`/`S` |
 | eBay | OAuth 2.0 user token | Inventory item → offer → publish. Needs business policies |

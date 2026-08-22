@@ -169,7 +169,13 @@ public final class InventoryDtos {
                     item.getCurrentValueUsed(),
                     item.getRetailPriceUs(),
                     below,
-                    ThemeMapper.suggestedTitle(item.getTheme(), item.getSetNumber(), item.getName(), ItemCondition.NEW_SEALED),
+                    ThemeMapper.suggestedTitle(
+                            item.getTheme(),
+                            item.getSubtheme(),
+                            item.getSetNumber(),
+                            item.getName(),
+                            ItemCondition.NEW_SEALED
+                    ),
                     ThemeMapper.ebayStoreCategory(item.getTheme()),
                     item.getFetchedAt(),
                     null

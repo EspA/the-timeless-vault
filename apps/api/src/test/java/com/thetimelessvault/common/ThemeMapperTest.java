@@ -20,6 +20,16 @@ class ThemeMapperTest {
                 "LEGO 10236 Star Wars Ewok Village (New Sealed In Box)",
                 ThemeMapper.suggestedTitle("Star Wars", "10236-1", "Ewok Village", ItemCondition.NEW_SEALED)
         );
+        assertEquals(
+                "LEGO 10237 The Lord of the Rings The Two Towers Tower of Orthanc (New Sealed In Box)".substring(0, ThemeMapper.TITLE_MAX_LENGTH),
+                ThemeMapper.suggestedTitle(
+                        "The Lord of the Rings",
+                        "The Two Towers",
+                        "10237-1",
+                        "Tower of Orthanc",
+                        ItemCondition.NEW_SEALED
+                )
+        );
         String limited = ThemeMapper.suggestedTitle(
                 "Star Wars",
                 "10236-1",

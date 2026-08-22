@@ -52,7 +52,8 @@ const startCamera = async () => {
     audio: false,
     video: {
       facingMode: { ideal: facingMode.value },
-      width: { ideal: 1920 },
+      aspectRatio: { ideal: 1 },
+      width: { ideal: 1440 },
       height: { ideal: 1440 },
     },
   });
@@ -88,16 +89,50 @@ const flipCamera = async () => {
   }
 };
 
+const squareCanvas = (source: CanvasImageSource, width: number, height: number) => {
+  const size = Math.min(width, height);
+  if (!size) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(
+    source,
+    Math.floor((width - size) / 2),
+    Math.floor((height - size) / 2),
+    size,
+    size,
+    0,
+    0,
+    size,
+    size
+  );
+  return canvas;
+};
+
+const canvasToJpeg = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+
+const cropFileToSquare = async (file: File) => {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  try {
+    const canvas = squareCanvas(bitmap, bitmap.width, bitmap.height);
+    if (!canvas) return file;
+    const blob = await canvasToJpeg(canvas);
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
+  }
+};
+
 const capture = async () => {
   const node = video.value;
   if (!node || !node.videoWidth) return;
-  const canvas = document.createElement("canvas");
-  canvas.width = node.videoWidth;
-  canvas.height = node.videoHeight;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.drawImage(node, 0, 0);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  const canvas = squareCanvas(node, node.videoWidth, node.videoHeight);
+  if (!canvas) return;
+  const blob = await canvasToJpeg(canvas);
   if (!blob) return;
   const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
   shots.value.push({ file, url: URL.createObjectURL(blob) });
@@ -114,13 +149,17 @@ const finishCamera = () => {
   }
 };
 
-const onInput = (event: Event) => {
+const onInput = async (event: Event, crop: boolean) => {
   const input = event.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
   input.value = "";
-  if (files.length) {
+  if (!files.length) return;
+  if (!crop) {
     emit("files", files);
+    return;
   }
+  const cropped = await Promise.all(files.map((file) => cropFileToSquare(file).catch(() => file)));
+  emit("files", cropped);
 };
 
 onUnmounted(() => {
@@ -142,7 +181,7 @@ onUnmounted(() => {
       accept="image/*"
       capture="environment"
       :disabled="disabled"
-      @change="onInput"
+      @change="onInput($event, true)"
     />
     <input
       ref="libraryInput"
@@ -151,13 +190,17 @@ onUnmounted(() => {
       accept="image/*"
       multiple
       :disabled="disabled"
-      @change="onInput"
+      @change="onInput($event, false)"
     />
   </div>
 
   <Teleport to="body">
     <div v-if="cameraOpen" class="camera-overlay" role="dialog" aria-modal="true" aria-label="Take photo">
-      <video ref="video" class="camera-video" autoplay playsinline muted></video>
+      <div class="camera-stage">
+        <div class="camera-viewfinder">
+          <video ref="video" class="camera-video" autoplay playsinline muted></video>
+        </div>
+      </div>
       <div class="camera-top">
         <button class="btn secondary compact" type="button" @click="closeCamera">Cancel</button>
         <button class="btn secondary compact" type="button" @click="flipCamera">Flip</button>

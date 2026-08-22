@@ -61,10 +61,24 @@ public final class ThemeMapper {
     public static final int TITLE_MAX_LENGTH = 80;
 
     public static String suggestedTitle(String theme, String setNumber, String name, ItemCondition condition) {
+        return suggestedTitle(theme, null, setNumber, name, condition);
+    }
+
+    public static String suggestedTitle(
+            String theme,
+            String subtheme,
+            String setNumber,
+            String name,
+            ItemCondition condition
+    ) {
         String number = displaySetNumber(setNumber);
         String themePart = theme == null || theme.isBlank() ? "" : " " + theme.trim();
+        String subthemePart = "";
+        if (subtheme != null && !subtheme.isBlank() && (theme == null || !subtheme.trim().equalsIgnoreCase(theme.trim()))) {
+            subthemePart = " " + subtheme.trim();
+        }
         String namePart = name == null || name.isBlank() ? "" : " " + name.trim();
-        String title = ("LEGO " + number + themePart + namePart).replaceAll(" +", " ").trim();
+        String title = ("LEGO " + number + themePart + subthemePart + namePart).replaceAll(" +", " ").trim();
         if (condition == ItemCondition.NEW_SEALED) {
             title = title + " (New Sealed In Box)";
         }

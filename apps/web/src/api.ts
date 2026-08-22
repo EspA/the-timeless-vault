@@ -259,11 +259,14 @@ export type PublishJob = {
 
 export const LISTING_TITLE_MAX = 80;
 
-export const defaultListingTitle = (catalog: Pick<Catalog, "setNumber" | "name" | "theme">) => {
+export const defaultListingTitle = (catalog: Pick<Catalog, "setNumber" | "name" | "theme" | "subtheme">) => {
   const number = catalog.setNumber.replace(/-1$/, "");
   const theme = catalog.theme?.trim() ? ` ${catalog.theme.trim()}` : "";
+  const subtheme = catalog.subtheme?.trim() && catalog.subtheme.trim() !== catalog.theme?.trim()
+    ? ` ${catalog.subtheme.trim()}`
+    : "";
   const name = catalog.name?.trim() ? ` ${catalog.name.trim()}` : "";
-  return `LEGO ${number}${theme}${name} (New Sealed In Box)`.replace(/ +/g, " ").trim().slice(0, LISTING_TITLE_MAX);
+  return `LEGO ${number}${theme}${subtheme}${name} (New Sealed In Box)`.replace(/ +/g, " ").trim().slice(0, LISTING_TITLE_MAX);
 };
 
 export const defaultEbayExcludeWords =
@@ -275,8 +278,14 @@ export const defaultEbaySearchQuery = (catalog: Pick<Catalog, "setNumber" | "nam
   return `LEGO ${number}${name}`.replace(/ +/g, " ").trim();
 };
 
-const yearFrom = (date?: string, fallback?: number | string) => {
-  if (date) {
+const yearFrom = (date?: string | number | number[], fallback?: number | string) => {
+  if (Array.isArray(date) && date[0]) {
+    return String(date[0]);
+  }
+  if (typeof date === "number" && date > 0) {
+    return String(date);
+  }
+  if (typeof date === "string" && date) {
     const year = Number(date.slice(0, 4));
     if (year) return String(year);
   }
@@ -299,11 +308,14 @@ const catalogFacts = (catalog?: Partial<Catalog> | null) => {
 };
 
 const replaceLabeledValue = (html: string, label: string, value: string) => {
-  const pattern = new RegExp(`<p>\\s*(<strong>${label}:\\s*</strong>)[\\s\\S]*?</p>`, "i");
+  const pattern = new RegExp(
+    `<p\\b[^>]*>[\\s\\S]*?<strong>[\\s\\S]*?${label}:[\\s\\S]*?</strong>[\\s\\S]*?</p>`,
+    "i"
+  );
   if (!pattern.test(html)) {
     return html;
   }
-  return html.replace(pattern, `<p>$1 <span>${value}</span></p>`);
+  return html.replace(pattern, `<p><strong>${label}:</strong> <span>${value}</span></p>`);
 };
 
 const removeMinifigsLine = (html: string) =>
