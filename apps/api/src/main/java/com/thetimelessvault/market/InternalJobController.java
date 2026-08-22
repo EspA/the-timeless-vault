@@ -2,6 +2,7 @@ package com.thetimelessvault.market;
 
 import com.thetimelessvault.bricklink.BrickLinkListingImportService;
 import com.thetimelessvault.ebay.EbayListingImportService;
+import com.thetimelessvault.inventory.DescriptionBackfillService;
 import com.thetimelessvault.sales.SalesSyncService;
 import com.thetimelessvault.shopify.ShopifyListingImportService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,19 +21,22 @@ public class InternalJobController {
     private final EbayListingImportService ebayListingImport;
     private final BrickLinkListingImportService brickLinkListingImport;
     private final ShopifyListingImportService shopifyListingImport;
+    private final DescriptionBackfillService descriptionBackfill;
 
     public InternalJobController(
             MarketScanService marketScanService,
             SalesSyncService salesSyncService,
             EbayListingImportService ebayListingImport,
             BrickLinkListingImportService brickLinkListingImport,
-            ShopifyListingImportService shopifyListingImport
+            ShopifyListingImportService shopifyListingImport,
+            DescriptionBackfillService descriptionBackfill
     ) {
         this.marketScanService = marketScanService;
         this.salesSyncService = salesSyncService;
         this.ebayListingImport = ebayListingImport;
         this.brickLinkListingImport = brickLinkListingImport;
         this.shopifyListingImport = shopifyListingImport;
+        this.descriptionBackfill = descriptionBackfill;
     }
 
     @PostMapping("/market-scan")
@@ -65,5 +69,12 @@ public class InternalJobController {
             @RequestParam(defaultValue = "true") boolean dryRun
     ) {
         return shopifyListingImport.run(dryRun);
+    }
+
+    @PostMapping("/description-backfill")
+    public DescriptionBackfillService.Report descriptionBackfill(
+            @RequestParam(defaultValue = "true") boolean dryRun
+    ) {
+        return descriptionBackfill.run(dryRun);
     }
 }

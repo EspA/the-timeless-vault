@@ -467,6 +467,57 @@ public class EbayClient {
         sell("POST", "/sell/inventory/v1/offer/" + offerId + "/withdraw", "{}");
     }
 
+    public void endListing(String listingId) {
+        if (listingId == null || listingId.isBlank()) {
+            throw ApiException.badRequest("Missing eBay listing id");
+        }
+        String xml = """
+                <?xml version="1.0" encoding="utf-8"?>
+                <EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+                  <ErrorLanguage>en_US</ErrorLanguage>
+                  <EndingReason>NotAvailable</EndingReason>
+                  <ItemID>%s</ItemID>
+                </EndItemRequest>
+                """.formatted(listingId.trim());
+        assertTradingAck(trading("EndItem", xml), "EndItem");
+    }
+
+    static void assertTradingAck(String xml, String callName) {
+        if (xml == null || xml.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay " + callName + " returned an empty response");
+        }
+        if (!xml.contains("<Ack>Failure</Ack>") && !xml.contains("<Ack>PartialFailure</Ack>")) {
+            return;
+        }
+        if (alreadyEnded(xml)) {
+            return;
+        }
+        Matcher message = Pattern.compile("<(?:LongMessage|ShortMessage)>([^<]+)</(?:LongMessage|ShortMessage)>").matcher(xml);
+        String detail = message.find() ? message.group(1) : xml;
+        throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay " + callName + " failed: " + detail);
+    }
+
+    static boolean alreadyEnded(String xml) {
+        Matcher codes = Pattern.compile("<ErrorCode>(\\d+)</ErrorCode>").matcher(xml);
+        while (codes.find()) {
+            String code = codes.group(1);
+            if ("1047".equals(code) || "21919188".equals(code)) {
+                return true;
+            }
+        }
+        String lower = xml.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("already been closed") || lower.contains("already ended")
+                || lower.contains("has already been ended");
+    }
+
+    public static String listingIdFromUrl(String liveUrl) {
+        if (liveUrl == null || liveUrl.isBlank()) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("/itm/(\\d+)").matcher(liveUrl);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
     public void deleteOffer(String offerId) {
         if (offerId == null || offerId.isBlank()) {
             return;

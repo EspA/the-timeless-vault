@@ -205,9 +205,21 @@ public class PublishService {
                     || listing.getExternalId().isBlank()) {
                 throw ApiException.badRequest("Publish to Shopify first");
             }
-            listing.setShopifyStatus(shopifyClient.updateProductStatus(listing.getExternalId(), normalized));
+            boolean inStock = normalized.equals("ACTIVE");
+            shopifyClient.setProductStoreAvailability(
+                    listing.getExternalId(),
+                    inStock,
+                    inStock ? item.getQuantity() : 0
+            );
+            listing.setShopifyStatus(normalized);
             ChannelListing saved = listings.save(listing);
-            listingLogs.record(item, Platform.SHOPIFY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+            listingLogs.record(
+                    item,
+                    Platform.SHOPIFY,
+                    action,
+                    ListingLogStatus.SUCCESS,
+                    inStock ? "Listing is now active" : "Listing is now sold out"
+            );
             return saved;
         } catch (RuntimeException e) {
             listingLogs.record(item, Platform.SHOPIFY, action, ListingLogStatus.FAILED, e.getMessage());
@@ -269,18 +281,16 @@ public class PublishService {
                 listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
                 return saved;
             }
-            String offerId = resolveEbayOfferId(listing, itemId);
             if (normalized.equals("ACTIVE")) {
                 ebayPublisher.syncInventory(item);
-                offerId = resolveEbayOfferId(listing, itemId);
+                String offerId = requireEbayOfferId(listing, itemId);
                 String listingId = ebayClient.publishOffer(offerId);
                 listing.setLiveUrl(EbayClient.listingUrl(listingId));
                 listing.setEbayStatus("ACTIVE");
+                listing.setExternalId(offerId);
             } else {
-                ebayClient.withdrawOffer(offerId);
-                listing.setEbayStatus("UNLISTED");
+                unlistEbay(listing, itemId);
             }
-            listing.setExternalId(offerId);
             ChannelListing saved = listings.save(listing);
             listingLogs.record(item, Platform.EBAY, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
             return saved;
@@ -457,18 +467,45 @@ public class PublishService {
         listings.delete(listing);
     }
 
-    private String resolveEbayOfferId(ChannelListing listing, UUID itemId) {
-        String externalId = listing.getExternalId();
-        String liveUrl = listing.getLiveUrl();
-        boolean looksLikeListingId = liveUrl != null && externalId != null && liveUrl.contains("/itm/" + externalId);
-        if (!looksLikeListingId) {
-            return externalId;
+    private void unlistEbay(ChannelListing listing, UUID itemId) {
+        String offerId = findEbayOfferId(listing, itemId);
+        if (offerId != null && !offerId.isBlank()) {
+            ebayClient.withdrawOffer(offerId);
+            listing.setExternalId(offerId);
+        } else {
+            String listingId = ebayListingId(listing);
+            if (listingId == null || listingId.isBlank()) {
+                throw ApiException.badRequest("Could not find the eBay offer for this item. Publish to eBay again.");
+            }
+            ebayClient.endListing(listingId);
         }
-        String sku = inventoryService.get(itemId).getSku();
-        String offerId = ebayClient.findOfferId(sku);
+        listing.setEbayStatus("UNLISTED");
+    }
+
+    private String requireEbayOfferId(ChannelListing listing, UUID itemId) {
+        String offerId = findEbayOfferId(listing, itemId);
         if (offerId == null || offerId.isBlank()) {
             throw ApiException.badRequest("Could not find the eBay offer for this item. Publish to eBay again.");
         }
         return offerId;
+    }
+
+    private String findEbayOfferId(ChannelListing listing, UUID itemId) {
+        if (!storesEbayListingId(listing)) {
+            return listing.getExternalId();
+        }
+        String sku = inventoryService.get(itemId).getSku();
+        String offerId = ebayClient.findOfferId(sku);
+        return offerId == null || offerId.isBlank() ? null : offerId;
+    }
+
+    private static boolean storesEbayListingId(ChannelListing listing) {
+        String listingId = ebayListingId(listing);
+        String externalId = listing.getExternalId();
+        return listingId != null && externalId != null && listingId.equals(externalId);
+    }
+
+    private static String ebayListingId(ChannelListing listing) {
+        return EbayClient.listingIdFromUrl(listing.getLiveUrl());
     }
 }

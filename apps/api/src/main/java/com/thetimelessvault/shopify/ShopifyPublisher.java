@@ -39,7 +39,8 @@ public class ShopifyPublisher implements ChannelPublisher {
 
     @Override
     public PublishResult update(InventoryItem item, ChannelListing listing, List<String> photoUrls) {
-        JsonNode product = client.updateProduct(listing.getExternalId(), item, photoUrls);
+        int quantity = "UNLISTED".equalsIgnoreCase(listing.getShopifyStatus()) ? 0 : item.getQuantity();
+        JsonNode product = client.updateProduct(listing.getExternalId(), item, photoUrls, quantity);
         String url = product.path("onlineStoreUrl").asText(null);
         if (url == null || url.isBlank()) {
             url = listing.getLiveUrl();

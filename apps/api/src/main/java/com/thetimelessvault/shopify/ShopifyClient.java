@@ -384,6 +384,10 @@ public class ShopifyClient {
     }
 
     public JsonNode updateProduct(String productId, InventoryItem item, List<String> photoUrls) {
+        return updateProduct(productId, item, photoUrls, item.getQuantity());
+    }
+
+    public JsonNode updateProduct(String productId, InventoryItem item, List<String> photoUrls, int onHandQuantity) {
         if (productId == null || productId.isBlank()) {
             throw ApiException.badRequest("Shopify product id is missing");
         }
@@ -438,7 +442,7 @@ public class ShopifyClient {
         if (inventoryItemId == null || inventoryItemId.isBlank()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify did not return an inventory item for the product");
         }
-        setOnHandQuantity(inventoryItemId, Math.max(item.getQuantity(), 0));
+        setOnHandQuantity(inventoryItemId, Math.max(onHandQuantity, 0));
         replaceMedia(productId, current, photoUrls, item.getTitle());
         return updated;
     }
@@ -463,6 +467,44 @@ public class ShopifyClient {
             throw ApiException.notFound("Shopify product not found");
         }
         return nodes.path(0);
+    }
+
+    public String productDescriptionHtml(String productId, String handle) {
+        JsonNode product;
+        if (productId != null && !productId.isBlank()) {
+            product = productDescriptionNode(ShopifyProducts.productGid(productId));
+        } else if (handle != null && !handle.isBlank()) {
+            ObjectNode variables = mapper.createObjectNode();
+            variables.put("query", "handle:" + handle.trim());
+            JsonNode nodes = graphql("""
+                    query ProductsByHandle($query: String!) {
+                      products(first: 1, query: $query) {
+                        nodes { id handle descriptionHtml }
+                      }
+                    }
+                    """, variables).path("products").path("nodes");
+            if (!nodes.isArray() || nodes.isEmpty() || nodes.path(0).path("id").asText("").isBlank()) {
+                throw ApiException.notFound("Shopify product not found");
+            }
+            product = nodes.path(0);
+        } else {
+            throw ApiException.badRequest("Shopify product id or handle is missing");
+        }
+        return com.thetimelessvault.common.DescriptionHtml.sanitize(product.path("descriptionHtml").asText(""));
+    }
+
+    private JsonNode productDescriptionNode(String productId) {
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("id", productId);
+        JsonNode product = graphql("""
+                query product($id: ID!) {
+                  product(id: $id) { id handle descriptionHtml }
+                }
+                """, variables).path("product");
+        if (product.isMissingNode() || product.path("id").asText("").isBlank()) {
+            throw ApiException.notFound("Shopify product not found");
+        }
+        return product;
     }
 
     private JsonNode getProduct(String productId) {
@@ -622,6 +664,18 @@ public class ShopifyClient {
                 && !id.contains("gid://shopify/ProductVariant/")
                 && !id.contains("gid://shopify/InventoryItem/")
                 && !id.contains("gid://shopify/Collection/");
+    }
+
+    public void setProductStoreAvailability(String productId, boolean inStock, int quantity) {
+        JsonNode product = getProduct(productId);
+        if (!"ACTIVE".equalsIgnoreCase(product.path("status").asText(""))) {
+            updateProductStatus(productId, "ACTIVE");
+        }
+        String inventoryItemId = firstInventoryItemId(product);
+        if (inventoryItemId == null || inventoryItemId.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify did not return an inventory item for the product");
+        }
+        setOnHandQuantity(inventoryItemId, inStock ? Math.max(quantity, 0) : 0);
     }
 
     public String updateProductStatus(String productId, String status) {

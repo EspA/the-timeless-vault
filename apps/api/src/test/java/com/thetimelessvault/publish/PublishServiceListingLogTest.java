@@ -70,10 +70,11 @@ class PublishServiceListingLogTest {
     @Test
     void activateSuccessIsLogged() {
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(listing));
-        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "ACTIVE")).thenReturn("ACTIVE");
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.setShopifyStatus(item.getId(), "ACTIVE");
+
+        verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", true, item.getQuantity());
 
         verify(listingLogs).record(
                 item,
@@ -87,17 +88,17 @@ class PublishServiceListingLogTest {
     @Test
     void deactivateSuccessIsLogged() {
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(listing));
-        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED")).thenReturn("UNLISTED");
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.setShopifyStatus(item.getId(), "UNLISTED");
 
+        verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
         verify(listingLogs).record(
                 item,
                 Platform.SHOPIFY,
                 ListingAction.DEACTIVATE,
                 ListingLogStatus.SUCCESS,
-                "Listing is now unlisted"
+                "Listing is now sold out"
         );
     }
 

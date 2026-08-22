@@ -77,14 +77,50 @@ class PublishServiceDeactivateListingsTest {
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED")).thenReturn("UNLISTED");
         when(brickLinkClient.updateStockRoom("12345", true)).thenReturn(true);
 
         service.deactivatePublishedListings(item.getId());
 
-        verify(shopifyClient).updateProductStatus("gid://shopify/Product/1", "UNLISTED");
+        verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
         verify(brickLinkClient).updateStockRoom("12345", true);
         verify(ebayClient).withdrawOffer("offer-1");
+        verify(ebayClient, never()).endListing(any());
+    }
+
+    @Test
+    void endsImportedEbayListingWhenThereIsNoInventoryOffer() {
+        ChannelListing ebay = published(Platform.EBAY, "365847291012", "https://www.ebay.com/itm/365847291012");
+        ebay.setEbayStatus("ACTIVE");
+
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(ebay));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ebayClient.findOfferId(item.getSku())).thenReturn(null);
+
+        service.deactivatePublishedListings(item.getId());
+
+        verify(ebayClient).endListing("365847291012");
+        verify(ebayClient, never()).withdrawOffer(any());
+        assertEquals("UNLISTED", ebay.getEbayStatus());
+    }
+
+    @Test
+    void withdrawsImportedEbayListingWhenAnInventoryOfferIsFound() {
+        ChannelListing ebay = published(Platform.EBAY, "365847291012", "https://www.ebay.com/itm/365847291012");
+        ebay.setEbayStatus("ACTIVE");
+
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(ebay));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ebayClient.findOfferId(item.getSku())).thenReturn("offer-imported");
+
+        service.deactivatePublishedListings(item.getId());
+
+        verify(ebayClient).withdrawOffer("offer-imported");
+        verify(ebayClient, never()).endListing(any());
+        assertEquals("offer-imported", ebay.getExternalId());
     }
 
     @Test
@@ -97,7 +133,7 @@ class PublishServiceDeactivateListingsTest {
 
         service.deactivatePublishedListings(item.getId());
 
-        verify(shopifyClient, never()).updateProductStatus(any(), any());
+        verify(shopifyClient, never()).setProductStoreAvailability(any(), any(Boolean.class), any(Integer.class));
         verify(ebayClient, never()).withdrawOffer(any());
     }
 
@@ -115,12 +151,11 @@ class PublishServiceDeactivateListingsTest {
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED")).thenReturn("UNLISTED");
         when(brickLinkClient.updateStockRoom("12345", true)).thenReturn(true);
 
         service.deactivatePublishedListingsAfterSale(item.getId(), Platform.EBAY);
 
-        verify(shopifyClient).updateProductStatus("gid://shopify/Product/1", "UNLISTED");
+        verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
         verify(brickLinkClient).updateStockRoom("12345", true);
         verify(ebayClient, never()).withdrawOffer(any());
         assertEquals("UNLISTED", ebay.getEbayStatus());
@@ -142,8 +177,8 @@ class PublishServiceDeactivateListingsTest {
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shopifyClient.updateProductStatus("gid://shopify/Product/1", "UNLISTED"))
-                .thenThrow(new RuntimeException("already sold"));
+        org.mockito.Mockito.doThrow(new RuntimeException("already sold"))
+                .when(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
 
         service.deactivatePublishedListingsAfterSale(item.getId(), Platform.EBAY);
 
