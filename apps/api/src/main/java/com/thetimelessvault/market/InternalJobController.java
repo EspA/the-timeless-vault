@@ -3,6 +3,7 @@ package com.thetimelessvault.market;
 import com.thetimelessvault.bricklink.BrickLinkListingImportService;
 import com.thetimelessvault.ebay.EbayListingImportService;
 import com.thetimelessvault.inventory.DescriptionBackfillService;
+import com.thetimelessvault.inventory.PriceBackfillService;
 import com.thetimelessvault.sales.SalesSyncService;
 import com.thetimelessvault.shopify.ShopifyListingImportService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +23,7 @@ public class InternalJobController {
     private final BrickLinkListingImportService brickLinkListingImport;
     private final ShopifyListingImportService shopifyListingImport;
     private final DescriptionBackfillService descriptionBackfill;
+    private final PriceBackfillService priceBackfill;
 
     public InternalJobController(
             MarketScanService marketScanService,
@@ -29,7 +31,8 @@ public class InternalJobController {
             EbayListingImportService ebayListingImport,
             BrickLinkListingImportService brickLinkListingImport,
             ShopifyListingImportService shopifyListingImport,
-            DescriptionBackfillService descriptionBackfill
+            DescriptionBackfillService descriptionBackfill,
+            PriceBackfillService priceBackfill
     ) {
         this.marketScanService = marketScanService;
         this.salesSyncService = salesSyncService;
@@ -37,6 +40,7 @@ public class InternalJobController {
         this.brickLinkListingImport = brickLinkListingImport;
         this.shopifyListingImport = shopifyListingImport;
         this.descriptionBackfill = descriptionBackfill;
+        this.priceBackfill = priceBackfill;
     }
 
     @PostMapping("/market-scan")
@@ -76,5 +80,12 @@ public class InternalJobController {
             @RequestParam(defaultValue = "true") boolean dryRun
     ) {
         return descriptionBackfill.run(dryRun);
+    }
+
+    @PostMapping("/price-backfill")
+    public PriceBackfillService.Report priceBackfill(
+            @RequestParam(defaultValue = "true") boolean dryRun
+    ) {
+        return priceBackfill.run(dryRun);
     }
 }

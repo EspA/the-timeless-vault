@@ -493,6 +493,47 @@ public class ShopifyClient {
         return com.thetimelessvault.common.DescriptionHtml.sanitize(product.path("descriptionHtml").asText(""));
     }
 
+    public java.math.BigDecimal productPrice(String productId, String handle) {
+        JsonNode product;
+        if (productId != null && !productId.isBlank()) {
+            ObjectNode variables = mapper.createObjectNode();
+            variables.put("id", ShopifyProducts.productGid(productId));
+            product = graphql("""
+                    query product($id: ID!) {
+                      product(id: $id) {
+                        id
+                        variants(first: 1) { nodes { price } }
+                      }
+                    }
+                    """, variables).path("product");
+        } else if (handle != null && !handle.isBlank()) {
+            ObjectNode variables = mapper.createObjectNode();
+            variables.put("query", "handle:" + handle.trim());
+            JsonNode nodes = graphql("""
+                    query ProductsByHandle($query: String!) {
+                      products(first: 1, query: $query) {
+                        nodes { id variants(first: 1) { nodes { price } } }
+                      }
+                    }
+                    """, variables).path("products").path("nodes");
+            product = !nodes.isArray() || nodes.isEmpty() ? mapper.missingNode() : nodes.path(0);
+        } else {
+            throw ApiException.badRequest("Shopify product id or handle is missing");
+        }
+        if (product.isMissingNode() || product.path("id").asText("").isBlank()) {
+            throw ApiException.notFound("Shopify product not found");
+        }
+        String raw = product.path("variants").path("nodes").path(0).path("price").asText("");
+        if (raw.isBlank()) {
+            return null;
+        }
+        try {
+            return new java.math.BigDecimal(raw);
+        } catch (NumberFormatException e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify returned an invalid price");
+        }
+    }
+
     private JsonNode productDescriptionNode(String productId) {
         ObjectNode variables = mapper.createObjectNode();
         variables.put("id", productId);
