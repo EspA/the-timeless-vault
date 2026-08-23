@@ -12,7 +12,8 @@ public record NotificationEmail(
         String platform,
         String sellerName,
         String sellerMeta,
-        java.time.Instant scannedAt
+        java.time.Instant scannedAt,
+        String detail
 ) {
     boolean buyingOpportunity() {
         return BuyingOpportunity.TYPE_BUYING_OPPORTUNITY.equals(type);
@@ -25,6 +26,10 @@ public record NotificationEmail(
     boolean priceGuard() {
         return BuyingOpportunity.TYPE_PRICE_HIGH.equals(type)
                 || BuyingOpportunity.TYPE_PRICE_LOW.equals(type);
+    }
+
+    boolean scanFailed() {
+        return BuyingOpportunity.TYPE_SCAN_FAILED.equals(type);
     }
 
     String typeLabel() {

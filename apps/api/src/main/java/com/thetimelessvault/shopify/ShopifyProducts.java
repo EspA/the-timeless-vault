@@ -1,7 +1,7 @@
 package com.thetimelessvault.shopify;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.thetimelessvault.sales.SetNumberParser;
+import com.thetimelessvault.orders.SetNumberParser;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

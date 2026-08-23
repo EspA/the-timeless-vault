@@ -10,7 +10,8 @@ import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
 import com.thetimelessvault.market.ScanTrigger;
 import com.thetimelessvault.publish.ChannelListing;
-import com.thetimelessvault.sales.Sale;
+import com.thetimelessvault.orders.Order;
+import com.thetimelessvault.orders.OrderRepository;
 import com.thetimelessvault.settings.NotificationMailer;
 import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatch;
@@ -21,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ import java.util.UUID;
 public class BuyingOpportunityService {
 
     private final BuyingOpportunityRepository opportunities;
+    private final OrderRepository orders;
     private final NotificationMailer notificationMailer;
     private final AppProperties properties;
     private final PhotoRepository photos;
@@ -35,12 +39,14 @@ public class BuyingOpportunityService {
 
     public BuyingOpportunityService(
             BuyingOpportunityRepository opportunities,
+            OrderRepository orders,
             NotificationMailer notificationMailer,
             AppProperties properties,
             PhotoRepository photos,
             ObjectStorage storage
     ) {
         this.opportunities = opportunities;
+        this.orders = orders;
         this.notificationMailer = notificationMailer;
         this.properties = properties;
         this.photos = photos;
@@ -66,6 +72,14 @@ public class BuyingOpportunityService {
         BuyingOpportunity opportunity = opportunities.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Buying opportunity not found"));
         opportunity.setReadAt(Instant.now());
+        return opportunities.save(opportunity);
+    }
+
+    @Transactional
+    public BuyingOpportunity markUnread(UUID id) {
+        BuyingOpportunity opportunity = opportunities.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Buying opportunity not found"));
+        opportunity.setReadAt(null);
         return opportunities.save(opportunity);
     }
 
@@ -124,7 +138,7 @@ public class BuyingOpportunityService {
                 + " · " + (listing.getTitle() == null ? "" : listing.getTitle()));
         opportunities.save(opportunity);
         Instant scannedAt = listing.getSnapshot() == null ? opportunity.getCreatedAt() : listing.getSnapshot().getScannedAt();
-        email(opportunity, listing.getPrice(), median, listing.getImageUrl(), null, scannedAt, listing);
+        email(opportunity, listing.getPrice(), median, listing.getImageUrl(), null, scannedAt, listing, null);
     }
 
     @Transactional
@@ -157,45 +171,86 @@ public class BuyingOpportunityService {
                 + " vs median " + NotificationEmailRenderer.money(market)
                 + " (thresholds +" + highPercent + "% / -" + lowPercent + "%). Adjust manually.");
         opportunities.save(opportunity);
-        email(opportunity, yours, market, inventoryPhoto(listing.getInventoryItem()), listing.getInventoryItem(), scannedAt, null);
+        email(opportunity, yours, market, inventoryPhoto(listing.getInventoryItem()), listing.getInventoryItem(), scannedAt, null, null);
     }
 
     @Transactional
-    public void recordNewSale(Sale sale, InventoryItem item) {
-        if (sale == null || item == null) {
+    public void recordNewSale(Order order, InventoryItem item) {
+        if (order == null || item == null) {
             return;
         }
-        String dedupe = "SALE:" + sale.getPlatform() + ":" + sale.getExternalOrderId() + ":" + sale.getExternalLineId();
+        String dedupe = "SALE:" + order.getPlatform() + ":" + order.getExternalOrderId() + ":" + order.getExternalLineId();
         if (opportunities.findByDedupeKey(dedupe).isPresent()) {
             return;
         }
         CatalogItem catalog = item.getCatalogItem();
-        String setNumber = catalog == null ? sale.getSetNumber() : catalog.getSetNumber();
-        String setName = catalog == null ? sale.getItemTitle() : catalog.getName();
+        String setNumber = catalog == null ? order.getSetNumber() : catalog.getSetNumber();
+        String setName = catalog == null ? order.getItemTitle() : catalog.getName();
         String heading = ((setNumber == null ? "" : setNumber) + " " + (setName == null ? "" : setName)).trim();
-        String channel = sale.getPlatform() == null
+        String channel = order.getPlatform() == null
                 ? "channel"
-                : NotificationEmailRenderer.platformLabel(sale.getPlatform().name());
+                : NotificationEmailRenderer.platformLabel(order.getPlatform().name());
         BuyingOpportunity opportunity = BuyingOpportunity.create(
                 BuyingOpportunity.TYPE_NEW_SALE,
                 "New " + channel + " sale" + (heading.isBlank() ? "" : " of " + heading),
                 dedupe
         );
         opportunity.setCatalogItem(catalog);
-        opportunity.setPlatform(sale.getPlatform());
-        String orderUrl = sale.getOrderUrl();
-        if (orderUrl != null && !orderUrl.isBlank()) {
-            opportunity.setUrl(orderUrl);
+        opportunity.setPlatform(order.getPlatform());
+        if (order.getId() != null) {
+            opportunity.setUrl("/orders/" + order.getId());
         } else if (item.getId() != null) {
             opportunity.setUrl("/inventory/" + item.getId());
         }
-        String qty = sale.getQuantity() <= 0 ? "1" : String.valueOf(sale.getQuantity());
-        opportunity.setBody(qty + " × " + NotificationEmailRenderer.money(sale.getUnitPrice())
-                + (sale.getSku() == null || sale.getSku().isBlank() ? "" : " · " + sale.getSku())
-                + (sale.getExternalOrderId() == null || sale.getExternalOrderId().isBlank()
-                ? "" : " · order " + sale.getExternalOrderId()));
+        String qty = order.getQuantity() <= 0 ? "1" : String.valueOf(order.getQuantity());
+        opportunity.setBody(qty + " × " + NotificationEmailRenderer.money(order.getUnitPrice())
+                + (order.getSku() == null || order.getSku().isBlank() ? "" : " · " + order.getSku())
+                + (order.getExternalOrderId() == null || order.getExternalOrderId().isBlank()
+                ? "" : " · order " + order.getExternalOrderId()));
         opportunities.save(opportunity);
-        email(opportunity, sale.getUnitPrice(), null, inventoryPhoto(item), item, sale.getSoldAt(), null);
+        email(opportunity, order.getUnitPrice(), null, inventoryPhoto(item), item, order.getSoldAt(), null, null);
+    }
+
+    @Transactional
+    public void recordScanFailure(CatalogItem catalog, Platform platform, String message, ScanTrigger trigger) {
+        if (trigger != ScanTrigger.AUTOMATIC) {
+            return;
+        }
+        String reason = message == null || message.isBlank() ? "Scan failed." : message.trim();
+        String day = LocalDate.now(ZoneId.of("America/New_York")).toString();
+        String catalogKey = catalog == null || catalog.getId() == null ? "JOB" : catalog.getId().toString();
+        String platformKey = platform == null ? "ALL" : platform.name();
+        String dedupe = "SCAN_FAIL:" + platformKey + ":" + catalogKey + ":" + day;
+        if (opportunities.findByDedupeKey(dedupe).isPresent()) {
+            return;
+        }
+        String channel = platform == null ? "market" : NotificationEmailRenderer.platformLabel(platform.name());
+        String heading = catalogHeading(catalog);
+        BuyingOpportunity opportunity = BuyingOpportunity.create(
+                BuyingOpportunity.TYPE_SCAN_FAILED,
+                heading.isBlank()
+                        ? "Automatic " + channel + " scan failed"
+                        : "Automatic " + channel + " scan failed for " + heading,
+                dedupe
+        );
+        opportunity.setCatalogItem(catalog);
+        opportunity.setPlatform(platform);
+        opportunity.setScanTrigger(ScanTrigger.AUTOMATIC);
+        opportunity.setBody(reason);
+        opportunity.setUrl(catalog == null || catalog.getId() == null
+                ? "/scan-logs"
+                : "/market/" + catalog.getId());
+        opportunities.save(opportunity);
+        email(opportunity, null, null, null, null, Instant.now(), null, reason);
+    }
+
+    static String catalogHeading(CatalogItem catalog) {
+        if (catalog == null) {
+            return "";
+        }
+        String setNumber = catalog.getSetNumber() == null ? "" : catalog.getSetNumber().trim();
+        String name = catalog.getName() == null ? "" : catalog.getName().trim();
+        return (setNumber + " " + name).trim();
     }
 
     static String listingUrl(ChannelListing listing) {
@@ -232,7 +287,8 @@ public class BuyingOpportunityService {
             String photoUrl,
             InventoryItem inventoryItem,
             Instant scannedAt,
-            MarketListing listing
+            MarketListing listing,
+            String detail
     ) {
         CatalogItem catalog = opportunity.getCatalogItem();
         String listingUrl = absoluteUrl(opportunity.getUrl());
@@ -252,7 +308,8 @@ public class BuyingOpportunityService {
                 opportunity.getPlatform() == null ? null : opportunity.getPlatform().name(),
                 listing == null ? null : listing.getSeller(),
                 sellerMeta(opportunity.getPlatform(), listing),
-                when
+                when,
+                detail
         );
         if (notificationMailer.sendQuietly(
                 NotificationEmailRenderer.subject(email),
@@ -294,6 +351,42 @@ public class BuyingOpportunityService {
             return null;
         }
         return storage.publicUrl(itemPhotos.getFirst().getStorageKey());
+    }
+
+    public String displayUrl(BuyingOpportunity opportunity) {
+        if (opportunity == null) {
+            return null;
+        }
+        if (BuyingOpportunity.TYPE_NEW_SALE.equals(opportunity.getType())) {
+            String path = orderAppPath(opportunity);
+            if (path != null) {
+                return path;
+            }
+        }
+        return opportunity.getUrl();
+    }
+
+    private String orderAppPath(BuyingOpportunity opportunity) {
+        String existing = opportunity.getUrl();
+        if (existing != null && existing.startsWith("/orders/")) {
+            return existing;
+        }
+        String key = opportunity.getDedupeKey();
+        if (key == null || !key.startsWith("SALE:")) {
+            return null;
+        }
+        String[] parts = key.split(":", 4);
+        if (parts.length != 4) {
+            return null;
+        }
+        try {
+            Platform platform = Platform.valueOf(parts[1]);
+            return orders.findByPlatformAndExternalOrderIdAndExternalLineId(platform, parts[2], parts[3])
+                    .map(order -> "/orders/" + order.getId())
+                    .orElse(null);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private String absoluteUrl(String url) {

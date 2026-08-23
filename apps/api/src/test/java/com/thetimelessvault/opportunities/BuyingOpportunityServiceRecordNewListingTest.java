@@ -8,8 +8,10 @@ import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
 import com.thetimelessvault.market.MarketSnapshot;
 import com.thetimelessvault.market.ScanTrigger;
-import com.thetimelessvault.sales.ChannelSale;
-import com.thetimelessvault.sales.Sale;
+import com.thetimelessvault.orders.ChannelOrder;
+import com.thetimelessvault.orders.Order;
+import com.thetimelessvault.orders.OrderRepository;
+import com.thetimelessvault.orders.OrderStatus;
 import com.thetimelessvault.settings.NotificationMailer;
 import com.thetimelessvault.storage.ObjectStorage;
 import com.thetimelessvault.watch.SetWatch;
@@ -36,6 +38,7 @@ import static org.mockito.Mockito.when;
 class BuyingOpportunityServiceRecordNewListingTest {
 
     @Mock BuyingOpportunityRepository opportunities;
+    @Mock OrderRepository orders;
     @Mock NotificationMailer notificationMailer;
     @Mock PhotoRepository photos;
     @Mock ObjectStorage storage;
@@ -51,6 +54,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
     void setUp() {
         service = new BuyingOpportunityService(
                 opportunities,
+                orders,
                 notificationMailer,
                 new AppProperties(),
                 photos,
@@ -158,7 +162,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
     @Test
     void recordNewSaleCreatesANewSaleNotification() {
         InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
-        Sale sale = Sale.create(item, new ChannelSale(
+        Order sale = Order.create(item, new ChannelOrder(
                 Platform.EBAY,
                 "12-345",
                 "li-1",
@@ -172,7 +176,10 @@ class BuyingOpportunityServiceRecordNewListingTest {
                 Instant.parse("2026-08-21T12:00:00Z"),
                 "https://www.ebay.com/sh/ord/details?orderid=12-345",
                 BigDecimal.ZERO,
-                BigDecimal.ZERO
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
         ), false);
         when(opportunities.findByDedupeKey("SALE:EBAY:12-345:li-1")).thenReturn(Optional.empty());
         when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -186,15 +193,15 @@ class BuyingOpportunityServiceRecordNewListingTest {
         assertEquals(BuyingOpportunity.TYPE_NEW_SALE, saved.getValue().getType());
         assertEquals("SALE:EBAY:12-345:li-1", saved.getValue().getDedupeKey());
         assertEquals("New eBay sale of 75017-1 Duel on Geonosis", saved.getValue().getTitle());
-        assertEquals("https://www.ebay.com/sh/ord/details?orderid=12-345", saved.getValue().getUrl());
+        assertEquals("/orders/" + sale.getId(), saved.getValue().getUrl());
         assertTrue(saved.getValue().getBody().contains("$315.00"));
         assertTrue(saved.getValue().getBody().contains("order 12-345"));
     }
 
     @Test
-    void recordNewSaleSkipsDuplicateOrderLines() {
+    void displayUrlRewritesExistingNewSaleToOrderPage() {
         InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
-        Sale sale = Sale.create(item, new ChannelSale(
+        Order sale = Order.create(item, new ChannelOrder(
                 Platform.EBAY,
                 "12-345",
                 "li-1",
@@ -208,12 +215,92 @@ class BuyingOpportunityServiceRecordNewListingTest {
                 Instant.parse("2026-08-21T12:00:00Z"),
                 "https://www.ebay.com/sh/ord/details?orderid=12-345",
                 BigDecimal.ZERO,
-                BigDecimal.ZERO
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
+        ), false);
+        BuyingOpportunity opportunity = BuyingOpportunity.create(
+                BuyingOpportunity.TYPE_NEW_SALE,
+                "New eBay sale",
+                "SALE:EBAY:12-345:li-1"
+        );
+        opportunity.setUrl("https://www.ebay.com/sh/ord/details?orderid=12-345");
+        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+                .thenReturn(Optional.of(sale));
+
+        assertEquals("/orders/" + sale.getId(), service.displayUrl(opportunity));
+    }
+
+    @Test
+    void recordNewSaleSkipsDuplicateOrderLines() {
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
+        Order sale = Order.create(item, new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-1",
+                item.getSku(),
+                null,
+                "LEGO 75017 Duel on Geonosis",
+                "75017-1",
+                1,
+                new BigDecimal("315.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
         ), false);
         when(opportunities.findByDedupeKey("SALE:EBAY:12-345:li-1"))
                 .thenReturn(Optional.of(BuyingOpportunity.create(BuyingOpportunity.TYPE_NEW_SALE, "already", "SALE:EBAY:12-345:li-1")));
 
         service.recordNewSale(sale, item);
+
+        verify(opportunities, never()).save(any());
+    }
+
+    @Test
+    void recordScanFailureCreatesNotificationAndEmail() {
+        when(opportunities.findByDedupeKey(org.mockito.ArgumentMatchers.startsWith("SCAN_FAIL:EBAY:")))
+                .thenReturn(Optional.empty());
+        when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(false);
+
+        service.recordScanFailure(catalog, Platform.EBAY, "eBay search failed.", ScanTrigger.AUTOMATIC);
+
+        ArgumentCaptor<BuyingOpportunity> saved = ArgumentCaptor.forClass(BuyingOpportunity.class);
+        verify(opportunities).save(saved.capture());
+        assertEquals(BuyingOpportunity.TYPE_SCAN_FAILED, saved.getValue().getType());
+        assertEquals(ScanTrigger.AUTOMATIC, saved.getValue().getScanTrigger());
+        assertEquals("eBay search failed.", saved.getValue().getBody());
+        assertEquals("/market/" + catalog.getId(), saved.getValue().getUrl());
+        assertTrue(saved.getValue().getTitle().contains("eBay"));
+        assertTrue(saved.getValue().getTitle().contains("75017-1"));
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
+        verify(notificationMailer).sendQuietly(subject.capture(), any(), html.capture());
+        assertTrue(subject.getValue().contains("SCAN FAILED"));
+        assertTrue(html.getValue().contains("eBay search failed."));
+    }
+
+    @Test
+    void recordScanFailureSkipsManualScans() {
+        service.recordScanFailure(catalog, Platform.EBAY, "eBay search failed.", ScanTrigger.MANUAL);
+
+        verify(opportunities, never()).save(any());
+        verify(notificationMailer, never()).sendQuietly(any(), any(), any());
+    }
+
+    @Test
+    void recordScanFailureSkipsDuplicateSameDay() {
+        when(opportunities.findByDedupeKey(org.mockito.ArgumentMatchers.startsWith("SCAN_FAIL:EBAY:")))
+                .thenReturn(Optional.of(BuyingOpportunity.create(
+                        BuyingOpportunity.TYPE_SCAN_FAILED, "already", "SCAN_FAIL:EBAY:x")));
+
+        service.recordScanFailure(catalog, Platform.EBAY, "eBay search failed.", ScanTrigger.AUTOMATIC);
 
         verify(opportunities, never()).save(any());
     }

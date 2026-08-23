@@ -1,18 +1,24 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { STOCK_STATUSES } from "../api";
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   modelValue?: string;
   disabled?: boolean;
   compact?: boolean;
+  options?: readonly { value: string; label: string; shortLabel?: string }[];
+  ariaLabel?: string;
 }>(), {
   disabled: false,
   compact: false,
+  ariaLabel: "Stock status",
 });
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
+
+const statuses = computed(() => props.options ?? STOCK_STATUSES);
 
 const select = (value: string, current?: string, disabled?: boolean) => {
   if (disabled || value === current) return;
@@ -21,9 +27,9 @@ const select = (value: string, current?: string, disabled?: boolean) => {
 </script>
 
 <template>
-  <div class="stock-status" :class="{ compact }" role="group" aria-label="Stock status">
+  <div class="stock-status" :class="{ compact }" role="group" :aria-label="ariaLabel">
     <button
-      v-for="status in STOCK_STATUSES"
+      v-for="status in statuses"
       :key="status.value"
       type="button"
       :class="['stock-status-btn', status.value.toLowerCase(), { active: modelValue === status.value }]"
@@ -31,7 +37,7 @@ const select = (value: string, current?: string, disabled?: boolean) => {
       :aria-pressed="modelValue === status.value"
       @click="select(status.value, modelValue, disabled)"
     >
-      {{ compact ? status.shortLabel : status.label }}
+      {{ compact ? (status.shortLabel || status.label) : status.label }}
     </button>
   </div>
 </template>

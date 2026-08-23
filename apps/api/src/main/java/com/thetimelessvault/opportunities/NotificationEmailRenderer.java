@@ -19,6 +19,8 @@ public final class NotificationEmailRenderer {
     private static final String BADGE_OK = "#d9ead3";
     private static final String BADGE_OK_INK = "#2f5d32";
     private static final String BADGE_PRICE = "#f3c07a";
+    private static final String BADGE_FAIL = "#f4c7c3";
+    private static final String BADGE_FAIL_INK = "#7a1f1a";
     private static final String GOLD_INK = "#1b1410";
     private static final String SLATE = "#3d4a52";
     private static final ZoneId SCAN_ZONE = ZoneId.of("America/New_York");
@@ -70,6 +72,9 @@ public final class NotificationEmailRenderer {
                         || (email.sellerMeta() != null && !email.sellerMeta().isBlank())))) {
             body.append("\n");
         }
+        if (email.detail() != null && !email.detail().isBlank()) {
+            body.append(email.detail()).append("\n\n");
+        }
         if (email.price() != null && !email.price().isBlank()) {
             body.append(email.price());
             if (email.percentVsMedian() != null && !email.percentVsMedian().isBlank()) {
@@ -78,7 +83,7 @@ public final class NotificationEmailRenderer {
             body.append("\n\n");
         }
         if (email.listingUrl() != null && !email.listingUrl().isBlank()) {
-            body.append("Open listing:\n").append(email.listingUrl()).append("\n");
+            body.append(scanFailedLinkLabel(email)).append(":\n").append(email.listingUrl()).append("\n");
         }
         if (email.priceGuard() && email.inventoryUrl() != null && !email.inventoryUrl().isBlank()
                 && !email.inventoryUrl().equals(email.listingUrl())) {
@@ -92,8 +97,8 @@ public final class NotificationEmailRenderer {
     }
 
     public static String html(NotificationEmail email, String assetBaseUrl) {
-        String badgeBg = email.buyingOpportunity() || email.newSale() ? BADGE_OK : BADGE_PRICE;
-        String badgeInk = email.buyingOpportunity() || email.newSale() ? BADGE_OK_INK : GOLD_INK;
+        String badgeBg = email.scanFailed() ? BADGE_FAIL : email.buyingOpportunity() || email.newSale() ? BADGE_OK : BADGE_PRICE;
+        String badgeInk = email.scanFailed() ? BADGE_FAIL_INK : email.buyingOpportunity() || email.newSale() ? BADGE_OK_INK : GOLD_INK;
         String heading = heading(email);
         StringBuilder priceHtml = new StringBuilder();
         if (email.price() != null && !email.price().isBlank()) {
@@ -108,6 +113,12 @@ public final class NotificationEmailRenderer {
             }
             priceHtml.append("</div>");
         }
+        if (email.detail() != null && !email.detail().isBlank()) {
+            priceHtml.append("<div style=\"font-family:'Source Sans 3',Arial,sans-serif;font-size:16px;line-height:1.45;")
+                    .append("color:").append(INK).append(";\">")
+                    .append(esc(email.detail()))
+                    .append("</div>");
+        }
         String photo = "";
         if (email.photoUrl() != null && !email.photoUrl().isBlank()) {
             photo = "<tr><td style=\"padding:0 28px 20px;\">"
@@ -118,7 +129,7 @@ public final class NotificationEmailRenderer {
         }
         StringBuilder links = new StringBuilder();
         if (email.listingUrl() != null && !email.listingUrl().isBlank()) {
-            links.append(button("Open listing", email.listingUrl(), GOLD, GOLD_INK, false));
+            links.append(button(scanFailedLinkLabel(email), email.listingUrl(), GOLD, GOLD_INK, false));
         }
         if (email.priceGuard() && email.inventoryUrl() != null && !email.inventoryUrl().isBlank()
                 && !email.inventoryUrl().equals(email.listingUrl())) {
@@ -213,6 +224,17 @@ public final class NotificationEmailRenderer {
             return "";
         }
         return SCAN_DATE.format(scannedAt);
+    }
+
+    static String scanFailedLinkLabel(NotificationEmail email) {
+        if (email.newSale()) {
+            return "Open order";
+        }
+        if (!email.scanFailed()) {
+            return "Open listing";
+        }
+        String url = email.listingUrl() == null ? "" : email.listingUrl();
+        return url.contains("/scan-logs") ? "Open scan logs" : "Open market";
     }
 
     public static String platformLabel(String platform) {

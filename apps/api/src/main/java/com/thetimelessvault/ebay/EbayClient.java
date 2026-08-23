@@ -133,6 +133,32 @@ public class EbayClient {
         return combined;
     }
 
+    public JsonNode getShippingFulfillments(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            return mapper.createObjectNode();
+        }
+        String path = "/sell/fulfillment/v1/order/"
+                + URLEncoder.encode(orderId.trim(), StandardCharsets.UTF_8)
+                + "/shipping_fulfillment";
+        try {
+            return sell("GET", path, null);
+        } catch (ApiException e) {
+            if (e.getStatus() == HttpStatus.NOT_FOUND) {
+                return mapper.createObjectNode();
+            }
+            throw e;
+        }
+    }
+
+    public JsonNode getFulfillmentOrder(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            return mapper.createObjectNode();
+        }
+        String path = "/sell/fulfillment/v1/order/"
+                + URLEncoder.encode(orderId.trim(), StandardCharsets.UTF_8);
+        return sell("GET", path, null);
+    }
+
     static boolean isInsufficientStorePermission(Exception error) {
         String message = error.getMessage();
         if (message == null) {

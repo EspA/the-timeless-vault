@@ -134,6 +134,14 @@ public class PublishController {
         ));
     }
 
+    @PutMapping("/listings/status")
+    public List<ListingView> setPublishedListingsStatus(@PathVariable UUID id, @RequestBody StatusRequest request) {
+        return publishService.setPublishedListingsStatus(id, request == null ? null : request.status())
+                .stream()
+                .map(ListingView::from)
+                .toList();
+    }
+
     @PutMapping("/listings/shopify/status")
     public ListingView setShopifyStatus(@PathVariable UUID id, @RequestBody StatusRequest request) {
         return ListingView.from(publishService.setShopifyStatus(id, request == null ? null : request.status()));

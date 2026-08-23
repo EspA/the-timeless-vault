@@ -29,6 +29,7 @@ const TYPE_OPTIONS = [
   { value: "PRICE_HIGH", label: "PRICE HIGH" },
   { value: "PRICE_LOW", label: "PRICE LOW" },
   { value: "NEW_SALE", label: "NEW SALE" },
+  { value: "SCAN_FAILED", label: "SCAN FAILED" },
 ];
 
 const PAGE_SIZE = 20;
@@ -55,9 +56,9 @@ const refreshUnread = inject<() => Promise<void>>("refreshUnread", async () => {
 const typeLabel = (type: string) => (type || "").replaceAll("_", " ");
 
 const typeBadge = (type: string) => {
-  if (type === "BUYING_OPPORTUNITY") return "ok";
+  if (type === "BUYING_OPPORTUNITY" || type === "NEW_SALE") return "ok";
   if (type === "PRICE_HIGH" || type === "PRICE_LOW") return "price";
-  if (type === "NEW_SALE") return "ok";
+  if (type === "SCAN_FAILED") return "bad";
   return "";
 };
 
@@ -96,8 +97,13 @@ const visible = computed(() =>
 const listingHref = (url?: string) => !!url && url.startsWith("/") && !url.startsWith("//");
 
 const linkLabel = (alert: NotificationEvent) => {
-  if (alert.type !== "NEW_SALE") return "Open listing";
-  return listingHref(alert.url) ? "Open item" : "Open order";
+  if (alert.type === "SCAN_FAILED") {
+    return alert.url?.includes("/scan-logs") ? "Open scan logs" : "Open market";
+  }
+  if (alert.type === "NEW_SALE") {
+    return alert.url?.startsWith("/orders/") ? "Open order" : listingHref(alert.url) ? "Open item" : "Open order";
+  }
+  return "Open listing";
 };
 
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
@@ -160,6 +166,12 @@ onMounted(() => {
 
 const read = async (id: string) => {
   await api.post(`/api/notifications/${id}/read`);
+  await load(page.value);
+  await refreshUnread();
+};
+
+const unread = async (id: string) => {
+  await api.post(`/api/notifications/${id}/unread`);
   await load(page.value);
   await refreshUnread();
 };
@@ -264,9 +276,9 @@ const readAll = async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="alert in visible" :key="alert.id" :style="{ opacity: alert.read ? 0.55 : 1 }">
+            <tr v-for="alert in visible" :key="alert.id" class="notification-row" :class="alert.read ? 'is-read' : 'is-unread'">
               <td>{{ whenLabel(alert.createdAt) }}</td>
-              <td><span class="badge" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span></td>
+              <td><span class="badge notify-type" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span></td>
               <td>
                 <ChannelLogo v-if="alert.platform" :platform="alert.platform" :height="16" />
                 <span v-else class="muted">—</span>
@@ -274,8 +286,8 @@ const readAll = async () => {
               <td>
                 <strong>{{ alert.title }}</strong>
                 <div class="muted">{{ alert.body }}</div>
-                <router-link v-if="alert.url && listingHref(alert.url)" :to="alert.url">{{ linkLabel(alert) }}</router-link>
-                <a v-else-if="alert.url" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
+                <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact notify-open" :to="alert.url">{{ linkLabel(alert) }}</router-link>
+                <a v-else-if="alert.url" class="btn secondary compact notify-open" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
               </td>
               <td>
                 <input
@@ -288,7 +300,7 @@ const readAll = async () => {
               </td>
               <td>
                 <button v-if="!alert.read" class="btn secondary compact" type="button" @click="read(alert.id)">Mark read</button>
-                <span v-else class="muted">Read</span>
+                <button v-else class="btn secondary compact" type="button" @click="unread(alert.id)">Mark unread</button>
               </td>
             </tr>
             <tr v-if="!visible.length">
@@ -304,9 +316,9 @@ const readAll = async () => {
         </table>
       </div>
       <div class="list-cards mobile-only">
-        <article v-for="alert in visible" :key="alert.id" class="list-card" :style="{ opacity: alert.read ? 0.7 : 1 }">
+        <article v-for="alert in visible" :key="alert.id" class="list-card" :class="alert.read ? 'is-read' : 'is-unread'">
           <div class="list-card-row">
-            <span class="badge" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span>
+            <span class="badge notify-type" :class="typeBadge(alert.type)">{{ typeLabel(alert.type) }}</span>
             <ChannelLogo v-if="alert.platform" :platform="alert.platform" :height="16" />
             <span class="muted">{{ whenLabel(alert.createdAt) }}</span>
           </div>
@@ -316,7 +328,7 @@ const readAll = async () => {
             <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact" :to="alert.url">{{ linkLabel(alert) }}</router-link>
             <a v-else-if="alert.url" class="btn secondary compact" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
             <button v-if="!alert.read" class="btn secondary compact" type="button" @click="read(alert.id)">Mark read</button>
-            <span v-else class="muted">Read</span>
+            <button v-else class="btn secondary compact" type="button" @click="unread(alert.id)">Mark unread</button>
           </div>
         </article>
         <p v-if="!visible.length" class="muted">

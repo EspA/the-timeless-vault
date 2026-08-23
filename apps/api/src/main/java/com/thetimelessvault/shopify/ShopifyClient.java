@@ -144,7 +144,7 @@ public class ShopifyClient {
         ObjectNode variables = mapper.createObjectNode();
         String query = since == null
                 ? ""
-                : "processed_at:>='" + since.toString() + "'";
+                : "updated_at:>='" + since.toString() + "'";
         variables.put("query", query);
         if (cursor != null && !cursor.isBlank()) {
             variables.put("cursor", cursor);
@@ -154,9 +154,9 @@ public class ShopifyClient {
         return graphql(ORDERS_QUERY, variables);
     }
 
-    private static final String ORDERS_QUERY = """
+    static final String ORDERS_QUERY = """
             query Orders($query: String, $cursor: String) {
-              orders(first: 50, after: $cursor, query: $query, sortKey: PROCESSED_AT, reverse: true) {
+              orders(first: 50, after: $cursor, query: $query, sortKey: UPDATED_AT, reverse: true) {
                 pageInfo { hasNextPage endCursor }
                 nodes {
                   id
@@ -165,8 +165,17 @@ public class ShopifyClient {
                   processedAt
                   cancelledAt
                   displayFinancialStatus
+                  displayFulfillmentStatus
                   totalShippingPriceSet { shopMoney { amount currencyCode } }
                   currentShippingPriceSet { shopMoney { amount currencyCode } }
+                  fulfillments(first: 10) {
+                    displayStatus
+                    deliveredAt
+                    trackingInfo {
+                      number
+                      company
+                    }
+                  }
                   lineItems(first: 50) {
                     nodes {
                       id

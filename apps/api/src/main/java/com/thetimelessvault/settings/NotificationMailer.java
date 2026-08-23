@@ -124,7 +124,8 @@ public class NotificationMailer {
                 "EBAY",
                 "brickshop",
                 "Feedback 1,842 / 99.8%",
-                Instant.now()
+                Instant.now(),
+                null
         );
         send(
                 "Test notification from The Timeless Vault",

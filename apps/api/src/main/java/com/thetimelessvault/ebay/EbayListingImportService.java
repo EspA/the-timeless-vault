@@ -14,7 +14,7 @@ import com.thetimelessvault.inventory.Photo;
 import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
-import com.thetimelessvault.sales.SetNumberParser;
+import com.thetimelessvault.orders.SetNumberParser;
 import com.thetimelessvault.storage.ObjectStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

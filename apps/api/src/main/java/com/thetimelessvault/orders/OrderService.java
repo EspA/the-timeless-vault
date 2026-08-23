@@ -1,4 +1,4 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.catalog.CatalogService;
@@ -34,12 +34,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class SalesService {
+public class OrderService {
 
-    private static final Logger log = LoggerFactory.getLogger(SalesService.class);
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
-    private final SaleRepository sales;
-    private final SaleIgnoreRepository ignores;
+    private final OrderRepository orders;
+    private final OrderIgnoreRepository ignores;
     private final InventoryItemRepository items;
     private final ChannelListingRepository listings;
     private final CatalogService catalogService;
@@ -48,9 +48,9 @@ public class SalesService {
     private final BuyingOpportunityService opportunities;
     private final ChannelFeeRates feeRates;
 
-    public SalesService(
-            SaleRepository sales,
-            SaleIgnoreRepository ignores,
+    public OrderService(
+            OrderRepository orders,
+            OrderIgnoreRepository ignores,
             InventoryItemRepository items,
             ChannelListingRepository listings,
             CatalogService catalogService,
@@ -59,7 +59,7 @@ public class SalesService {
             BuyingOpportunityService opportunities,
             ChannelFeeRates feeRates
     ) {
-        this.sales = sales;
+        this.orders = orders;
         this.ignores = ignores;
         this.items = items;
         this.listings = listings;
@@ -70,31 +70,37 @@ public class SalesService {
         this.feeRates = feeRates;
     }
 
-    public Page<Sale> list(int page, int size) {
+    public Page<Order> list(int page, int size) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
-        return sales.findAllByOrderBySoldAtDesc(PageRequest.of(pageIndex, pageSize));
+        return orders.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
+    }
+
+    public Order get(UUID id) {
+        return orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
     }
 
     public Optional<Instant> lastSyncedAt() {
-        return settings.findById(SalesSyncService.LAST_SYNC_KEY)
+        return settings.findById(OrderSyncService.LAST_SYNC_KEY)
                 .map(AppSetting::getValue)
-                .map(SalesService::parseInstant);
+                .map(OrderService::parseInstant);
     }
 
     @Transactional
-    public boolean importSale(ChannelSale incoming) {
+    public boolean importOrder(ChannelOrder incoming) {
         if (incoming == null || incoming.orderId() == null) {
             return false;
         }
         if (ignored(incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
             return false;
         }
-        Optional<Sale> existing = sales.findByPlatformAndExternalOrderIdAndExternalLineId(
+        Optional<Order> existing = orders.findByPlatformAndExternalOrderIdAndExternalLineId(
                 incoming.platform(), incoming.orderId(), incoming.identityLineId());
         if (existing.isPresent()) {
-            existing.get().applyChannelCosts(incoming);
-            sales.save(existing.get());
+            Order order = existing.get();
+            OrderStatus previous = order.applyChannelUpdate(incoming);
+            orders.save(order);
+            applyInventoryTransition(order, previous, order.getStatus());
             return false;
         }
         try {
@@ -109,18 +115,19 @@ public class SalesService {
     }
 
     @Transactional
-    public Sale addManual(ManualSaleRequest request) {
-        if (request == null || request.platform() == null) {
-            throw ApiException.badRequest("Channel is required");
+    public Order addManual(ManualOrderRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("Order is required");
         }
         if (blank(request.sku())) {
             throw ApiException.badRequest("SKU is required");
         }
+        Platform platform = request.platform() == null ? Platform.LOCAL : request.platform();
         String orderId = blank(request.externalOrderId())
                 ? "MANUAL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT)
                 : request.externalOrderId().trim();
-        return add(new ChannelSale(
-                request.platform(),
+        return add(new ChannelOrder(
+                platform,
                 orderId,
                 "manual",
                 request.sku(),
@@ -132,50 +139,68 @@ public class SalesService {
                 request.currency(),
                 request.soldAt(),
                 request.orderUrl(),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO
+                request.shippingCost(),
+                request.platformFee(),
+                request.status() == null ? OrderStatus.OPEN : request.status(),
+                request.trackingNumber(),
+                request.shippingProvider()
         ));
     }
 
     @Transactional
-    public void delete(UUID id) {
-        Sale sale = sales.findById(id).orElseThrow(() -> ApiException.notFound("Sale not found"));
-        ignore(sale.getPlatform(), sale.getExternalOrderId(), sale.getExternalLineId());
-        sales.delete(sale);
+    public Order update(UUID id, UpdateOrderRequest request) {
+        Order order = orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
+        if (request == null) {
+            return order;
+        }
+        OrderStatus previous = order.applyManual(request.status(), request.trackingNumber(), request.shippingProvider());
+        orders.save(order);
+        applyInventoryTransition(order, previous, order.getStatus());
+        return order;
     }
 
     @Transactional
-    Sale add(ChannelSale incoming) {
+    public void delete(UUID id) {
+        Order order = orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
+        ignore(order.getPlatform(), order.getExternalOrderId(), order.getExternalLineId());
+        orders.delete(order);
+    }
+
+    @Transactional
+    Order add(ChannelOrder incoming) {
         if (incoming == null || incoming.orderId() == null) {
             throw ApiException.badRequest("Order is required");
         }
-        if (sales.existsByPlatformAndExternalOrderIdAndExternalLineId(
+        if (orders.existsByPlatformAndExternalOrderIdAndExternalLineId(
                 incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
-            throw ApiException.conflict("A sale for that channel order already exists");
+            throw ApiException.conflict("An order for that channel already exists");
         }
         clearIgnore(incoming.platform(), incoming.orderId(), incoming.identityLineId());
+        boolean cancelled = incoming.status() == OrderStatus.CANCELLED;
         InventoryItem item = resolveItem(incoming);
         boolean created = false;
-        if (item == null) {
+        if (item == null && !cancelled) {
             CreatedItem createdItem = createSoldItem(incoming);
             item = createdItem.item();
             created = createdItem.created();
         }
-        ChannelSale recorded = withRecordedFee(incoming);
+        ChannelOrder recorded = withRecordedFee(incoming);
         try {
-            Sale saved = sales.save(Sale.create(item, recorded, created));
-            if (!created) {
+            Order saved = orders.save(Order.create(item, recorded, created));
+            if (!cancelled && !created && item != null) {
                 deactivateListings(item, incoming.platform());
                 markSold(item);
             }
-            opportunities.recordNewSale(saved, item);
+            if (!cancelled) {
+                opportunities.recordNewSale(saved, item);
+            }
             return saved;
         } catch (DataIntegrityViolationException e) {
-            throw ApiException.conflict("A sale for that channel order already exists");
+            throw ApiException.conflict("An order for that channel already exists");
         }
     }
 
-    public record ManualSaleRequest(
+    public record ManualOrderRequest(
             Platform platform,
             String sku,
             String setNumber,
@@ -185,15 +210,50 @@ public class SalesService {
             Integer quantity,
             BigDecimal unitPrice,
             String currency,
-            Instant soldAt
+            Instant soldAt,
+            OrderStatus status,
+            String trackingNumber,
+            String shippingProvider,
+            BigDecimal shippingCost,
+            BigDecimal platformFee
     ) {
+    }
+
+    public record UpdateOrderRequest(
+            OrderStatus status,
+            String trackingNumber,
+            String shippingProvider
+    ) {
+    }
+
+    private void applyInventoryTransition(Order order, OrderStatus from, OrderStatus to) {
+        if (order == null || from == to) {
+            return;
+        }
+        UUID itemId = order.getInventoryItemId();
+        if (itemId == null) {
+            return;
+        }
+        InventoryItem item = items.findById(itemId).orElse(null);
+        if (item == null) {
+            return;
+        }
+        if (to == OrderStatus.CANCELLED && from != OrderStatus.CANCELLED) {
+            item.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
+            items.save(item);
+            return;
+        }
+        if (from == OrderStatus.CANCELLED && to != OrderStatus.CANCELLED) {
+            deactivateListings(item, order.getPlatform());
+            markSold(item);
+        }
     }
 
     private void ignore(Platform platform, String orderId, String lineId) {
         if (ignored(platform, orderId, lineId)) {
             return;
         }
-        ignores.save(SaleIgnore.of(platform, orderId, lineId));
+        ignores.save(OrderIgnore.of(platform, orderId, lineId));
     }
 
     private void clearIgnore(Platform platform, String orderId, String lineId) {
@@ -205,7 +265,7 @@ public class SalesService {
         return ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(platform, orderId, lineId);
     }
 
-    InventoryItem resolveItem(ChannelSale incoming) {
+    InventoryItem resolveItem(ChannelOrder incoming) {
         if (incoming.sku() != null) {
             Optional<InventoryItem> bySku = items.findWithCatalogBySkuIgnoreCase(incoming.sku());
             if (bySku.isPresent()) {
@@ -229,7 +289,7 @@ public class SalesService {
         return null;
     }
 
-    CreatedItem createSoldItem(ChannelSale incoming) {
+    CreatedItem createSoldItem(ChannelOrder incoming) {
         String setNumber = SetNumberParser.firstNonBlank(
                 incoming.setNumber(),
                 SetNumberParser.fromSku(incoming.sku()),
@@ -268,7 +328,7 @@ public class SalesService {
     record CreatedItem(InventoryItem item, boolean created) {
     }
 
-    private ChannelSale withRecordedFee(ChannelSale incoming) {
+    private ChannelOrder withRecordedFee(ChannelOrder incoming) {
         BigDecimal fee = feeRates.feeFor(
                 incoming.platform(), incoming.unitPrice(), incoming.quantity(), incoming.shippingCost());
         return fee == null ? incoming : incoming.withPlatformFee(fee);
@@ -278,7 +338,7 @@ public class SalesService {
         try {
             publishService.deactivatePublishedListingsAfterSale(item.getId(), soldOn);
         } catch (RuntimeException e) {
-            log.warn("Could not deactivate listings after sale for item {}: {}", item.getId(), e.getMessage());
+            log.warn("Could not deactivate listings after order for item {}: {}", item.getId(), e.getMessage());
         }
     }
 

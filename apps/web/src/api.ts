@@ -153,7 +153,9 @@ export type ChannelListing = {
   lastError?: string;
 };
 
-export type Sale = {
+export type OrderStatus = "OPEN" | "SHIPPED" | "COMPLETED" | "CANCELLED";
+
+export type Order = {
   id: string;
   inventoryItemId?: string;
   sku?: string;
@@ -169,15 +171,40 @@ export type Sale = {
   soldAt: string;
   orderUrl?: string;
   inventoryCreated: boolean;
+  status: OrderStatus;
+  trackingNumber?: string;
+  shippingProvider?: string;
 };
 
-export type SalesPage = {
-  items: Sale[];
+export type OrdersPage = {
+  items: Order[];
   page: number;
   size: number;
   total: number;
   totalPages: number;
   lastSyncedAt?: string;
+};
+
+export const ORDER_STATUSES: { value: OrderStatus; label: string; shortLabel: string }[] = [
+  { value: "OPEN", label: "Open", shortLabel: "Open" },
+  { value: "SHIPPED", label: "Shipped", shortLabel: "Shipped" },
+  { value: "COMPLETED", label: "Delivered", shortLabel: "Delivered" },
+  { value: "CANCELLED", label: "Cancelled", shortLabel: "Cancel" },
+];
+
+export const orderStatusLabel = (status?: string | null) =>
+  ORDER_STATUSES.find((row) => row.value === status)?.label || status || "";
+
+export const isUpsTracking = (tracking?: string | null, provider?: string | null) => {
+  const number = tracking?.trim() ?? "";
+  if (!number) return false;
+  return number.toUpperCase().startsWith("1Z") || (provider ?? "").toUpperCase().includes("UPS");
+};
+
+export const upsTrackingUrl = (tracking?: string | null, provider?: string | null) => {
+  const number = tracking?.trim();
+  if (!number || !isUpsTracking(number, provider)) return "";
+  return `https://www.ups.com/track?loc=en_US&requester=ST&trackNums=${encodeURIComponent(number)}`;
 };
 
 export type LedgerSale = {

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { api, CONDITIONS, quantityForStockStatus, STOCK_STATUSES, visibilityStatusLabel, type InventoryItem, type InventoryPage } from "../api";
+import { api, CONDITIONS, quantityForStockStatus, STOCK_STATUSES, type InventoryItem, type InventoryPage } from "../api";
 import { askConfirm, confirmStockStatusChange } from "../confirm";
+import ChannelListingBadge from "../components/ChannelListingBadge.vue";
 import ItemNewModal from "../components/ItemNewModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
 
 const router = useRouter();
 const adding = ref(false);
 
-type Column = "sku" | "set" | "title" | "created" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
+type Column = "sku" | "set" | "title" | "created" | "updated" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
 const PAGE_SIZE = 10;
@@ -22,12 +23,12 @@ const loading = ref(false);
 const error = ref("");
 const stockBusyId = ref("");
 const search = ref("");
-const sort = ref<Sort>({ key: "created", dir: "desc" });
+const sort = ref<Sort>({ key: "updated", dir: "desc" });
 const filters = ref({
   sku: "",
   set: "",
   title: "",
-  created: "",
+  updated: "",
   ebayPrice: "",
   bricklinkPrice: "",
   shopifyPrice: "",
@@ -47,7 +48,7 @@ const statusOptions = [
   { value: "none", label: "None" },
 ];
 
-const formatCreated = (value?: string) => {
+const formatWhen = (value?: string) => {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -100,7 +101,7 @@ const clearFilters = () => {
     sku: "",
     set: "",
     title: "",
-    created: "",
+    updated: "",
     ebayPrice: "",
     bricklinkPrice: "",
     shopifyPrice: "",
@@ -200,6 +201,16 @@ const onSaved = async (item: InventoryItem) => {
   await router.push(`/inventory/${item.id}`);
 };
 
+const listingUrl = (item: InventoryItem, platform: "SHOPIFY" | "BRICKLINK" | "EBAY") => {
+  if (platform === "SHOPIFY") {
+    return item.shopifyStatus === "ACTIVE" && item.shopifyLiveUrl ? item.shopifyLiveUrl : "";
+  }
+  if (platform === "BRICKLINK") {
+    return item.bricklinkStatus === "ACTIVE" && item.bricklinkLiveUrl ? item.bricklinkLiveUrl : "";
+  }
+  return item.ebayStatus === "ACTIVE" && item.ebayLiveUrl ? item.ebayLiveUrl : "";
+};
+
 onMounted(async () => {
   try {
     await load();
@@ -257,7 +268,7 @@ onMounted(async () => {
               <th><button class="sort-btn" type="button" @click="sortBy('shopify')">Shopify{{ sortMark("shopify") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('bricklink')">BrickLink{{ sortMark("bricklink") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('ebay')">eBay{{ sortMark("ebay") }}</button></th>
-              <th><button class="sort-btn" type="button" @click="sortBy('created')">Created{{ sortMark("created") }}</button></th>
+              <th><button class="sort-btn" type="button" @click="sortBy('updated')">Updated{{ sortMark("updated") }}</button></th>
               <th></th>
             </tr>
             <tr>
@@ -296,7 +307,7 @@ onMounted(async () => {
                   <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </select>
               </th>
-              <th><input v-model="filters.created" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.updated" class="column-filter" type="search" placeholder="Filter" /></th>
               <th></th>
             </tr>
           </thead>
@@ -320,30 +331,27 @@ onMounted(async () => {
               <td>{{ item.quantity }}</td>
               <td><span class="badge">{{ item.condition }}</span></td>
               <td>
-                <span
-                  v-if="item.shopifyStatus"
-                  class="badge"
-                  :class="{ ok: item.shopifyStatus === 'ACTIVE', warn: item.shopifyStatus === 'UNLISTED' }"
-                >{{ visibilityStatusLabel(item.shopifyStatus) }}</span>
-                <span v-else class="muted">—</span>
+                <ChannelListingBadge
+                  platform="SHOPIFY"
+                  :status="item.shopifyStatus"
+                  :href="listingUrl(item, 'SHOPIFY')"
+                />
               </td>
               <td>
-                <span
-                  v-if="item.bricklinkStatus"
-                  class="badge"
-                  :class="{ ok: item.bricklinkStatus === 'ACTIVE', warn: item.bricklinkStatus === 'UNLISTED' }"
-                >{{ visibilityStatusLabel(item.bricklinkStatus) }}</span>
-                <span v-else class="muted">—</span>
+                <ChannelListingBadge
+                  platform="BRICKLINK"
+                  :status="item.bricklinkStatus"
+                  :href="listingUrl(item, 'BRICKLINK')"
+                />
               </td>
               <td>
-                <span
-                  v-if="item.ebayStatus"
-                  class="badge"
-                  :class="{ ok: item.ebayStatus === 'ACTIVE', warn: item.ebayStatus === 'UNLISTED' }"
-                >{{ visibilityStatusLabel(item.ebayStatus) }}</span>
-                <span v-else class="muted">—</span>
+                <ChannelListingBadge
+                  platform="EBAY"
+                  :status="item.ebayStatus"
+                  :href="listingUrl(item, 'EBAY')"
+                />
               </td>
-              <td>{{ formatCreated(item.createdAt) }}</td>
+              <td>{{ formatWhen(item.updatedAt) }}</td>
               <td>
                 <button class="btn danger compact" type="button" @click="remove(item)">Delete</button>
               </td>
@@ -357,7 +365,7 @@ onMounted(async () => {
       <div class="list-cards mobile-only">
         <article v-for="item in items" :key="item.id" class="list-card">
           <h3><router-link :to="`/inventory/${item.id}`">{{ item.title }}</router-link></h3>
-          <div class="list-card-meta muted">{{ item.catalog.setNumber }} · {{ item.sku }} · Qty {{ item.quantity }}</div>
+          <div class="list-card-meta muted">{{ item.catalog.setNumber }} · {{ item.sku }} · Qty {{ item.quantity }} · {{ formatWhen(item.updatedAt) }}</div>
           <StockStatusButtons
             compact
             :model-value="item.stockStatus"
@@ -370,21 +378,24 @@ onMounted(async () => {
             <span><span class="muted">Shopify</span>${{ item.shopifyPrice ?? item.price }}</span>
           </div>
           <div class="list-card-row">
-            <span
+            <ChannelListingBadge
               v-if="item.shopifyStatus"
-              class="badge"
-              :class="{ ok: item.shopifyStatus === 'ACTIVE', warn: item.shopifyStatus === 'UNLISTED' }"
-            >Shopify {{ visibilityStatusLabel(item.shopifyStatus) }}</span>
-            <span
+              platform="SHOPIFY"
+              :status="item.shopifyStatus"
+              :href="listingUrl(item, 'SHOPIFY')"
+            />
+            <ChannelListingBadge
               v-if="item.bricklinkStatus"
-              class="badge"
-              :class="{ ok: item.bricklinkStatus === 'ACTIVE', warn: item.bricklinkStatus === 'UNLISTED' }"
-            >BrickLink {{ visibilityStatusLabel(item.bricklinkStatus) }}</span>
-            <span
+              platform="BRICKLINK"
+              :status="item.bricklinkStatus"
+              :href="listingUrl(item, 'BRICKLINK')"
+            />
+            <ChannelListingBadge
               v-if="item.ebayStatus"
-              class="badge"
-              :class="{ ok: item.ebayStatus === 'ACTIVE', warn: item.ebayStatus === 'UNLISTED' }"
-            >eBay {{ visibilityStatusLabel(item.ebayStatus) }}</span>
+              platform="EBAY"
+              :status="item.ebayStatus"
+              :href="listingUrl(item, 'EBAY')"
+            />
           </div>
           <div class="list-card-actions">
             <router-link class="btn secondary compact" :to="`/inventory/${item.id}`">Open</router-link>

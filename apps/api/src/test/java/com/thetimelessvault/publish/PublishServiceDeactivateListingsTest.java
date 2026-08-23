@@ -88,6 +88,35 @@ class PublishServiceDeactivateListingsTest {
     }
 
     @Test
+    void activatesInactivePublishedListingsOnEveryChannel() {
+        ChannelListing shopify = published(Platform.SHOPIFY, "gid://shopify/Product/1", "https://shop.example/1");
+        shopify.setShopifyStatus("UNLISTED");
+        ChannelListing bricklink = published(Platform.BRICKLINK, "12345", "https://bricklink.example/1");
+        bricklink.setBricklinkStatus("UNLISTED");
+        ChannelListing ebay = published(Platform.EBAY, "offer-1", "https://www.ebay.com/itm/999");
+        ebay.setEbayStatus("UNLISTED");
+
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, ebay));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(brickLinkClient.updateStockRoom("12345", false)).thenReturn(false);
+        when(ebayClient.publishOffer("offer-1")).thenReturn("999");
+
+        service.setPublishedListingsStatus(item.getId(), "ACTIVE");
+
+        verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", true, item.getQuantity());
+        verify(brickLinkClient).updateStockRoom("12345", false);
+        verify(ebayPublisher).syncInventory(item);
+        verify(ebayClient).publishOffer("offer-1");
+        assertEquals("ACTIVE", shopify.getShopifyStatus());
+        assertEquals("ACTIVE", bricklink.getBricklinkStatus());
+        assertEquals("ACTIVE", ebay.getEbayStatus());
+    }
+
+    @Test
     void endsImportedEbayListingWhenThereIsNoInventoryOffer() {
         ChannelListing ebay = published(Platform.EBAY, "365847291012", "https://www.ebay.com/itm/365847291012");
         ebay.setEbayStatus("ACTIVE");

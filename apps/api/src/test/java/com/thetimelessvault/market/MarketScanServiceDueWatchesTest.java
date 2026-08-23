@@ -94,6 +94,7 @@ class MarketScanServiceDueWatchesTest {
 
         verify(ebayClient).searchBrowse(anyString());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
+        verify(opportunities, never()).recordScanFailure(any(), any(), any(), any());
     }
 
     @Test
@@ -151,6 +152,8 @@ class MarketScanServiceDueWatchesTest {
 
         verify(ebayClient).searchBrowse(anyString());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
+        verify(opportunities).recordScanFailure(
+                catalog, Platform.EBAY, "eBay down", ScanTrigger.AUTOMATIC);
     }
 
     @Test

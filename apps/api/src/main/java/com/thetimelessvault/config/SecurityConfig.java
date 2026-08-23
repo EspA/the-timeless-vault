@@ -85,6 +85,8 @@ public class SecurityConfig {
                                 "/buying-opportunities",
                         "/listing-logs",
                         "/sales",
+                        "/orders",
+                        "/orders/**",
                         "/sales-ledger",
                         "/settings",
                         "/webhooks/ebay/**"

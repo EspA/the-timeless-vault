@@ -499,28 +499,24 @@ onMounted(async () => {
 
 <template>
   <div class="grid">
-    <h1>Market Monitoring</h1>
-    <p v-if="selectedWatch" class="muted">{{ lastScanLabel }}</p>
+    <div class="page-head">
+      <div class="page-title-row">
+        <h1>Market Monitoring</h1>
+        <p v-if="selectedWatch" class="muted page-meta">{{ lastScanLabel }}</p>
+      </div>
+    </div>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="filterMessage" class="muted">{{ filterMessage }}</p>
     <p v-if="!watches.length" class="muted">No sets are watched yet. Add one with <router-link to="/watches">New item watch</router-link>.</p>
-    <div class="card grid">
+    <div class="card grid market-controls">
       <div class="toolbar">
-        <label>Watched set
+        <label class="watched-set">Watched set
           <select :value="selected" :disabled="!!scanning" @change="loadDash(($event.target as HTMLSelectElement).value)">
             <option v-for="watch in watches" :key="watch.catalogId" :value="watch.catalogId">
               {{ watch.setNumber }} {{ watch.name }}
             </option>
           </select>
         </label>
-        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('ebay')">
-          {{ scanning === "ebay" ? "Scanning" : "Scan" }}
-          <ChannelLogo platform="EBAY" :height="16" />
-        </button>
-        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('bricklink')">
-          {{ scanning === "bricklink" ? "Scanning" : "Scan" }}
-          <ChannelLogo platform="BRICKLINK" :height="16" />
-        </button>
         <button class="btn gold" type="button" :disabled="!!scanning" @click="scan('all')">
           {{ scanning === "all" ? "Scanning…" : "Scan all" }}
         </button>
@@ -529,6 +525,14 @@ onMounted(async () => {
           class="btn secondary"
           :to="`/watches/${selectedWatch.id}`"
         >Market filters</router-link>
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('ebay')">
+          {{ scanning === "ebay" ? "Scanning" : "Scan" }}
+          <ChannelLogo platform="EBAY" :height="16" />
+        </button>
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('bricklink')">
+          {{ scanning === "bricklink" ? "Scanning" : "Scan" }}
+          <ChannelLogo platform="BRICKLINK" :height="16" />
+        </button>
       </div>
       <div v-if="selectedWatch" class="toolbar">
         <label>Min price
@@ -552,6 +556,14 @@ onMounted(async () => {
           />
         </label>
         <button
+          class="btn gold"
+          type="button"
+          :disabled="!!scanning || applyingAlertRange"
+          @click="applyRangeForAlert"
+        >
+          {{ applyingAlertRange ? "Saving…" : "Apply range for alert" }}
+        </button>
+        <button
           v-if="recommendedMaxPrice != null"
           class="btn secondary"
           type="button"
@@ -559,14 +571,6 @@ onMounted(async () => {
           @click="useRecommendedMaxPrice"
         >
           Use recommended {{ money(recommendedMaxPrice) }}
-        </button>
-        <button
-          class="btn gold"
-          type="button"
-          :disabled="!!scanning || applyingAlertRange"
-          @click="applyRangeForAlert"
-        >
-          {{ applyingAlertRange ? "Saving…" : "Apply range for alert" }}
         </button>
       </div>
     </div>
@@ -576,7 +580,7 @@ onMounted(async () => {
       <div class="card grid">
         <p v-if="dash.ebayError" class="error">{{ dash.ebayError }}</p>
         <p v-if="dash.bricklinkError" class="error">{{ dash.bricklinkError }}</p>
-        <div class="grid three">
+        <div class="grid three hero-stats">
           <div class="stat">
             <span class="stat-value hero">{{ money(combinedMedian) }}</span>
             <span class="stat-label">Median</span>
@@ -591,52 +595,28 @@ onMounted(async () => {
           </div>
         </div>
         <div class="platform-stats">
-          <div class="grid">
+          <div class="platform-stat-row">
             <h4 class="channel-heading">
               <ChannelLogo platform="EBAY" :height="18" />
               <span class="muted">{{ dash.ebay?.count != null ? `${dash.ebay.count} listings` : "No scan yet" }}</span>
             </h4>
-            <div class="grid four stats">
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.ebay?.min) }}</span>
-                <span class="stat-label">Min</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.ebay?.avg) }}</span>
-                <span class="stat-label">Average</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(ebayMedian) }}</span>
-                <span class="stat-label">Median</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.ebay?.max) }}</span>
-                <span class="stat-label">Max</span>
-              </div>
+            <div class="platform-stat-metrics">
+              <span><span class="stat-label">Min</span> {{ money(dash.ebay?.min) }}</span>
+              <span><span class="stat-label">Average</span> {{ money(dash.ebay?.avg) }}</span>
+              <span><span class="stat-label">Median</span> {{ money(ebayMedian) }}</span>
+              <span><span class="stat-label">Max</span> {{ money(dash.ebay?.max) }}</span>
             </div>
           </div>
-          <div class="grid">
+          <div class="platform-stat-row">
             <h4 class="channel-heading">
               <ChannelLogo platform="BRICKLINK" :height="18" />
               <span class="muted">{{ dash.bricklink?.count != null ? `${dash.bricklink.count} listings` : "No scan yet" }}</span>
             </h4>
-            <div class="grid four stats">
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.bricklink?.min) }}</span>
-                <span class="stat-label">Min</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.bricklink?.avg) }}</span>
-                <span class="stat-label">Average</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(bricklinkMedian) }}</span>
-                <span class="stat-label">Median</span>
-              </div>
-              <div class="stat">
-                <span class="stat-value">{{ money(dash.bricklink?.max) }}</span>
-                <span class="stat-label">Max</span>
-              </div>
+            <div class="platform-stat-metrics">
+              <span><span class="stat-label">Min</span> {{ money(dash.bricklink?.min) }}</span>
+              <span><span class="stat-label">Average</span> {{ money(dash.bricklink?.avg) }}</span>
+              <span><span class="stat-label">Median</span> {{ money(bricklinkMedian) }}</span>
+              <span><span class="stat-label">Max</span> {{ money(dash.bricklink?.max) }}</span>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import org.junit.jupiter.api.Test;
 

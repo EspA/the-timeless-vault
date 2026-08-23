@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, type Sale, type SalesPage } from "../api";
+import { api, ORDER_STATUSES, type Order, type OrderStatus, type OrdersPage } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
-import SaleNewModal from "../components/SaleNewModal.vue";
+import OrderNewModal from "../components/OrderNewModal.vue";
+import StockStatusButtons from "../components/StockStatusButtons.vue";
+import TrackingNumber from "../components/TrackingNumber.vue";
 import { askConfirm } from "../confirm";
 
 const PAGE_SIZE = 20;
@@ -16,9 +18,12 @@ const emptyFilters = () => ({
   shipping: "",
   fee: "",
   order: "",
+  status: "",
+  tracking: "",
+  provider: "",
 });
 
-const items = ref<Sale[]>([]);
+const items = ref<Order[]>([]);
 const page = ref(0);
 const total = ref(0);
 const totalPages = ref(1);
@@ -28,6 +33,7 @@ const loading = ref(false);
 const syncing = ref(false);
 const adding = ref(false);
 const deletingId = ref("");
+const savingId = ref("");
 const filters = ref(emptyFilters());
 let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -43,13 +49,13 @@ const whenLabel = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
-const itemLabel = (row: Sale) => {
+const itemLabel = (row: Order) => {
   const set = [row.setNumber, row.itemTitle].filter(Boolean).join(" ");
   if (row.sku && set) return `${row.sku} · ${set}`;
   return row.sku || set || "—";
 };
 
-const orderLabel = (row: Sale) => row.externalOrderId || "—";
+const orderLabel = (row: Order) => row.externalOrderId || "—";
 
 const contains = (value: string | number | null | undefined, needle: string) => {
   if (!needle.trim()) return true;
@@ -67,13 +73,16 @@ const visible = computed(() =>
     && contains(money(row.shippingCost ?? 0, row.currency), filters.value.shipping)
     && contains(money(row.platformFee ?? 0, row.currency), filters.value.fee)
     && contains(orderLabel(row), filters.value.order)
+    && (!filters.value.status || row.status === filters.value.status)
+    && contains(row.trackingNumber, filters.value.tracking)
+    && contains(row.shippingProvider, filters.value.provider)
   )
 );
 
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const rangeLabel = computed(() => {
-  if (!total.value) return "0 sales";
+  if (!total.value) return "0 orders";
   const start = page.value * PAGE_SIZE + 1;
   const end = Math.min((page.value + 1) * PAGE_SIZE, total.value);
   const pages = totalPages.value > 1 ? ` · page ${page.value + 1} of ${totalPages.value}` : "";
@@ -90,7 +99,7 @@ const load = async (pageIndex = page.value) => {
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<SalesPage>(`/api/sales?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const result = await api.get<OrdersPage>(`/api/orders?page=${pageIndex}&size=${PAGE_SIZE}`);
     const pages = Math.max(1, result.totalPages);
     const nextPage = Math.min(pageIndex, pages - 1);
     items.value = result.items;
@@ -115,7 +124,7 @@ const syncNow = async () => {
   syncing.value = true;
   error.value = "";
   try {
-    await api.post("/api/sales/sync");
+    await api.post("/api/orders/sync");
     await load(0);
   } catch (e) {
     error.value = (e as Error).message;
@@ -124,22 +133,40 @@ const syncNow = async () => {
   }
 };
 
+const persist = async (row: Order, patch: { status?: OrderStatus; trackingNumber?: string; shippingProvider?: string }) => {
+  if (savingId.value) return;
+  savingId.value = row.id;
+  error.value = "";
+  try {
+    const updated = await api.put<Order>(`/api/orders/${row.id}`, {
+      status: patch.status ?? row.status,
+      trackingNumber: patch.trackingNumber ?? row.trackingNumber ?? "",
+      shippingProvider: patch.shippingProvider ?? row.shippingProvider ?? "",
+    });
+    items.value = items.value.map((item) => (item.id === updated.id ? updated : item));
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    savingId.value = "";
+  }
+};
+
 const onAdded = async () => {
   adding.value = false;
   await load(0);
 };
 
-const remove = async (row: Sale) => {
+const remove = async (row: Order) => {
   const label = itemLabel(row);
   const confirmed = await askConfirm(
-    `Delete ${label} from sales? The inventory item will be kept. Sync will not bring this channel order back.`,
-    { title: "Delete sale" }
+    `Delete ${label} from orders? The inventory item will be kept. Sync will not bring this channel order back.`,
+    { title: "Delete order" }
   );
   if (!confirmed) return;
   deletingId.value = row.id;
   error.value = "";
   try {
-    await api.del(`/api/sales/${row.id}`);
+    await api.del(`/api/orders/${row.id}`);
     await load(page.value);
   } catch (e) {
     error.value = (e as Error).message;
@@ -176,13 +203,13 @@ onUnmounted(() => {
 
 <template>
   <div class="grid">
-    <div class="toolbar">
-      <div>
-        <h1>Last Sales</h1>
-        <p class="muted">{{ syncedLabel }}</p>
+    <div class="page-head">
+      <div class="page-title-row">
+        <h1>Orders</h1>
+        <p class="muted page-meta">{{ syncedLabel }}</p>
       </div>
       <div class="pager-actions">
-        <button class="btn gold" type="button" @click="adding = true">Add sale</button>
+        <button class="btn gold" type="button" @click="adding = true">Add order</button>
         <button class="btn" type="button" :disabled="syncing" @click="syncNow">
           {{ syncing ? "Syncing…" : "Sync now" }}
         </button>
@@ -206,6 +233,12 @@ onUnmounted(() => {
         <label>Search
           <input v-model="filters.item" type="search" placeholder="Item, SKU, or set" />
         </label>
+        <label>Status
+          <select v-model="filters.status">
+            <option value="">All</option>
+            <option v-for="status in ORDER_STATUSES" :key="status.value" :value="status.value">{{ status.label }}</option>
+          </select>
+        </label>
         <label>Channel
           <select v-model="filters.platform">
             <option value="">All</option>
@@ -221,17 +254,21 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th>When</th>
+              <th>Channel Order</th>
               <th>Channel</th>
               <th>Item</th>
+              <th>Status</th>
               <th>Qty</th>
               <th>Price</th>
               <th>Shipping</th>
               <th>Fee</th>
-              <th>Order</th>
+              <th>Tracking</th>
+              <th>Shipping provider</th>
               <th></th>
             </tr>
             <tr>
               <th><input v-model="filters.when" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.order" class="column-filter" type="search" placeholder="Filter" /></th>
               <th>
                 <select v-model="filters.platform" class="column-filter">
                   <option value="">All</option>
@@ -242,35 +279,53 @@ onUnmounted(() => {
                 </select>
               </th>
               <th><input v-model="filters.item" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th>
+                <select v-model="filters.status" class="column-filter">
+                  <option value="">All</option>
+                  <option v-for="status in ORDER_STATUSES" :key="status.value" :value="status.value">{{ status.label }}</option>
+                </select>
+              </th>
               <th><input v-model="filters.qty" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.price" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.shipping" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.fee" class="column-filter" type="search" placeholder="Filter" /></th>
-              <th><input v-model="filters.order" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.tracking" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.provider" class="column-filter" type="search" placeholder="Filter" /></th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in visible" :key="row.id">
               <td>{{ whenLabel(row.soldAt) }}</td>
-              <td><ChannelLogo :platform="row.platform" :height="16" /></td>
-              <td>
-                <router-link v-if="row.inventoryItemId" :to="`/inventory/${row.inventoryItemId}`">
-                  {{ itemLabel(row) }}
-                </router-link>
-                <span v-else>{{ itemLabel(row) }}</span>
-                <span v-if="row.inventoryCreated" class="badge" style="margin-left:0.4rem">Added</span>
-              </td>
-              <td>{{ row.quantity }}</td>
-              <td>{{ money(row.unitPrice, row.currency) }}</td>
-              <td>{{ money(row.shippingCost ?? 0, row.currency) }}</td>
-              <td>{{ money(row.platformFee ?? 0, row.currency) }}</td>
               <td>
                 <a v-if="row.orderUrl" :href="row.orderUrl" target="_blank" rel="noopener noreferrer">
                   {{ orderLabel(row) }}
                 </a>
                 <span v-else>{{ orderLabel(row) }}</span>
               </td>
+              <td><ChannelLogo :platform="row.platform" :height="16" /></td>
+              <td>
+                <router-link :to="`/orders/${row.id}`">{{ itemLabel(row) }}</router-link>
+                <span v-if="row.inventoryCreated" class="badge" style="margin-left:0.4rem">Added</span>
+              </td>
+              <td>
+                <StockStatusButtons
+                  compact
+                  aria-label="Order status"
+                  :options="ORDER_STATUSES"
+                  :model-value="row.status"
+                  :disabled="savingId === row.id"
+                  @update:model-value="persist(row, { status: $event as OrderStatus })"
+                />
+              </td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ money(row.unitPrice, row.currency) }}</td>
+              <td>{{ money(row.shippingCost ?? 0, row.currency) }}</td>
+              <td>{{ money(row.platformFee ?? 0, row.currency) }}</td>
+              <td>
+                <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
+              </td>
+              <td>{{ row.shippingProvider || "—" }}</td>
               <td>
                 <button
                   class="btn danger compact"
@@ -281,12 +336,12 @@ onUnmounted(() => {
               </td>
             </tr>
             <tr v-if="!visible.length">
-              <td colspan="9" class="muted">
+              <td colspan="12" class="muted">
                 {{ loading
-                  ? "Loading sales…"
+                  ? "Loading orders…"
                   : items.length
-                    ? "No sales match those filters."
-                    : "No sales recorded yet. Sales are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
+                    ? "No orders match those filters."
+                    : "No orders recorded yet. Orders are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
               </td>
             </tr>
           </tbody>
@@ -300,10 +355,7 @@ onUnmounted(() => {
             <span v-if="row.inventoryCreated" class="badge">Added</span>
           </div>
           <h3>
-            <router-link v-if="row.inventoryItemId" :to="`/inventory/${row.inventoryItemId}`">
-              {{ itemLabel(row) }}
-            </router-link>
-            <span v-else>{{ itemLabel(row) }}</span>
+            <router-link :to="`/orders/${row.id}`">{{ itemLabel(row) }}</router-link>
           </h3>
           <div class="list-card-meta muted">
             Qty {{ row.quantity }} · {{ money(row.unitPrice, row.currency) }}
@@ -311,10 +363,24 @@ onUnmounted(() => {
             · Fee {{ money(row.platformFee ?? 0, row.currency) }}
           </div>
           <p class="muted" style="margin:0">
+            Channel order
             <a v-if="row.orderUrl" :href="row.orderUrl" target="_blank" rel="noopener noreferrer">
               {{ orderLabel(row) }}
             </a>
             <span v-else>{{ orderLabel(row) }}</span>
+          </p>
+          <StockStatusButtons
+            compact
+            aria-label="Order status"
+            :options="ORDER_STATUSES"
+            :model-value="row.status"
+            :disabled="savingId === row.id"
+            @update:model-value="persist(row, { status: $event as OrderStatus })"
+          />
+          <p class="muted" style="margin:0">
+            Tracking
+            <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
+            · {{ row.shippingProvider || "—" }}
           </p>
           <div class="list-card-actions">
             <button
@@ -327,10 +393,10 @@ onUnmounted(() => {
         </article>
         <p v-if="!visible.length" class="muted">
           {{ loading
-            ? "Loading sales…"
+            ? "Loading orders…"
             : items.length
-              ? "No sales match those filters."
-              : "No sales recorded yet. Sales are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
+              ? "No orders match those filters."
+              : "No orders recorded yet. Orders are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
         </p>
       </div>
       <div v-if="totalPages > 1" class="pager">
@@ -341,6 +407,6 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <SaleNewModal v-if="adding" @close="adding = false" @saved="onAdded" />
+    <OrderNewModal v-if="adding" @close="adding = false" @saved="onAdded" />
   </div>
 </template>

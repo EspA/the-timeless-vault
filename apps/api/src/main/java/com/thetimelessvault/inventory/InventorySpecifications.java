@@ -26,6 +26,7 @@ final class InventorySpecifications {
             String set,
             String title,
             String created,
+            String updated,
             String ebayPrice,
             String bricklinkPrice,
             String shopifyPrice,
@@ -61,6 +62,7 @@ final class InventorySpecifications {
             predicates.add(contains(cb, setNumber, query.set()));
             predicates.add(contains(cb, root.get("title"), query.title()));
             predicates.add(contains(cb, root.get("createdAt"), query.created()));
+            predicates.add(contains(cb, root.get("updatedAt"), query.updated()));
             predicates.add(contains(cb, root.get("ebayPrice"), query.ebayPrice()));
             predicates.add(contains(cb, root.get("bricklinkPrice"), query.bricklinkPrice()));
             predicates.add(contains(cb, root.get("shopifyPrice"), query.shopifyPrice()));
@@ -100,7 +102,7 @@ final class InventorySpecifications {
             Join<InventoryItem, ChannelListing> ebay,
             String sort
     ) {
-        return switch (sort == null ? "created" : sort) {
+        return switch (sort == null ? "updated" : sort) {
             case "sku" -> root.get("sku");
             case "set" -> setNumber;
             case "title" -> root.get("title");
@@ -114,7 +116,8 @@ final class InventorySpecifications {
             case "shopify" -> shopify.get("shopifyStatus");
             case "bricklink" -> bricklink.get("bricklinkStatus");
             case "ebay" -> ebay.get("ebayStatus");
-            default -> root.get("createdAt");
+            case "created" -> root.get("createdAt");
+            default -> root.get("updatedAt");
         };
     }
 

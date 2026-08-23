@@ -1,4 +1,4 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -6,12 +6,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(prefix = "app.sales", name = "local-schedule", havingValue = "true")
-public class SalesScheduler {
+public class OrderScheduler {
 
-    private final SalesSyncService salesSyncService;
+    private final OrderSyncService orderSyncService;
 
-    public SalesScheduler(SalesSyncService salesSyncService) {
-        this.salesSyncService = salesSyncService;
+    public OrderScheduler(OrderSyncService orderSyncService) {
+        this.orderSyncService = orderSyncService;
     }
 
     @Scheduled(
@@ -19,6 +19,6 @@ public class SalesScheduler {
             fixedDelayString = "${app.sales.sync-delay-ms:300000}"
     )
     public void sync() {
-        salesSyncService.sync();
+        orderSyncService.sync();
     }
 }

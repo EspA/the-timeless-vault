@@ -1,4 +1,4 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thetimelessvault.common.Platform;
@@ -11,23 +11,27 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-public final class ChannelSaleMapper {
+public final class ChannelOrderMapper {
 
-    private static final Set<String> BRICKLINK_SKIP = Set.of("CANCELLED", "PURGED", "N/A");
-    private static final Set<String> EBAY_SKIP_PAYMENT = Set.of("FAILED", "FULLY_REFUNDED", "PENDING");
-    private static final Set<String> SHOPIFY_SKIP_FINANCIAL = Set.of("VOIDED", "REFUNDED", "EXPIRED", "PENDING");
+    private static final Set<String> BRICKLINK_SKIP = Set.of("NPB", "N/A");
+    private static final Set<String> BRICKLINK_CANCELLED = Set.of(
+            "CANCELLED", "CANCELED", "OCR", "NPX", "NRS", "NSS", "PURGED");
+    private static final Set<String> BRICKLINK_SHIPPED = Set.of("SHIPPED");
+    private static final Set<String> BRICKLINK_COMPLETED = Set.of("RECEIVED", "COMPLETED");
+    private static final Set<String> EBAY_SKIP_PAYMENT = Set.of("FAILED", "PENDING");
+    private static final Set<String> SHOPIFY_SKIP_FINANCIAL = Set.of("EXPIRED", "PENDING");
 
-    private ChannelSaleMapper() {
+    private ChannelOrderMapper() {
     }
 
-    public static List<ChannelSale> fromEbayOrders(JsonNode root) {
-        List<ChannelSale> sales = new ArrayList<>();
-        JsonNode orders = root == null ? null : root.path("orders");
-        if (orders == null || !orders.isArray()) {
-            return sales;
+    public static List<ChannelOrder> fromEbayOrders(JsonNode root) {
+        List<ChannelOrder> orders = new ArrayList<>();
+        JsonNode nodes = root == null ? null : root.path("orders");
+        if (nodes == null || !nodes.isArray()) {
+            return orders;
         }
-        for (JsonNode order : orders) {
-            if (isEbayCancelled(order) || isSkippedEbayPayment(order)) {
+        for (JsonNode order : nodes) {
+            if (isSkippedEbayPayment(order)) {
                 continue;
             }
             String orderId = text(order, "orderId");
@@ -39,6 +43,11 @@ public final class ChannelSaleMapper {
             }
             BigDecimal shipping = money(order.path("pricingSummary").path("deliveryCost"));
             BigDecimal fee = money(order.path("totalMarketplaceFee"));
+            OrderStatus status = ebayStatus(order);
+            Tracking shipment = ebayEmbeddedTracking(order);
+            if (shipment.tracking() != null && status == OrderStatus.OPEN) {
+                status = OrderStatus.SHIPPED;
+            }
             boolean first = true;
             for (JsonNode line : lines) {
                 String listingId = firstText(line, "legacyItemId", "listingId");
@@ -47,7 +56,7 @@ public final class ChannelSaleMapper {
                 }
                 String sku = firstText(line, "sku");
                 String title = firstText(line, "title");
-                sales.add(new ChannelSale(
+                orders.add(new ChannelOrder(
                         Platform.EBAY,
                         orderId,
                         firstText(line, "lineItemId"),
@@ -61,18 +70,21 @@ public final class ChannelSaleMapper {
                         soldAt,
                         orderUrl,
                         first ? shipping : BigDecimal.ZERO,
-                        first ? fee : BigDecimal.ZERO
+                        first ? fee : BigDecimal.ZERO,
+                        status,
+                        shipment.tracking(),
+                        shipment.provider()
                 ));
                 first = false;
             }
         }
-        return sales;
+        return orders;
     }
 
-    public static List<ChannelSale> fromBrickLinkOrder(JsonNode order, JsonNode items) {
-        List<ChannelSale> sales = new ArrayList<>();
+    public static List<ChannelOrder> fromBrickLinkOrder(JsonNode order, JsonNode items) {
+        List<ChannelOrder> orders = new ArrayList<>();
         if (order == null || order.isMissingNode() || isSkippedBrickLink(order)) {
-            return sales;
+            return orders;
         }
         String orderId = firstText(order, "order_id");
         if (orderId == null) {
@@ -81,17 +93,22 @@ public final class ChannelSaleMapper {
         Instant soldAt = instant(order, "date_ordered");
         String orderUrl = orderId == null ? null : "https://www.bricklink.com/orderDetail.asp?ID=" + orderId;
         BigDecimal shipping = brickLinkShipping(order);
+        OrderStatus status = brickLinkStatus(order);
+        Tracking shipment = brickLinkTracking(order);
+        if (shipment.tracking() != null && status == OrderStatus.OPEN) {
+            status = OrderStatus.SHIPPED;
+        }
         boolean first = true;
         for (JsonNode line : flattenBrickLinkItems(items)) {
             JsonNode item = line.path("item");
             String remarks = firstText(line, "remarks");
-            sales.add(new ChannelSale(
+            orders.add(new ChannelOrder(
                     Platform.BRICKLINK,
                     orderId,
                     firstNonNull(
                             firstText(line, "inventory_id"),
                             item.path("no").asText(null),
-                            String.valueOf(sales.size())
+                            String.valueOf(orders.size())
                     ),
                     remarks,
                     firstText(line, "inventory_id"),
@@ -103,26 +120,29 @@ public final class ChannelSaleMapper {
                     soldAt,
                     orderUrl,
                     first ? shipping : BigDecimal.ZERO,
-                    BigDecimal.ZERO
+                    BigDecimal.ZERO,
+                    status,
+                    shipment.tracking(),
+                    shipment.provider()
             ));
             first = false;
         }
-        return sales;
+        return orders;
     }
 
-    public static List<ChannelSale> fromShopifyOrders(JsonNode connection, String shopHost) {
-        List<ChannelSale> sales = new ArrayList<>();
+    public static List<ChannelOrder> fromShopifyOrders(JsonNode connection, String shopHost) {
+        List<ChannelOrder> orders = new ArrayList<>();
         JsonNode nodes = connection == null ? null : connection.path("nodes");
         if (nodes == null || !nodes.isArray()) {
             nodes = connection == null ? null : connection.path("edges");
         }
         if (nodes == null || !nodes.isArray()) {
-            return sales;
+            return orders;
         }
         String storeHandle = shopHandle(shopHost);
         for (JsonNode node : nodes) {
             JsonNode order = node.has("node") ? node.path("node") : node;
-            if (hasText(order, "cancelledAt") || isSkippedShopifyFinancial(order)) {
+            if (isSkippedShopifyFinancial(order)) {
                 continue;
             }
             String gid = firstText(order, "id");
@@ -139,6 +159,8 @@ public final class ChannelSaleMapper {
                     shopifyMoney(order.path("totalShippingPriceSet").path("shopMoney")),
                     shopifyMoney(order.path("currentShippingPriceSet").path("shopMoney"))
             );
+            Tracking shipment = shopifyTracking(order);
+            OrderStatus status = shopifyStatus(order, shipment);
             boolean first = true;
             for (JsonNode line : lines) {
                 String sku = firstNonNull(
@@ -146,7 +168,7 @@ public final class ChannelSaleMapper {
                         firstText(line.path("variant"), "sku")
                 );
                 String productId = firstText(line.path("product"), "id");
-                sales.add(new ChannelSale(
+                orders.add(new ChannelOrder(
                         Platform.SHOPIFY,
                         firstNonNull(gid, firstText(order, "name")),
                         firstText(line, "id"),
@@ -163,12 +185,72 @@ public final class ChannelSaleMapper {
                         soldAt,
                         orderUrl,
                         first ? shipping : BigDecimal.ZERO,
-                        BigDecimal.ZERO
+                        BigDecimal.ZERO,
+                        status,
+                        shipment.tracking(),
+                        shipment.provider()
                 ));
                 first = false;
             }
         }
-        return sales;
+        return orders;
+    }
+
+    static OrderStatus ebayStatus(JsonNode order) {
+        if (isEbayCancelled(order)) {
+            return OrderStatus.CANCELLED;
+        }
+        String payment = firstText(order, "orderPaymentStatus");
+        if (payment != null && payment.equalsIgnoreCase("FULLY_REFUNDED")) {
+            return OrderStatus.CANCELLED;
+        }
+        String fulfillment = firstText(order, "orderFulfillmentStatus");
+        if (fulfillment != null && fulfillment.equalsIgnoreCase("FULFILLED")) {
+            return OrderStatus.SHIPPED;
+        }
+        return OrderStatus.OPEN;
+    }
+
+    static OrderStatus brickLinkStatus(JsonNode order) {
+        String status = firstText(order, "status");
+        if (status == null) {
+            return OrderStatus.OPEN;
+        }
+        String upper = status.toUpperCase(Locale.ROOT);
+        if (BRICKLINK_CANCELLED.contains(upper)) {
+            return OrderStatus.CANCELLED;
+        }
+        if (BRICKLINK_COMPLETED.contains(upper)) {
+            return OrderStatus.COMPLETED;
+        }
+        if (BRICKLINK_SHIPPED.contains(upper)) {
+            return OrderStatus.SHIPPED;
+        }
+        return OrderStatus.OPEN;
+    }
+
+    static OrderStatus shopifyStatus(JsonNode order, Tracking shipment) {
+        if (hasText(order, "cancelledAt")) {
+            return OrderStatus.CANCELLED;
+        }
+        String financial = firstText(order, "displayFinancialStatus");
+        if (financial != null) {
+            String upper = financial.toUpperCase(Locale.ROOT);
+            if (upper.equals("VOIDED") || upper.equals("REFUNDED")) {
+                return OrderStatus.CANCELLED;
+            }
+        }
+        if (shopifyDelivered(order) || (shipment != null && shipment.delivered())) {
+            return OrderStatus.COMPLETED;
+        }
+        String fulfillment = firstText(order, "displayFulfillmentStatus");
+        if (fulfillment != null && fulfillment.equalsIgnoreCase("FULFILLED")) {
+            return OrderStatus.SHIPPED;
+        }
+        if (shipment != null && shipment.tracking() != null) {
+            return OrderStatus.SHIPPED;
+        }
+        return OrderStatus.OPEN;
     }
 
     static boolean isEbayCancelled(JsonNode order) {
@@ -177,6 +259,9 @@ public final class ChannelSaleMapper {
     }
 
     static boolean isSkippedEbayPayment(JsonNode order) {
+        if (isEbayCancelled(order)) {
+            return false;
+        }
         String status = firstText(order, "orderPaymentStatus");
         return status != null && EBAY_SKIP_PAYMENT.contains(status.toUpperCase(Locale.ROOT));
     }
@@ -187,8 +272,109 @@ public final class ChannelSaleMapper {
     }
 
     static boolean isSkippedShopifyFinancial(JsonNode order) {
+        if (hasText(order, "cancelledAt")) {
+            return false;
+        }
         String status = firstText(order, "displayFinancialStatus");
         return status != null && SHOPIFY_SKIP_FINANCIAL.contains(status.toUpperCase(Locale.ROOT));
+    }
+
+    static Tracking ebayEmbeddedTracking(JsonNode order) {
+        String tracking = firstText(order, "shipmentTrackingNumber", "trackingNumber");
+        String provider = firstText(order, "shippingCarrierCode", "shippingCarrier");
+        JsonNode fulfillments = order.path("fulfillments");
+        if (fulfillments.isArray()) {
+            for (JsonNode fulfillment : fulfillments) {
+                if (tracking == null) {
+                    tracking = firstText(fulfillment, "shipmentTrackingNumber", "trackingNumber");
+                }
+                if (provider == null) {
+                    provider = firstText(fulfillment, "shippingCarrierCode", "shippingCarrier");
+                }
+            }
+        }
+        return new Tracking(tracking, provider, false);
+    }
+
+    static Tracking fromEbayShippingFulfillments(JsonNode root) {
+        if (root == null) {
+            return Tracking.EMPTY;
+        }
+        JsonNode fulfillments = root.path("fulfillments");
+        if (!fulfillments.isArray()) {
+            fulfillments = root.path("shippingFulfillments");
+        }
+        String tracking = null;
+        String provider = null;
+        if (fulfillments.isArray()) {
+            for (JsonNode fulfillment : fulfillments) {
+                if (tracking == null) {
+                    tracking = firstText(fulfillment, "shipmentTrackingNumber", "trackingNumber");
+                }
+                if (provider == null) {
+                    provider = firstText(fulfillment, "shippingCarrierCode", "shippingCarrier");
+                }
+            }
+        }
+        if (tracking == null) {
+            tracking = firstText(root, "shipmentTrackingNumber", "trackingNumber");
+        }
+        if (provider == null) {
+            provider = firstText(root, "shippingCarrierCode", "shippingCarrier");
+        }
+        return new Tracking(tracking, provider, false);
+    }
+
+    static Tracking brickLinkTracking(JsonNode order) {
+        JsonNode shipping = order == null ? null : order.path("shipping");
+        return new Tracking(
+                firstText(shipping, "tracking_no", "tracking_number"),
+                null,
+                false
+        );
+    }
+
+    static Tracking shopifyTracking(JsonNode order) {
+        JsonNode fulfillments = order.path("fulfillments");
+        if (fulfillments.has("nodes")) {
+            fulfillments = fulfillments.path("nodes");
+        }
+        if (!fulfillments.isArray()) {
+            return Tracking.EMPTY;
+        }
+        String tracking = null;
+        String provider = null;
+        boolean delivered = false;
+        for (JsonNode fulfillment : fulfillments) {
+            String display = firstText(fulfillment, "displayStatus", "status");
+            if (display != null && display.equalsIgnoreCase("DELIVERED")) {
+                delivered = true;
+            }
+            if (hasText(fulfillment, "deliveredAt")) {
+                delivered = true;
+            }
+            JsonNode info = fulfillment.path("trackingInfo");
+            if (info.has("nodes")) {
+                info = info.path("nodes");
+            }
+            if (!info.isArray()) {
+                continue;
+            }
+            for (JsonNode track : info) {
+                if (tracking == null) {
+                    tracking = firstText(track, "number");
+                }
+                if (provider == null) {
+                    provider = firstText(track, "company");
+                }
+            }
+        }
+        return new Tracking(tracking, provider, delivered);
+    }
+
+    static boolean shopifyDelivered(JsonNode order) {
+        String fulfillment = firstText(order, "displayFulfillmentStatus");
+        return fulfillment != null && fulfillment.equalsIgnoreCase("DELIVERED");
     }
 
     static List<JsonNode> flattenBrickLinkItems(JsonNode items) {
@@ -209,8 +395,7 @@ public final class ChannelSaleMapper {
     }
 
     private static boolean hasText(JsonNode node, String field) {
-        String value = firstText(node, field);
-        return value != null;
+        return firstText(node, field) != null;
     }
 
     private static String firstText(JsonNode node, String... fields) {
@@ -243,8 +428,7 @@ public final class ChannelSaleMapper {
     }
 
     private static Instant instant(JsonNode node, String field) {
-        String text = text(node, field);
-        return parseInstant(text);
+        return parseInstant(text(node, field));
     }
 
     private static Instant firstInstant(JsonNode node, String... fields) {
@@ -352,5 +536,9 @@ public final class ChannelSaleMapper {
             return host.substring(0, host.length() - ".myshopify.com".length());
         }
         return host;
+    }
+
+    record Tracking(String tracking, String provider, boolean delivered) {
+        static final Tracking EMPTY = new Tracking(null, null, false);
     }
 }

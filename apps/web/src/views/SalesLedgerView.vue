@@ -16,9 +16,9 @@ const filters = ref({
   item: "",
 });
 
-const money = (value: number | null | undefined, currency = "USD") => {
+const money = (value: number | null | undefined, currency = "USD", digits = 2) => {
   if (value == null || Number.isNaN(Number(value))) return "—";
-  const amount = `$${Number(value).toFixed(2)}`;
+  const amount = `$${Number(value).toFixed(digits)}`;
   return currency && currency !== "USD" ? `${amount} ${currency}` : amount;
 };
 
@@ -378,10 +378,10 @@ onUnmounted(() => {
 
 <template>
   <div class="grid ledger-page">
-    <div class="toolbar ledger-toolbar">
-      <div>
+    <div class="page-head ledger-toolbar">
+      <div class="page-title-row">
         <h1>Sales Ledger</h1>
-        <p class="muted">{{ fetchedLabel }}</p>
+        <p class="muted page-meta">{{ fetchedLabel }}</p>
       </div>
       <div class="pager-actions">
         <label class="ledger-year">Year
@@ -403,11 +403,11 @@ onUnmounted(() => {
       </div>
       <div>
         <p class="muted">Revenue</p>
-        <p class="ledger-stat">{{ money(yearRevenue) }}</p>
+        <p class="ledger-stat">{{ money(yearRevenue, "USD", 0) }}</p>
       </div>
       <div>
         <p class="muted">Net Profit</p>
-        <p class="ledger-stat" :class="{ negative: yearProfit < 0 }">{{ money(yearProfit) }}</p>
+        <p class="ledger-stat" :class="{ negative: yearProfit < 0 }">{{ money(yearProfit, "USD", 0) }}</p>
       </div>
       <div>
         <p class="muted">Net Profit margin</p>

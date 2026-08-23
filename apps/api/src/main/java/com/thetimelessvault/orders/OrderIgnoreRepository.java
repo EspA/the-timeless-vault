@@ -1,23 +1,19 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.thetimelessvault.common.Platform;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 import java.util.UUID;
 
-public interface SaleRepository extends JpaRepository<Sale, UUID> {
-    Page<Sale> findAllByOrderBySoldAtDesc(Pageable pageable);
-
+public interface OrderIgnoreRepository extends JpaRepository<OrderIgnore, UUID> {
     boolean existsByPlatformAndExternalOrderIdAndExternalLineId(
             Platform platform,
             String externalOrderId,
             String externalLineId
     );
 
-    java.util.Optional<Sale> findByPlatformAndExternalOrderIdAndExternalLineId(
+    Optional<OrderIgnore> findByPlatformAndExternalOrderIdAndExternalLineId(
             Platform platform,
             String externalOrderId,
             String externalLineId

@@ -1,11 +1,11 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.thetimelessvault.common.Platform;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record ChannelSale(
+public record ChannelOrder(
         Platform platform,
         String orderId,
         String lineId,
@@ -19,9 +19,12 @@ public record ChannelSale(
         Instant soldAt,
         String orderUrl,
         BigDecimal shippingCost,
-        BigDecimal platformFee
+        BigDecimal platformFee,
+        OrderStatus status,
+        String trackingNumber,
+        String shippingProvider
 ) {
-    public ChannelSale {
+    public ChannelOrder {
         orderId = blankToNull(orderId);
         lineId = blankToNull(lineId);
         sku = blankToNull(sku);
@@ -35,14 +38,17 @@ public record ChannelSale(
         orderUrl = blankToNull(orderUrl);
         shippingCost = shippingCost == null ? BigDecimal.ZERO : shippingCost;
         platformFee = platformFee == null ? BigDecimal.ZERO : platformFee;
+        status = status == null ? OrderStatus.OPEN : status;
+        trackingNumber = blankToNull(trackingNumber);
+        shippingProvider = ShippingProviders.infer(trackingNumber, blankToNull(shippingProvider));
     }
 
     public String identityLineId() {
         return lineId == null || lineId.isBlank() ? "0" : lineId;
     }
 
-    public ChannelSale withPlatformFee(BigDecimal fee) {
-        return new ChannelSale(
+    public ChannelOrder withPlatformFee(BigDecimal fee) {
+        return new ChannelOrder(
                 platform,
                 orderId,
                 lineId,
@@ -56,7 +62,32 @@ public record ChannelSale(
                 soldAt,
                 orderUrl,
                 shippingCost,
-                fee
+                fee,
+                status,
+                trackingNumber,
+                shippingProvider
+        );
+    }
+
+    public ChannelOrder withFulfillment(OrderStatus nextStatus, String tracking, String provider) {
+        return new ChannelOrder(
+                platform,
+                orderId,
+                lineId,
+                sku,
+                listingExternalId,
+                title,
+                setNumber,
+                quantity,
+                unitPrice,
+                currency,
+                soldAt,
+                orderUrl,
+                shippingCost,
+                platformFee,
+                nextStatus == null ? status : nextStatus,
+                tracking == null ? trackingNumber : tracking,
+                provider == null ? shippingProvider : provider
         );
     }
 

@@ -27,7 +27,8 @@ class NotificationEmailRendererTest {
                 "EBAY",
                 "brickshop",
                 "Feedback 1,842 / 99.8%",
-                SCANNED
+                SCANNED,
+                null
         );
 
         String html = NotificationEmailRenderer.html(email);
@@ -69,7 +70,8 @@ class NotificationEmailRendererTest {
                 "BRICKLINK",
                 "kaden50",
                 "Country United Kingdom",
-                SCANNED
+                SCANNED,
+                null
         );
 
         String html = NotificationEmailRenderer.html(email);
@@ -101,7 +103,8 @@ class NotificationEmailRendererTest {
                 "EBAY",
                 "ignored-seller",
                 "Feedback 99 / 100%",
-                SCANNED
+                SCANNED,
+                null
         );
 
         String html = NotificationEmailRenderer.html(email);
@@ -143,9 +146,41 @@ class NotificationEmailRendererTest {
                 null,
                 null,
                 null,
-                SCANNED
+                SCANNED,
+                null
         );
         assertTrue(NotificationEmailRenderer.html(email).contains("Foo &lt;script&gt;"));
         assertFalse(NotificationEmailRenderer.html(email).contains("Foo <script>"));
+    }
+
+    @Test
+    void scanFailureIncludesReasonAndMarketLink() {
+        NotificationEmail email = new NotificationEmail(
+                BuyingOpportunity.TYPE_SCAN_FAILED,
+                "75017-1",
+                "Duel on Geonosis",
+                null,
+                null,
+                null,
+                "https://admin.thetimelessvault.com/market/abc",
+                null,
+                "EBAY",
+                null,
+                null,
+                SCANNED,
+                "eBay search failed."
+        );
+
+        String html = NotificationEmailRenderer.html(email);
+        assertTrue(html.contains("SCAN FAILED"));
+        assertTrue(html.contains("eBay search failed."));
+        assertTrue(html.contains("Open market"));
+        assertTrue(html.contains("https://admin.thetimelessvault.com/market/abc"));
+        assertEquals(
+                "[The Timeless Vault] SCAN FAILED · eBay · 75017-1 / Duel on Geonosis",
+                NotificationEmailRenderer.subject(email)
+        );
+        assertTrue(NotificationEmailRenderer.text(email).contains("eBay search failed."));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Open market:"));
     }
 }

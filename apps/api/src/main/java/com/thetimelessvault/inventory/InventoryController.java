@@ -51,6 +51,7 @@ public class InventoryController {
             @RequestParam(required = false) String set,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String created,
+            @RequestParam(required = false) String updated,
             @RequestParam(required = false) String ebayPrice,
             @RequestParam(required = false) String bricklinkPrice,
             @RequestParam(required = false) String shopifyPrice,
@@ -61,11 +62,11 @@ public class InventoryController {
             @RequestParam(required = false) String shopify,
             @RequestParam(required = false) String bricklink,
             @RequestParam(required = false) String ebay,
-            @RequestParam(defaultValue = "created") String sort,
+            @RequestParam(defaultValue = "updated") String sort,
             @RequestParam(defaultValue = "desc") String dir
     ) {
         var result = inventoryService.list(page, size, new InventorySpecifications.Query(
-                q, sku, set, title, created, ebayPrice, bricklinkPrice, shopifyPrice, cost,
+                q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, cost,
                 stockStatus, quantity, condition, shopify, bricklink, ebay, sort, dir
         ));
         return new InventoryDtos.InventoryPage(

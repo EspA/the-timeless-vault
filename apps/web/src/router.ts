@@ -7,7 +7,8 @@ import MarketView from "./views/MarketView.vue";
 import NotificationsView from "./views/NotificationsView.vue";
 import ScanLogsView from "./views/ScanLogsView.vue";
 import ListingLogsView from "./views/ListingLogsView.vue";
-import SalesView from "./views/SalesView.vue";
+import OrdersView from "./views/OrdersView.vue";
+import OrderDetail from "./views/OrderDetail.vue";
 import SalesLedgerView from "./views/SalesLedgerView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import LoginView from "./views/LoginView.vue";
@@ -21,7 +22,9 @@ export const router = createRouter({
     { path: "/inventory/new", redirect: "/inventory" },
     { path: "/inventory/:id", component: ItemDetail },
     { path: "/listing-logs", component: ListingLogsView },
-    { path: "/sales", component: SalesView },
+    { path: "/orders", component: OrdersView },
+    { path: "/orders/:id", component: OrderDetail },
+    { path: "/sales", redirect: "/orders" },
     { path: "/sales-ledger", component: SalesLedgerView },
     { path: "/watches", component: WatchList },
     { path: "/watches/new", redirect: "/watches" },

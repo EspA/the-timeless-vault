@@ -4,7 +4,7 @@ import com.thetimelessvault.bricklink.BrickLinkListingImportService;
 import com.thetimelessvault.ebay.EbayListingImportService;
 import com.thetimelessvault.inventory.DescriptionBackfillService;
 import com.thetimelessvault.inventory.PriceBackfillService;
-import com.thetimelessvault.sales.SalesSyncService;
+import com.thetimelessvault.orders.OrderSyncService;
 import com.thetimelessvault.shopify.ShopifyListingImportService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,7 +18,7 @@ import java.util.Map;
 public class InternalJobController {
 
     private final MarketScanService marketScanService;
-    private final SalesSyncService salesSyncService;
+    private final OrderSyncService orderSyncService;
     private final EbayListingImportService ebayListingImport;
     private final BrickLinkListingImportService brickLinkListingImport;
     private final ShopifyListingImportService shopifyListingImport;
@@ -27,7 +27,7 @@ public class InternalJobController {
 
     public InternalJobController(
             MarketScanService marketScanService,
-            SalesSyncService salesSyncService,
+            OrderSyncService orderSyncService,
             EbayListingImportService ebayListingImport,
             BrickLinkListingImportService brickLinkListingImport,
             ShopifyListingImportService shopifyListingImport,
@@ -35,7 +35,7 @@ public class InternalJobController {
             PriceBackfillService priceBackfill
     ) {
         this.marketScanService = marketScanService;
-        this.salesSyncService = salesSyncService;
+        this.orderSyncService = orderSyncService;
         this.ebayListingImport = ebayListingImport;
         this.brickLinkListingImport = brickLinkListingImport;
         this.shopifyListingImport = shopifyListingImport;
@@ -51,7 +51,7 @@ public class InternalJobController {
 
     @PostMapping("/sales-sync")
     public Map<String, Object> salesSync() {
-        return salesSyncService.sync();
+        return orderSyncService.sync();
     }
 
     @PostMapping("/ebay-listing-import")

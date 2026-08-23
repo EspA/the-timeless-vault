@@ -21,6 +21,8 @@ public class SpaController {
             "/buying-opportunities",
             "/listing-logs",
             "/sales",
+            "/orders",
+            "/orders/**",
             "/sales-ledger",
             "/settings"
     })

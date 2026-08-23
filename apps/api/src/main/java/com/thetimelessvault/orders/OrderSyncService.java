@@ -1,7 +1,10 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
@@ -12,42 +15,51 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
-public class SalesSyncService {
+public class OrderSyncService {
 
     static final String LAST_SYNC_KEY = "sales.last_sync_at";
     static final String LAST_EBAY_KEY = "sales.last_sync.ebay";
     static final String LAST_BRICKLINK_KEY = "sales.last_sync.bricklink";
     static final String LAST_SHOPIFY_KEY = "sales.last_sync.shopify";
 
-    private static final Logger log = LoggerFactory.getLogger(SalesSyncService.class);
+    private static final Logger log = LoggerFactory.getLogger(OrderSyncService.class);
     private static final Duration LOOKBACK = Duration.ofDays(1);
     private static final Duration OVERLAP = Duration.ofHours(2);
 
-    private final SalesService salesService;
+    private final OrderService orderService;
+    private final OrderRepository orders;
     private final AppSettingRepository settings;
     private final EbayClient ebayClient;
     private final BrickLinkClient brickLinkClient;
     private final ShopifyClient shopifyClient;
+    private final ObjectMapper mapper;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public SalesSyncService(
-            SalesService salesService,
+    public OrderSyncService(
+            OrderService orderService,
+            OrderRepository orders,
             AppSettingRepository settings,
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
-            ShopifyClient shopifyClient
+            ShopifyClient shopifyClient,
+            ObjectMapper mapper
     ) {
-        this.salesService = salesService;
+        this.orderService = orderService;
+        this.orders = orders;
         this.settings = settings;
         this.ebayClient = ebayClient;
         this.brickLinkClient = brickLinkClient;
         this.shopifyClient = shopifyClient;
+        this.mapper = mapper;
     }
 
     public Map<String, Object> sync() {
@@ -71,24 +83,32 @@ public class SalesSyncService {
 
     int syncEbay() {
         if (!ebayClient.sellReady()) {
-            log.info("Skipping eBay sales sync; sell API is not ready");
+            log.info("Skipping eBay order sync; sell API is not ready");
             return 0;
         }
         Instant since = since(LAST_EBAY_KEY);
         try {
-            int imported = importAll(ChannelSaleMapper.fromEbayOrders(ebayClient.getFulfillmentOrders(since)));
-            log.info("eBay sales sync imported {}", imported);
+            List<ChannelOrder> listed = ChannelOrderMapper.fromEbayOrders(ebayClient.getFulfillmentOrders(since));
+            Set<String> seen = new LinkedHashSet<>();
+            listed.forEach(line -> {
+                if (line.orderId() != null) {
+                    seen.add(line.orderId());
+                }
+            });
+            int imported = importAll(enrichEbayTracking(listed));
+            imported += refreshKnownEbayOrders(seen);
+            log.info("eBay order sync imported {}", imported);
             saveSetting(LAST_EBAY_KEY, Instant.now().toString());
             return imported;
         } catch (Exception e) {
-            log.warn("eBay sales sync failed: {}", e.getMessage());
+            log.warn("eBay order sync failed: {}", e.getMessage());
             return 0;
         }
     }
 
     int syncBrickLink() {
         if (!brickLinkClient.configured()) {
-            log.info("Skipping BrickLink sales sync; API is not configured");
+            log.info("Skipping BrickLink order sync; API is not configured");
             return 0;
         }
         Instant since = since(LAST_BRICKLINK_KEY);
@@ -100,19 +120,19 @@ public class SalesSyncService {
             int imported = 0;
             imported += importBrickLinkOrders(unfiled, null);
             imported += importBrickLinkOrders(filed, since);
-            log.info("BrickLink sales sync: {} unfiled, {} filed since {}, imported {}",
+            log.info("BrickLink order sync: {} unfiled, {} filed since {}, imported {}",
                     unfiledCount, filedCount, since, imported);
             saveSetting(LAST_BRICKLINK_KEY, Instant.now().toString());
             return imported;
         } catch (Exception e) {
-            log.warn("BrickLink sales sync failed: {}", e.getMessage());
+            log.warn("BrickLink order sync failed: {}", e.getMessage());
             return 0;
         }
     }
 
     int syncShopify() {
         if (!shopifyClient.configured()) {
-            log.info("Skipping Shopify sales sync; API is not configured");
+            log.info("Skipping Shopify order sync; API is not configured");
             return 0;
         }
         shopifyClient.refreshOrdersAccess();
@@ -122,7 +142,7 @@ public class SalesSyncService {
             String cursor = null;
             for (int page = 0; page < 20; page++) {
                 JsonNode payload = shopifyClient.listOrdersSince(since, cursor);
-                imported += importAll(ChannelSaleMapper.fromShopifyOrders(
+                imported += importAll(ChannelOrderMapper.fromShopifyOrders(
                         payload.path("orders"), shopifyClient.shopHost()));
                 JsonNode pageInfo = payload.path("orders").path("pageInfo");
                 if (!pageInfo.path("hasNextPage").asBoolean(false)) {
@@ -136,7 +156,7 @@ public class SalesSyncService {
             saveSetting(LAST_SHOPIFY_KEY, Instant.now().toString());
             return imported;
         } catch (Exception e) {
-            log.warn("Shopify sales sync failed: {}", e.getMessage());
+            log.warn("Shopify order sync failed: {}", e.getMessage());
             return 0;
         }
     }
@@ -172,9 +192,9 @@ public class SalesSyncService {
                     log.info("BrickLink order {} detail failed: {}", orderId, e.getMessage());
                 }
                 JsonNode items = brickLinkClient.getOrderItems(orderId);
-                List<ChannelSale> lines = ChannelSaleMapper.fromBrickLinkOrder(detail, items);
+                List<ChannelOrder> lines = ChannelOrderMapper.fromBrickLinkOrder(detail, items);
                 if (lines.isEmpty()) {
-                    log.info("BrickLink order {} produced no sale lines (status={}, items={})",
+                    log.info("BrickLink order {} produced no order lines (status={}, items={})",
                             orderId,
                             order.path("status").asText(""),
                             trimJson(items));
@@ -182,6 +202,61 @@ public class SalesSyncService {
                 imported += importAll(lines);
             } catch (Exception e) {
                 log.warn("BrickLink order {} items failed: {}", orderId, e.getMessage());
+            }
+        }
+        return imported;
+    }
+
+    private List<ChannelOrder> enrichEbayTracking(List<ChannelOrder> incoming) {
+        Map<String, ChannelOrderMapper.Tracking> byOrder = new LinkedHashMap<>();
+        List<ChannelOrder> enriched = new ArrayList<>();
+        for (ChannelOrder line : incoming) {
+            if (line.status() == OrderStatus.CANCELLED || line.orderId() == null) {
+                enriched.add(line);
+                continue;
+            }
+            if (line.trackingNumber() != null) {
+                enriched.add(line);
+                continue;
+            }
+            ChannelOrderMapper.Tracking shipment = byOrder.computeIfAbsent(line.orderId(), id -> {
+                try {
+                    return ChannelOrderMapper.fromEbayShippingFulfillments(ebayClient.getShippingFulfillments(id));
+                } catch (Exception e) {
+                    log.info("eBay shipping fulfillment {} failed: {}", id, e.getMessage());
+                    return ChannelOrderMapper.Tracking.EMPTY;
+                }
+            });
+            if (shipment.tracking() == null) {
+                enriched.add(line);
+                continue;
+            }
+            OrderStatus status = line.status() == OrderStatus.OPEN ? OrderStatus.SHIPPED : line.status();
+            enriched.add(line.withFulfillment(status, shipment.tracking(), shipment.provider()));
+        }
+        return enriched;
+    }
+
+    private int refreshKnownEbayOrders(Set<String> alreadySeen) {
+        Set<String> ids = new LinkedHashSet<>();
+        orders.findByPlatformAndStatusSource(Platform.EBAY, OrderStatusSource.MIGRATION)
+                .forEach(order -> ids.add(order.getExternalOrderId()));
+        orders.findByPlatformAndStatusIn(Platform.EBAY, List.of(OrderStatus.OPEN, OrderStatus.SHIPPED))
+                .forEach(order -> ids.add(order.getExternalOrderId()));
+        ids.removeAll(alreadySeen);
+        ids.remove(null);
+        int imported = 0;
+        for (String orderId : ids) {
+            try {
+                JsonNode detail = ebayClient.getFulfillmentOrder(orderId);
+                if (detail == null || detail.isMissingNode() || detail.path("orderId").asText("").isBlank()) {
+                    continue;
+                }
+                ObjectNode root = mapper.createObjectNode();
+                root.putArray("orders").add(detail);
+                imported += importAll(enrichEbayTracking(ChannelOrderMapper.fromEbayOrders(root)));
+            } catch (Exception e) {
+                log.info("eBay refresh {} failed: {}", orderId, e.getMessage());
             }
         }
         return imported;
@@ -209,10 +284,10 @@ public class SalesSyncService {
         return text.length() <= 500 ? text : text.substring(0, 500) + "…";
     }
 
-    private int importAll(List<ChannelSale> incoming) {
+    private int importAll(List<ChannelOrder> incoming) {
         int imported = 0;
-        for (ChannelSale sale : incoming) {
-            if (salesService.importSale(sale)) {
+        for (ChannelOrder order : incoming) {
+            if (orderService.importOrder(order)) {
                 imported++;
             }
         }
@@ -222,7 +297,7 @@ public class SalesSyncService {
     private Instant since(String key) {
         return settings.findById(key)
                 .map(AppSetting::getValue)
-                .map(SalesSyncService::tryParseInstant)
+                .map(OrderSyncService::tryParseInstant)
                 .map(at -> at.minus(OVERLAP))
                 .orElse(Instant.now().minus(LOOKBACK));
     }

@@ -301,21 +301,32 @@ public class PublishService {
     }
 
     @Transactional
-    public void deactivatePublishedListings(UUID itemId) {
+    public List<ChannelListing> setPublishedListingsStatus(UUID itemId, String status) {
+        String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
+            throw ApiException.badRequest("Listing status must be Unlisted or Active");
+        }
         List<String> errors = new ArrayList<>();
         for (ChannelListing listing : listings.findByInventoryItemId(itemId)) {
-            if (!needsDeactivation(listing)) {
+            if (!canChangeVisibility(listing) || normalized.equals(visibilityStatus(listing))) {
                 continue;
             }
             try {
-                unlistRemotely(itemId, listing.getPlatform());
+                applyVisibility(itemId, listing.getPlatform(), normalized);
             } catch (RuntimeException e) {
                 errors.add(platformName(listing.getPlatform()) + ": " + e.getMessage());
             }
         }
         if (!errors.isEmpty()) {
-            throw ApiException.badRequest("Could not deactivate all listings. " + String.join(" ", errors));
+            String verb = normalized.equals("ACTIVE") ? "activate" : "deactivate";
+            throw ApiException.badRequest("Could not " + verb + " all listings. " + String.join(" ", errors));
         }
+        return listingsFor(itemId);
+    }
+
+    @Transactional
+    public void deactivatePublishedListings(UUID itemId) {
+        setPublishedListingsStatus(itemId, "UNLISTED");
     }
 
     @Transactional
@@ -342,14 +353,18 @@ public class PublishService {
         }
     }
 
-    private void unlistRemotely(UUID itemId, Platform platform) {
+    private void applyVisibility(UUID itemId, Platform platform, String status) {
         switch (platform) {
-            case SHOPIFY -> setShopifyStatus(itemId, "UNLISTED");
-            case BRICKLINK -> setBricklinkStatus(itemId, "UNLISTED");
-            case EBAY -> setEbayStatus(itemId, "UNLISTED");
+            case SHOPIFY -> setShopifyStatus(itemId, status);
+            case BRICKLINK -> setBricklinkStatus(itemId, status);
+            case EBAY -> setEbayStatus(itemId, status);
             case LOCAL -> {
             }
         }
+    }
+
+    private void unlistRemotely(UUID itemId, Platform platform) {
+        applyVisibility(itemId, platform, "UNLISTED");
     }
 
     private void markUnlistedLocally(ChannelListing listing, InventoryItem item, String message) {
@@ -358,16 +373,14 @@ public class PublishService {
         listingLogs.record(item, listing.getPlatform(), ListingAction.DEACTIVATE, ListingLogStatus.SUCCESS, message);
     }
 
-    private static boolean needsDeactivation(ChannelListing listing) {
-        if (!listing.getPlatform().isListingChannel()) {
-            return false;
-        }
-        if (listing.getStatus() != ListingStatus.PUBLISHED) {
-            return false;
-        }
-        if (listing.getExternalId() == null || listing.getExternalId().isBlank()) {
-            return false;
-        }
+    private static boolean canChangeVisibility(ChannelListing listing) {
+        return listing.getPlatform().isListingChannel()
+                && listing.getStatus() == ListingStatus.PUBLISHED
+                && listing.getExternalId() != null
+                && !listing.getExternalId().isBlank();
+    }
+
+    private static String visibilityStatus(ChannelListing listing) {
         String visibility = switch (listing.getPlatform()) {
             case SHOPIFY -> listing.getShopifyStatus();
             case BRICKLINK -> listing.getBricklinkStatus();
@@ -378,9 +391,13 @@ public class PublishService {
                 && (visibility == null || visibility.isBlank())
                 && listing.getLiveUrl() != null
                 && !listing.getLiveUrl().isBlank()) {
-            visibility = "ACTIVE";
+            return "ACTIVE";
         }
-        return !"UNLISTED".equalsIgnoreCase(visibility);
+        return visibility == null ? "" : visibility.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean needsDeactivation(ChannelListing listing) {
+        return canChangeVisibility(listing) && !"UNLISTED".equals(visibilityStatus(listing));
     }
 
     private static String platformName(Platform platform) {

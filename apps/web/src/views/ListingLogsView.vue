@@ -143,7 +143,7 @@ onUnmounted(() => {
 
 <template>
   <div class="grid">
-    <div>
+    <div class="page-head">
       <h1>Listing logs</h1>
     </div>
     <p v-if="error" class="error">{{ error }}</p>

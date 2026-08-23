@@ -283,7 +283,9 @@ const onThemeToggle = (event: Event) => {
 
 <template>
   <div class="grid">
-    <h1>Settings</h1>
+    <div class="page-head">
+      <h1>Settings</h1>
+    </div>
     <p class="muted">Credentials live in environment variables / Secret Manager. This page only shows connection health.</p>
     <div class="card appearance-row">
       <div class="appearance-copy">

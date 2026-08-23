@@ -25,6 +25,10 @@ export function applyTheme(next: Theme) {
   }
 }
 
+export function toggleTheme() {
+  applyTheme(theme.value === "dark" ? "light" : "dark");
+}
+
 export function initTheme() {
   applyTheme(readTheme());
 }

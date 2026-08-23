@@ -89,29 +89,43 @@ public class MarketScanService {
     }
 
     public void scanDueWatches() {
-        Instant now = Instant.now();
-        boolean ebayReady = ebayClient.browseConfigured();
-        MarketScanService scans = scanner();
-        for (SetWatch watch : setWatches.findEnabledWithCatalog()) {
-            UUID catalogId = watch.getCatalogItem().getId();
-            if (ebayReady && watch.isEbayDue(now)) {
-                try {
-                    scans.scan(catalogId, Platform.EBAY, ScanTrigger.AUTOMATIC);
-                } catch (Exception e) {
-                    log.warn("eBay market scan failed for {}", watch.getSetNumber(), e);
-                    recordFailedPlatformScan(watch, Platform.EBAY);
+        try {
+            Instant now = Instant.now();
+            boolean ebayReady = ebayClient.browseConfigured();
+            MarketScanService scans = scanner();
+            for (SetWatch watch : setWatches.findEnabledWithCatalog()) {
+                UUID catalogId = watch.getCatalogItem().getId();
+                if (ebayReady && watch.isEbayDue(now)) {
+                    try {
+                        scans.scan(catalogId, Platform.EBAY, ScanTrigger.AUTOMATIC);
+                    } catch (Exception e) {
+                        log.warn("eBay market scan failed for {}", watch.getSetNumber(), e);
+                        recordFailedPlatformScan(watch, Platform.EBAY);
+                        opportunities.recordScanFailure(
+                                watch.getCatalogItem(), Platform.EBAY, e.getMessage(), ScanTrigger.AUTOMATIC);
+                    }
+                }
+                if (watch.isBrickLinkDue(now)) {
+                    try {
+                        scans.scan(catalogId, Platform.BRICKLINK, ScanTrigger.AUTOMATIC);
+                    } catch (Exception e) {
+                        log.warn("BrickLink market scan failed for {}", watch.getSetNumber(), e);
+                        recordFailedPlatformScan(watch, Platform.BRICKLINK);
+                        opportunities.recordScanFailure(
+                                watch.getCatalogItem(), Platform.BRICKLINK, e.getMessage(), ScanTrigger.AUTOMATIC);
+                    }
                 }
             }
-            if (watch.isBrickLinkDue(now)) {
-                try {
-                    scans.scan(catalogId, Platform.BRICKLINK, ScanTrigger.AUTOMATIC);
-                } catch (Exception e) {
-                    log.warn("BrickLink market scan failed for {}", watch.getSetNumber(), e);
-                    recordFailedPlatformScan(watch, Platform.BRICKLINK);
-                }
+            evaluatePriceGuards();
+        } catch (Exception e) {
+            log.error("Automatic market scan job failed", e);
+            try {
+                opportunities.recordScanFailure(null, null, e.getMessage(), ScanTrigger.AUTOMATIC);
+            } catch (Exception notifyError) {
+                log.warn("Could not record automatic scan failure notification", notifyError);
             }
+            throw e;
         }
-        evaluatePriceGuards();
     }
 
     private MarketScanService scanner() {
@@ -159,8 +173,11 @@ public class MarketScanService {
                 result.listingCount(),
                 result.message()
         ));
-        if (result.failed() && watch != null) {
-            recordFailedPlatformScan(watch, platform);
+        if (result.failed()) {
+            if (watch != null) {
+                recordFailedPlatformScan(watch, platform);
+            }
+            opportunities.recordScanFailure(catalog, platform, result.message(), trigger);
         }
         return dashboard(catalogId, ebayError, bricklinkError);
     }

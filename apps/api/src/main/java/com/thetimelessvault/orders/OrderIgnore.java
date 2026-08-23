@@ -1,4 +1,4 @@
-package com.thetimelessvault.sales;
+package com.thetimelessvault.orders;
 
 import com.thetimelessvault.common.Platform;
 import jakarta.persistence.Column;
@@ -12,8 +12,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "sale_ignore")
-public class SaleIgnore {
+@Table(name = "order_ignore")
+public class OrderIgnore {
 
     @Id
     private UUID id;
@@ -31,8 +31,8 @@ public class SaleIgnore {
     @Column(name = "ignored_at", nullable = false)
     private Instant ignoredAt;
 
-    public static SaleIgnore of(Platform platform, String externalOrderId, String externalLineId) {
-        SaleIgnore ignore = new SaleIgnore();
+    public static OrderIgnore of(Platform platform, String externalOrderId, String externalLineId) {
+        OrderIgnore ignore = new OrderIgnore();
         ignore.id = UUID.randomUUID();
         ignore.platform = platform;
         ignore.externalOrderId = externalOrderId;

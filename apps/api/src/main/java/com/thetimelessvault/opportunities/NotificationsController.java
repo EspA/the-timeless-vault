@@ -34,19 +34,23 @@ public class NotificationsController {
             boolean read,
             boolean emailed
     ) {
-        static BuyingOpportunityView from(BuyingOpportunity opportunity) {
+        static BuyingOpportunityView from(BuyingOpportunity opportunity, String url) {
             return new BuyingOpportunityView(
                     opportunity.getId(),
                     opportunity.getType(),
                     opportunity.getPlatform(),
                     opportunity.getTitle(),
                     opportunity.getBody(),
-                    opportunity.getUrl(),
+                    url,
                     opportunity.getCreatedAt(),
                     opportunity.getReadAt() != null,
                     opportunity.getEmailedAt() != null
             );
         }
+    }
+
+    private BuyingOpportunityView view(BuyingOpportunity opportunity) {
+        return BuyingOpportunityView.from(opportunity, opportunities.displayUrl(opportunity));
     }
 
     public record NotificationsPageView(
@@ -65,7 +69,7 @@ public class NotificationsController {
     ) {
         var result = opportunities.list(page, size);
         return new NotificationsPageView(
-                result.getContent().stream().map(BuyingOpportunityView::from).toList(),
+                result.getContent().stream().map(this::view).toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
@@ -80,7 +84,12 @@ public class NotificationsController {
 
     @PostMapping("/{id}/read")
     public BuyingOpportunityView read(@PathVariable UUID id) {
-        return BuyingOpportunityView.from(opportunities.markRead(id));
+        return view(opportunities.markRead(id));
+    }
+
+    @PostMapping("/{id}/unread")
+    public BuyingOpportunityView unread(@PathVariable UUID id) {
+        return view(opportunities.markUnread(id));
     }
 
     @PostMapping("/read-all")

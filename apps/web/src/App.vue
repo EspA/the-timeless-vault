@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import ConfirmModal from "./components/ConfirmModal.vue";
 import ChannelLogo from "./components/ChannelLogo.vue";
 import LoginGate from "./components/LoginGate.vue";
+import ThemeToggle from "./components/ThemeToggle.vue";
 import { api } from "./api";
 
 const route = useRoute();
@@ -76,19 +77,22 @@ onUnmounted(() => {
         <img class="brand-logo" src="/logos/ttl-logo.png" alt="" />
       </router-link>
       <p class="brand-mark">The Timeless Vault</p>
-      <router-link
-        to="/notifications"
-        class="mobile-notify"
-        :aria-label="unread ? `${unread} unread notifications` : 'Notifications'"
-      >
-        <svg class="mobile-notify-bell" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M12 2a6 6 0 0 0-6 6v3.1c0 .7-.2 1.3-.6 1.9L4 15.6c-.5.7 0 1.7.9 1.7h14.2c.9 0 1.4-1 .9-1.7l-1.4-2.6c-.4-.6-.6-1.2-.6-1.9V8a6 6 0 0 0-6-6Zm0 20a2.8 2.8 0 0 0 2.7-2H9.3A2.8 2.8 0 0 0 12 22Z"
-          />
-        </svg>
-        <span v-if="unread" class="mobile-notify-count">{{ unread }}</span>
-      </router-link>
+      <div class="mobile-bar-actions">
+        <ThemeToggle compact />
+        <router-link
+          to="/notifications"
+          class="mobile-notify"
+          :aria-label="unread ? `${unread} unread notifications` : 'Notifications'"
+        >
+          <svg class="mobile-notify-bell" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 2a6 6 0 0 0-6 6v3.1c0 .7-.2 1.3-.6 1.9L4 15.6c-.5.7 0 1.7.9 1.7h14.2c.9 0 1.4-1 .9-1.7l-1.4-2.6c-.4-.6-.6-1.2-.6-1.9V8a6 6 0 0 0-6-6Zm0 20a2.8 2.8 0 0 0 2.7-2H9.3A2.8 2.8 0 0 0 12 22Z"
+            />
+          </svg>
+          <span v-if="unread" class="mobile-notify-count">{{ unread }}</span>
+        </router-link>
+      </div>
     </header>
     <button
       v-if="navOpen"
@@ -122,8 +126,8 @@ onUnmounted(() => {
           <router-link to="/listing-logs">Listing logs</router-link>
         </div>
         <div class="nav-group">
-          <p class="nav-label">Last Sales</p>
-          <router-link to="/sales">Last Sales</router-link>
+          <p class="nav-label">Orders</p>
+          <router-link to="/orders">Orders</router-link>
           <router-link to="/sales-ledger">Sales Ledger</router-link>
         </div>
         <div class="nav-group">
@@ -161,6 +165,7 @@ onUnmounted(() => {
         </div>
         <div class="nav-group">
           <router-link to="/settings">Settings</router-link>
+          <ThemeToggle />
         </div>
       </nav>
     </aside>

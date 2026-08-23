@@ -449,6 +449,19 @@ const runRetry = async (platform: string, bypassEbayCatalog = false) => {
   }
 };
 
+const listingVisibility = (listing: ChannelListing) => {
+  if (listing.platform === "SHOPIFY") return listing.shopifyStatus;
+  if (listing.platform === "BRICKLINK") return listing.bricklinkStatus;
+  if (listing.platform === "EBAY") {
+    if (listing.ebayStatus) return listing.ebayStatus;
+    return listing.liveUrl ? "ACTIVE" : "";
+  }
+  return "";
+};
+
+const canToggleListing = (listing: ChannelListing) =>
+  listing.status === "PUBLISHED" && !!listing.externalId && ["SHOPIFY", "BRICKLINK", "EBAY"].includes(listing.platform);
+
 const canToggleShopify = (listing: ChannelListing) =>
   listing.platform === "SHOPIFY" && listing.status === "PUBLISHED" && !!listing.externalId;
 
@@ -471,6 +484,14 @@ const canRetry = (listing: ChannelListing) => listing.status === "FAILED";
 
 const canUpdateListing = (listing: ChannelListing) =>
   listing.status === "PUBLISHED" && !!listing.externalId;
+
+const activatableListings = computed(() =>
+  listings.value.filter((listing) => canToggleListing(listing) && listingVisibility(listing) !== "ACTIVE")
+);
+
+const deactivatableListings = computed(() =>
+  listings.value.filter((listing) => canToggleListing(listing) && listingVisibility(listing) === "ACTIVE")
+);
 
 const updatableListings = computed(() => listings.value.filter(canUpdateListing));
 
@@ -568,6 +589,19 @@ const updateListings = async (targets: ChannelListing[]) => {
   } finally {
     publishing.value = false;
   }
+};
+
+const setAllListingStatus = async (status: "ACTIVE" | "UNLISTED") => {
+  if (!item.value || publishing.value) return;
+  const targets = status === "ACTIVE" ? activatableListings.value : deactivatableListings.value;
+  if (!targets.length) return;
+  const action = status === "ACTIVE" ? "Activate" : "Deactivate";
+  const names = targets.map((listing) => platformLabel(listing.platform));
+  await runChannelAction(`${action} ${joinAnd(names)}…`, async () => {
+    logLine(`Calling ${names.join(", ")}…`);
+    await api.put(`/api/inventory/${item.value!.id}/listings/status`, { status });
+    logLine(`Listings are now ${visibilityStatusLabel(status).toLowerCase()}.`, "ok");
+  });
 };
 
 const toggleShopify = async (listing: ChannelListing) => {
@@ -876,6 +910,22 @@ const remove = async () => {
         </button>
         <button class="btn secondary" type="button" :disabled="publishing || linking" @click="openLinkListing">
           Link existing listing
+        </button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="publishing || !activatableListings.length"
+          @click="setAllListingStatus('ACTIVE')"
+        >
+          Activate all
+        </button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="publishing || !deactivatableListings.length"
+          @click="setAllListingStatus('UNLISTED')"
+        >
+          Deactivate all
         </button>
       </div>
       <table>
