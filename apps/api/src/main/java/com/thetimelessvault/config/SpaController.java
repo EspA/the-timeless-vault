@@ -24,6 +24,8 @@ public class SpaController {
             "/orders",
             "/orders/**",
             "/sales-ledger",
+            "/notifications",
+            "/notifications/**",
             "/settings"
     })
     public String spa() {

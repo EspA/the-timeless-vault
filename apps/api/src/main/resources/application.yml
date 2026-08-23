@@ -15,6 +15,11 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    timeout: 7d
   servlet:
     multipart:
       max-file-size: 15MB
@@ -36,7 +41,10 @@ server:
   port: ${PORT:8080}
   servlet:
     session:
-      timeout: 1h
+      timeout: 7d
+      cookie:
+        http-only: true
+        same-site: lax
   error:
     include-message: always
 

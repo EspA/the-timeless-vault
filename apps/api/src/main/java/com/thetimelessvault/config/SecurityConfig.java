@@ -67,31 +67,15 @@ public class SecurityConfig {
                                 "/oauth2/**",
                                 "/api/auth/status",
                                 "/internal/jobs/**",
-                                "/",
+                                "/webhooks/ebay/**",
                                 "/index.html",
                                 "/assets/**",
                                 "/favicon.ico",
                                 "/email/**",
-                                "/logos/**",
-                                "/inventory",
-                                "/inventory/**",
-                                "/watches",
-                                "/watches/**",
-                                "/market",
-                                "/market/**",
-                                "/scans",
-                                "/scan-logs",
-                                "/alerts",
-                                "/buying-opportunities",
-                        "/listing-logs",
-                        "/sales",
-                        "/orders",
-                        "/orders/**",
-                        "/sales-ledger",
-                        "/settings",
-                        "/webhooks/ebay/**"
+                                "/logos/**"
                         ).permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
