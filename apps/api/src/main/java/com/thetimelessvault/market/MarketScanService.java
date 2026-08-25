@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,6 +44,7 @@ import java.util.UUID;
 public class MarketScanService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketScanService.class);
+    static final Duration SCAN_LOG_RETENTION = Duration.ofDays(7);
 
     private final SetWatchRepository setWatches;
     private final CatalogItemRepository catalogItems;
@@ -203,6 +205,14 @@ public class MarketScanService {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
         return scanLogs.findAllByOrderByScannedAtDesc(PageRequest.of(pageIndex, pageSize));
+    }
+
+    @Transactional
+    public long purgeOldScanLogs() {
+        Instant cutoff = Instant.now().minus(SCAN_LOG_RETENTION);
+        long deleted = scanLogs.deleteByScannedAtBefore(cutoff);
+        log.info("Purged {} scan log entries older than {}", deleted, cutoff);
+        return deleted;
     }
 
     public MarketDashboard dashboard(UUID catalogId) {

@@ -164,7 +164,9 @@ onUnmounted(() => {
           </a>
         </div>
         <div class="nav-group">
-          <router-link to="/settings">Settings</router-link>
+          <p class="nav-label">Settings</p>
+          <router-link to="/settings" active-class="" exact-active-class="router-link-active">Settings</router-link>
+          <router-link to="/settings/statistics">Statistics</router-link>
           <ThemeToggle />
         </div>
       </nav>

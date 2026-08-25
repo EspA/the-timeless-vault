@@ -9,6 +9,7 @@ import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryDtos;
 import com.thetimelessvault.inventory.InventoryItem;
+import com.thetimelessvault.settings.ApiCallStatsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,7 @@ public class BrickLinkClient {
     private final ObjectMapper mapper;
     private final RestClient restClient;
     private final RestClient publicClient;
+    private ApiCallStatsService apiCalls;
 
     @Autowired
     public BrickLinkClient(AppProperties properties, ObjectMapper mapper) {
@@ -53,6 +55,17 @@ public class BrickLinkClient {
         this.mapper = mapper;
         this.restClient = restClient;
         this.publicClient = publicClient;
+    }
+
+    @Autowired(required = false)
+    public void setApiCalls(ApiCallStatsService apiCalls) {
+        this.apiCalls = apiCalls;
+    }
+
+    private void recordApiCall() {
+        if (apiCalls != null) {
+            apiCalls.record(ApiCallStatsService.BRICKLINK);
+        }
     }
 
     public boolean configured() {
@@ -316,6 +329,7 @@ public class BrickLinkClient {
     }
 
     private String fetchPublic(String uri, String accept, String referer) {
+        recordApiCall();
         try {
             return publicClient.get()
                     .uri(URI.create(uri))
@@ -413,6 +427,7 @@ public class BrickLinkClient {
         if (!config.configured()) {
             throw ApiException.unavailable("BrickLink is not configured");
         }
+        recordApiCall();
         String url = config.getBaseUrl() + path;
         String auth = OAuth1Signer.authorizationHeader(
                 method, url, config.getConsumerKey(), config.getConsumerSecret(), config.getToken(), config.getTokenSecret()

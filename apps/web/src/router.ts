@@ -11,6 +11,7 @@ import OrdersView from "./views/OrdersView.vue";
 import OrderDetail from "./views/OrderDetail.vue";
 import SalesLedgerView from "./views/SalesLedgerView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import StatisticsView from "./views/StatisticsView.vue";
 import LoginView from "./views/LoginView.vue";
 
 export const router = createRouter({
@@ -37,5 +38,6 @@ export const router = createRouter({
     { path: "/scans", redirect: "/scan-logs" },
     { path: "/scan-logs", component: ScanLogsView },
     { path: "/settings", component: SettingsView },
+    { path: "/settings/statistics", component: StatisticsView },
   ],
 });

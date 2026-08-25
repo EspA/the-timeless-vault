@@ -1913,7 +1913,8 @@ td.negative {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .grid.four.stats {
+  .grid.four.stats,
+  .grid.five.stats {
     grid-template-columns: 1fr 1fr;
   }
 

@@ -26,7 +26,8 @@ public class SpaController {
             "/sales-ledger",
             "/notifications",
             "/notifications/**",
-            "/settings"
+            "/settings",
+            "/settings/**"
     })
     public String spa() {
         return "forward:/index.html";

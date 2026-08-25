@@ -9,6 +9,7 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryItem;
+import com.thetimelessvault.settings.ApiCallStatsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ public class ShopifyClient {
     private final ObjectMapper mapper;
     private final ShopifyTokenService tokens;
     private final RestClient restClient;
+    private ApiCallStatsService apiCalls;
 
     @Autowired
     public ShopifyClient(AppProperties properties, ObjectMapper mapper, ShopifyTokenService tokens) {
@@ -47,6 +49,17 @@ public class ShopifyClient {
         this.mapper = mapper;
         this.tokens = tokens;
         this.restClient = restClient;
+    }
+
+    @Autowired(required = false)
+    public void setApiCalls(ApiCallStatsService apiCalls) {
+        this.apiCalls = apiCalls;
+    }
+
+    private void recordApiCall() {
+        if (apiCalls != null) {
+            apiCalls.record(ApiCallStatsService.SHOPIFY);
+        }
     }
 
     public boolean configured() {
@@ -119,6 +132,7 @@ public class ShopifyClient {
         for (int page = 1; page <= 20; page++) {
             String url = "https://" + config.shopHost() + "/products.json?limit=250&page=" + page;
             try {
+                recordApiCall();
                 String raw = restClient.get()
                         .uri(url)
                         .header("Accept", "application/json")
@@ -274,6 +288,7 @@ public class ShopifyClient {
         }
         String url = "https://" + config.shopHost() + "/collections.json?limit=250";
         try {
+            recordApiCall();
             String raw = restClient.get()
                     .uri(url)
                     .header("Accept", "application/json")
@@ -997,6 +1012,7 @@ public class ShopifyClient {
         body.put("query", query);
         body.set("variables", variables);
         String url = "https://" + config.shopHost() + "/admin/api/" + config.getApiVersion() + "/graphql.json";
+        recordApiCall();
         String raw = restClient.post()
                 .uri(url)
                 .contentType(MediaType.APPLICATION_JSON)

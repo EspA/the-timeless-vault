@@ -13,6 +13,7 @@ import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryItem;
+import com.thetimelessvault.settings.ApiCallStatsService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -48,6 +49,7 @@ public class EbayClient {
     private final ObjectMapper mapper;
     private final AppSettingRepository settings;
     private final RestClient restClient = RestClient.builder().build();
+    private ApiCallStatsService apiCalls;
 
     private volatile EbaySellDefaults cachedSellDefaults;
 
@@ -66,6 +68,17 @@ public class EbayClient {
         this.tokens = tokens;
         this.mapper = mapper;
         this.settings = settings;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setApiCalls(ApiCallStatsService apiCalls) {
+        this.apiCalls = apiCalls;
+    }
+
+    private void recordApiCall() {
+        if (apiCalls != null) {
+            apiCalls.record(ApiCallStatsService.EBAY);
+        }
     }
 
     public boolean configured() {
@@ -855,6 +868,7 @@ public class EbayClient {
     }
 
     private JsonNode browseUri(URI uri) {
+        recordApiCall();
         try {
             String raw = restClient.get()
                     .uri(uri)
@@ -878,6 +892,7 @@ public class EbayClient {
     }
 
     private JsonNode sell(String method, String path, String json) {
+        recordApiCall();
         URI uri = URI.create(config.apiHost() + path);
         log.info("eBay {} {}", method, path);
         var spec = restClient.method(org.springframework.http.HttpMethod.valueOf(method))
@@ -925,6 +940,7 @@ public class EbayClient {
         fileHeaders.setContentType(MediaType.parseMediaType(safeContentType(contentType)));
         LinkedMultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
         form.add("image", new HttpEntity<>(resource, fileHeaders));
+        recordApiCall();
         try {
             String raw = restClient.post()
                     .uri(mediaHost() + "/commerce/media/v1_beta/image/create_image_from_file")
@@ -950,6 +966,7 @@ public class EbayClient {
     }
 
     private String trading(String callName, String xml) {
+        recordApiCall();
         try {
             String raw = restClient.post()
                     .uri(tradingHost())
@@ -993,6 +1010,7 @@ public class EbayClient {
         LinkedMultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
         form.add("XML Payload", new HttpEntity<>(xml, xmlHeaders));
         form.add("file", new HttpEntity<>(image, imageHeaders));
+        recordApiCall();
         try {
             String raw = restClient.post()
                     .uri(tradingHost())

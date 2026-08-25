@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.config.AppProperties;
+import com.thetimelessvault.settings.ApiCallStatsService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,7 @@ public class BrickEconomyClient {
     private final RestClient restClient;
     private final ObjectMapper mapper;
     private final AppProperties.Brickeconomy config;
+    private ApiCallStatsService apiCalls;
 
     public BrickEconomyClient(AppProperties properties, ObjectMapper mapper) {
         this.config = properties.getBrickeconomy();
@@ -27,10 +30,22 @@ public class BrickEconomyClient {
                 .build();
     }
 
+    @Autowired(required = false)
+    public void setApiCalls(ApiCallStatsService apiCalls) {
+        this.apiCalls = apiCalls;
+    }
+
+    private void recordApiCall() {
+        if (apiCalls != null) {
+            apiCalls.record(ApiCallStatsService.BRICKECONOMY);
+        }
+    }
+
     public JsonNode getSet(String setNumber) {
         if (!config.configured()) {
             throw ApiException.unavailable("BrickEconomy API key is not configured");
         }
+        recordApiCall();
         ResponseEntity<String> response = restClient.get()
                 .uri("/set/{setNumber}?currency=USD", setNumber)
                 .retrieve()
@@ -62,6 +77,7 @@ public class BrickEconomyClient {
         if (!config.configured()) {
             throw ApiException.unavailable("BrickEconomy API key is not configured");
         }
+        recordApiCall();
         ResponseEntity<String> response = restClient.get()
                 .uri(path, uriVars)
                 .retrieve()

@@ -41,6 +41,7 @@ public class SettingsController {
     private final PriceGuardDefaults priceGuardDefaults;
     private final ChannelFeeRates channelFeeRates;
     private final EbayStoreCategorySettings storeCategorySettings;
+    private final ApiCallStatsService apiCallStats;
 
     public SettingsController(
             AppProperties properties,
@@ -54,7 +55,8 @@ public class SettingsController {
             NotificationMailer notificationMailer,
             PriceGuardDefaults priceGuardDefaults,
             ChannelFeeRates channelFeeRates,
-            EbayStoreCategorySettings storeCategorySettings
+            EbayStoreCategorySettings storeCategorySettings,
+            ApiCallStatsService apiCallStats
     ) {
         this.properties = properties;
         this.shopifyClient = shopifyClient;
@@ -68,6 +70,7 @@ public class SettingsController {
         this.priceGuardDefaults = priceGuardDefaults;
         this.channelFeeRates = channelFeeRates;
         this.storeCategorySettings = storeCategorySettings;
+        this.apiCallStats = apiCallStats;
     }
 
     @GetMapping("/settings/health")
@@ -107,6 +110,11 @@ public class SettingsController {
         health.put("bricklinkFeePercent", fees.bricklinkPercent());
         health.put("shopifyFeePercent", fees.shopifyPercent());
         return health;
+    }
+
+    @GetMapping("/settings/statistics")
+    public ApiCallStatsService.Snapshot statistics() {
+        return apiCallStats.snapshot();
     }
 
     @PutMapping({"/settings/notification-email", "/settings/alert-email"})

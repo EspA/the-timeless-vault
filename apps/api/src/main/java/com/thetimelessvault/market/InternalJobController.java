@@ -49,6 +49,11 @@ public class InternalJobController {
         return Map.of("status", "ok");
     }
 
+    @PostMapping("/scan-log-purge")
+    public Map<String, Object> scanLogPurge() {
+        return Map.of("status", "ok", "deleted", marketScanService.purgeOldScanLogs());
+    }
+
     @PostMapping("/sales-sync")
     public Map<String, Object> salesSync() {
         return orderSyncService.sync();

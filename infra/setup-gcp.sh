@@ -230,6 +230,29 @@ if [ -n "$SERVICE_URL" ] && [ -n "$JOB_TOKEN" ] && [ "$JOB_TOKEN" != "change-me-
       --quiet
     echo "Created Cloud Scheduler job ttv-sales-sync."
   fi
+  if gcloud scheduler jobs describe ttv-scan-log-purge --location="$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http ttv-scan-log-purge \
+      --location="$REGION" \
+      --schedule="0 0 * * *" \
+      --time-zone="America/New_York" \
+      --uri="${SERVICE_URL}/internal/jobs/scan-log-purge" \
+      --http-method=POST \
+      --update-headers="X-Internal-Token=${JOB_TOKEN}" \
+      --attempt-deadline=180s \
+      --quiet
+    echo "Updated Cloud Scheduler job ttv-scan-log-purge."
+  else
+    gcloud scheduler jobs create http ttv-scan-log-purge \
+      --location="$REGION" \
+      --schedule="0 0 * * *" \
+      --time-zone="America/New_York" \
+      --uri="${SERVICE_URL}/internal/jobs/scan-log-purge" \
+      --http-method=POST \
+      --headers="X-Internal-Token=${JOB_TOKEN}" \
+      --attempt-deadline=180s \
+      --quiet
+    echo "Created Cloud Scheduler job ttv-scan-log-purge."
+  fi
 elif [ -z "$SERVICE_URL" ]; then
   echo "Cloud Run service not found yet; create ttv-market-scan after the first deploy."
 else

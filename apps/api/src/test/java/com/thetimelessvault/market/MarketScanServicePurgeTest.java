@@ -1,0 +1,38 @@
+package com.thetimelessvault.market;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+
+import java.time.Instant;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class MarketScanServicePurgeTest {
+
+    @Mock ScanLogRepository scanLogs;
+    @Mock ObjectProvider<MarketScanService> self;
+    @InjectMocks MarketScanService service;
+
+    @Test
+    void purgeDeletesEntriesOlderThanSevenDays() {
+        Instant before = Instant.now().minus(MarketScanService.SCAN_LOG_RETENTION).minusSeconds(2);
+        when(scanLogs.deleteByScannedAtBefore(any())).thenReturn(12L);
+
+        assertEquals(12L, service.purgeOldScanLogs());
+
+        ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
+        verify(scanLogs).deleteByScannedAtBefore(cutoff.capture());
+        Instant after = Instant.now().minus(MarketScanService.SCAN_LOG_RETENTION).plusSeconds(2);
+        assertTrue(!cutoff.getValue().isBefore(before) && !cutoff.getValue().isAfter(after));
+    }
+}
