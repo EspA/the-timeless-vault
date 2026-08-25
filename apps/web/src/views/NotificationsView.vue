@@ -29,10 +29,11 @@ const TYPE_OPTIONS = [
   { value: "PRICE_HIGH", label: "PRICE HIGH" },
   { value: "PRICE_LOW", label: "PRICE LOW" },
   { value: "NEW_SALE", label: "NEW SALE" },
+  { value: "ORDER_DELIVERED", label: "ORDER DELIVERED" },
   { value: "SCAN_FAILED", label: "SCAN FAILED" },
 ];
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const emptyFilters = () => ({
   when: "",
   type: "",
@@ -56,7 +57,7 @@ const refreshUnread = inject<() => Promise<void>>("refreshUnread", async () => {
 const typeLabel = (type: string) => (type || "").replaceAll("_", " ");
 
 const typeBadge = (type: string) => {
-  if (type === "BUYING_OPPORTUNITY" || type === "NEW_SALE") return "ok";
+  if (type === "BUYING_OPPORTUNITY" || type === "NEW_SALE" || type === "ORDER_DELIVERED") return "ok";
   if (type === "PRICE_HIGH" || type === "PRICE_LOW") return "price";
   if (type === "SCAN_FAILED") return "bad";
   return "";
@@ -100,7 +101,7 @@ const linkLabel = (alert: NotificationEvent) => {
   if (alert.type === "SCAN_FAILED") {
     return alert.url?.includes("/scan-logs") ? "Open scan logs" : "Open market";
   }
-  if (alert.type === "NEW_SALE") {
+  if (alert.type === "NEW_SALE" || alert.type === "ORDER_DELIVERED") {
     return alert.url?.startsWith("/orders/") ? "Open order" : listingHref(alert.url) ? "Open item" : "Open order";
   }
   return "Open listing";

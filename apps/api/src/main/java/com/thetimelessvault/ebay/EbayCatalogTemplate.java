@@ -48,7 +48,7 @@ public record EbayCatalogTemplate(
             return false;
         }
         String key = name.trim().toLowerCase(Locale.ROOT);
-        return key.equals("brand") || key.equals("type") || key.equals("packaging");
+        return key.equals("brand") || key.equals("type") || key.equals("packaging") || key.equals("material");
     }
 
     static boolean catalogFillAspect(String name) {
@@ -209,6 +209,7 @@ public record EbayCatalogTemplate(
             eans.addAll(fallback.ean());
             fallback.aspects().forEach((name, values) -> aspects.putIfAbsent(name, values));
         }
+        putSellerDefaults(aspects);
         return new EbayCatalogTemplate(
                 epid,
                 mpn,
@@ -360,9 +361,12 @@ public record EbayCatalogTemplate(
                 putAspect(aspects, "Type", "Complete Set");
             }
         }
-        if (condition == ItemCondition.NEW_SEALED) {
-            putAspect(aspects, "Packaging", "Box");
-        }
+        putSellerDefaults(aspects);
+    }
+
+    static void putSellerDefaults(Map<String, List<String>> aspects) {
+        putAspect(aspects, "Material", "Plastic");
+        putAspect(aspects, "Packaging", "Box");
     }
 
     private static void putAspect(Map<String, List<String>> aspects, String name, String value) {

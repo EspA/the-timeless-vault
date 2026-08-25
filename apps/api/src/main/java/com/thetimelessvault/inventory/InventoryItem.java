@@ -232,6 +232,9 @@ public class InventoryItem {
         } else if (stockStatus == StockStatus.IN_STOCK && previous != StockStatus.IN_STOCK) {
             quantity = Math.max(quantity, previousQuantity + 1);
         }
+        if (nextStatus != null && nextStatus != previous) {
+            touch();
+        }
     }
 
     public BigDecimal getCost() {

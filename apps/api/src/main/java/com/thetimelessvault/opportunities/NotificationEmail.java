@@ -23,6 +23,14 @@ public record NotificationEmail(
         return BuyingOpportunity.TYPE_NEW_SALE.equals(type);
     }
 
+    boolean orderDelivered() {
+        return BuyingOpportunity.TYPE_ORDER_DELIVERED.equals(type);
+    }
+
+    boolean orderAlert() {
+        return newSale() || orderDelivered();
+    }
+
     boolean priceGuard() {
         return BuyingOpportunity.TYPE_PRICE_HIGH.equals(type)
                 || BuyingOpportunity.TYPE_PRICE_LOW.equals(type);

@@ -296,6 +296,12 @@ public class EbayClient {
             ArrayNode array = aspects.putArray(name);
             values.forEach(array::add);
         });
+        if (!aspects.has("Material")) {
+            aspects.putArray("Material").add("Plastic");
+        }
+        if (!aspects.has("Packaging")) {
+            aspects.putArray("Packaging").add("Box");
+        }
     }
 
     public String hostImage(byte[] bytes, String filename, String contentType) {

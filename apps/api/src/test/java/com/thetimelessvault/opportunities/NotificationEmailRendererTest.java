@@ -183,4 +183,38 @@ class NotificationEmailRendererTest {
         assertTrue(NotificationEmailRenderer.text(email).contains("eBay search failed."));
         assertTrue(NotificationEmailRenderer.text(email).contains("Open market:"));
     }
+
+    @Test
+    void orderDeliveredIncludesOpenOrderLinkAndTracking() {
+        NotificationEmail email = new NotificationEmail(
+                BuyingOpportunity.TYPE_ORDER_DELIVERED,
+                "75192-1",
+                "Millennium Falcon",
+                null,
+                "$899.99",
+                null,
+                "https://admin.thetimelessvault.com/orders/abc",
+                "https://admin.thetimelessvault.com/inventory/item-1",
+                "EBAY",
+                null,
+                null,
+                SCANNED,
+                "Tracking 9400111 · USPS"
+        );
+
+        String html = NotificationEmailRenderer.html(email);
+        assertTrue(html.contains("ORDER DELIVERED"));
+        assertTrue(html.contains("75192-1 / Millennium Falcon"));
+        assertTrue(html.contains("$899.99"));
+        assertTrue(html.contains("Open order"));
+        assertTrue(html.contains("https://admin.thetimelessvault.com/orders/abc"));
+        assertTrue(html.contains("Tracking 9400111 · USPS"));
+        assertFalse(html.contains("Adjust price"));
+        assertEquals(
+                "[The Timeless Vault] ORDER DELIVERED · eBay · 75192-1 / Millennium Falcon",
+                NotificationEmailRenderer.subject(email)
+        );
+        assertTrue(NotificationEmailRenderer.text(email).contains("Open order:"));
+        assertTrue(NotificationEmailRenderer.text(email).contains("Tracking 9400111 · USPS"));
+    }
 }

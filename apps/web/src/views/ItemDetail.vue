@@ -88,6 +88,24 @@ onMounted(async () => {
 
 onBeforeUnmount(() => clearTimeout(savedTimer));
 
+let lastGeneratedShortDescription = "";
+
+watch(
+  () => item.value?.description,
+  (html, previous) => {
+    if (!item.value) return;
+    const generated = brickLinkShortDescriptionFromHtml(html || "");
+    if (previous === undefined) {
+      lastGeneratedShortDescription = generated;
+      return;
+    }
+    if (!item.value.shortDescription || item.value.shortDescription === lastGeneratedShortDescription) {
+      item.value.shortDescription = generated;
+    }
+    lastGeneratedShortDescription = generated;
+  }
+);
+
 watch(
   () => item.value?.cost,
   (cost, previous) => {
@@ -692,6 +710,7 @@ const applyCatalogRefresh = (catalog: Catalog) => {
   if (!item.value.shortDescription || item.value.shortDescription === previousGenerated) {
     item.value.shortDescription = generatedShort;
   }
+  lastGeneratedShortDescription = generatedShort;
   item.value.ebayStoreCategory = catalog.suggestedEbayStoreCategory;
   const pkg = catalog.bricklinkPackage?.shipping;
   if (pkg) {

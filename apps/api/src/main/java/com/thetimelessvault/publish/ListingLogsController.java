@@ -60,7 +60,7 @@ public class ListingLogsController {
     @GetMapping
     public ListingLogsPageView list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "10") int size
     ) {
         var result = listingLogs.list(page, size);
         return new ListingLogsPageView(

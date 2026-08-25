@@ -39,6 +39,7 @@ class EbayCatalogTemplateTest {
         assertEquals(List.of("Speed Champions"), template.aspects().get("LEGO Theme"));
         assertEquals(List.of("75870"), template.aspects().get("LEGO Set Number"));
         assertEquals(List.of("Complete Set"), template.aspects().get("Type"));
+        assertEquals(List.of("Plastic"), template.aspects().get("Material"));
         assertEquals(List.of("Box"), template.aspects().get("Packaging"));
         assertEquals(List.of("Yes"), template.aspects().get("Retired"));
         assertEquals(List.of("2017"), template.aspects().get("Year Retired"));
@@ -70,6 +71,8 @@ class EbayCatalogTemplateTest {
         EbayCatalogTemplate slim = merged.withoutCopiedAspects();
         assertEquals("12053416333", slim.epid());
         assertEquals(List.of("Complete Set"), slim.aspects().get("Type"));
+        assertEquals(List.of("Plastic"), slim.aspects().get("Material"));
+        assertEquals(List.of("Box"), slim.aspects().get("Packaging"));
         assertFalse(slim.aspects().containsKey("Age Level"));
     }
 
@@ -118,6 +121,7 @@ class EbayCatalogTemplateTest {
         assertEquals(List.of("Cars, Vehicles"), merged.aspects().get("Interests"));
         assertEquals(List.of("SPEED CHAMPIONS"), merged.aspects().get("LEGO Theme"));
         assertEquals(List.of("Complete Set"), merged.aspects().get("Type"));
+        assertEquals(List.of("Plastic"), merged.aspects().get("Material"));
         assertEquals(List.of("Box"), merged.aspects().get("Packaging"));
         assertFalse(merged.aspects().containsKey("Item Height"));
     }
@@ -217,6 +221,39 @@ class EbayCatalogTemplateTest {
         );
 
         assertEquals(List.of("2018"), merged.aspects().get("Year Retired"));
+    }
+
+    @Test
+    void keepsCatalogMaterialWhenPresent() throws Exception {
+        InventoryItem item = sealedCorvette();
+        JsonNode listing = mapper.readTree("""
+                {
+                  "epid": "12053416333",
+                  "localizedAspects": [
+                    {"name": "Material", "value": "ABS"}
+                  ]
+                }
+                """);
+
+        EbayCatalogTemplate merged = EbayCatalogTemplate.merge(
+                EbayCatalogTemplate.fromCatalog(item),
+                List.of(listing)
+        );
+
+        assertEquals(List.of("ABS"), merged.aspects().get("Material"));
+        assertEquals(List.of("Box"), merged.aspects().get("Packaging"));
+    }
+
+    @Test
+    void usedItemStillDefaultsMaterialAndPackagingWhenSkippingCatalog() {
+        InventoryItem item = sealedCorvette();
+        item.setCondition(ItemCondition.USED_COMPLETE);
+        EbayCatalogTemplate template = EbayCatalogTemplate.fromCatalog(item);
+
+        assertEquals(List.of("Plastic"), template.aspects().get("Material"));
+        assertEquals(List.of("Box"), template.aspects().get("Packaging"));
+        assertEquals(List.of("Plastic"), template.withoutCopiedAspects().aspects().get("Material"));
+        assertEquals(List.of("Box"), template.withoutCopiedAspects().aspects().get("Packaging"));
     }
 
     private static InventoryItem sealedCorvette() {

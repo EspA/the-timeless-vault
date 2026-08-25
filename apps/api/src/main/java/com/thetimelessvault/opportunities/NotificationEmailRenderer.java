@@ -97,8 +97,8 @@ public final class NotificationEmailRenderer {
     }
 
     public static String html(NotificationEmail email, String assetBaseUrl) {
-        String badgeBg = email.scanFailed() ? BADGE_FAIL : email.buyingOpportunity() || email.newSale() ? BADGE_OK : BADGE_PRICE;
-        String badgeInk = email.scanFailed() ? BADGE_FAIL_INK : email.buyingOpportunity() || email.newSale() ? BADGE_OK_INK : GOLD_INK;
+        String badgeBg = email.scanFailed() ? BADGE_FAIL : email.buyingOpportunity() || email.orderAlert() ? BADGE_OK : BADGE_PRICE;
+        String badgeInk = email.scanFailed() ? BADGE_FAIL_INK : email.buyingOpportunity() || email.orderAlert() ? BADGE_OK_INK : GOLD_INK;
         String heading = heading(email);
         StringBuilder priceHtml = new StringBuilder();
         if (email.price() != null && !email.price().isBlank()) {
@@ -227,7 +227,7 @@ public final class NotificationEmailRenderer {
     }
 
     static String scanFailedLinkLabel(NotificationEmail email) {
-        if (email.newSale()) {
+        if (email.orderAlert()) {
             return "Open order";
         }
         if (!email.scanFailed()) {
@@ -245,6 +245,7 @@ public final class NotificationEmailRenderer {
             case "EBAY" -> "eBay";
             case "BRICKLINK" -> "BrickLink";
             case "SHOPIFY" -> "Shopify";
+            case "LOCAL" -> "Local";
             default -> platform.trim();
         };
     }

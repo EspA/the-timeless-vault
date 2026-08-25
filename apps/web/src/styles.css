@@ -1445,6 +1445,39 @@ th .sort-btn { width: 100%; }
   min-width: min(100%, 12rem);
 }
 
+.watched-set-block {
+  display: grid;
+  gap: 0.45rem;
+  flex: 1 1 100%;
+  min-width: min(100%, 16rem);
+}
+
+.watched-set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.watched-set-label {
+  font-weight: 600;
+}
+
+.watched-set-result,
+.watched-set-matches {
+  margin: 0;
+}
+
+.watched-set-matches {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.market-set-lookup .btn {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 .pager-actions {
   display: flex;
   gap: 0.5rem;
@@ -1961,7 +1994,7 @@ td.negative {
     grid-column: auto;
   }
 
-  .market-controls .toolbar > .watched-set {
+  .market-controls .toolbar > .watched-set-block {
     grid-column: 1 / -1;
   }
 
@@ -2102,6 +2135,17 @@ td.negative {
 
   .form-modal-lookup {
     flex-direction: column;
+  }
+
+  .form-modal-lookup.market-set-lookup {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .form-modal-lookup.market-set-lookup .btn {
+    width: auto;
+    flex: 0 0 auto;
+    justify-content: center;
   }
 
   .form-modal-foot,

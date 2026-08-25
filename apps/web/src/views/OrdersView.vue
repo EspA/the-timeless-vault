@@ -7,7 +7,7 @@ import StockStatusButtons from "../components/StockStatusButtons.vue";
 import TrackingNumber from "../components/TrackingNumber.vue";
 import { askConfirm } from "../confirm";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const REFRESH_MS = 60_000;
 const emptyFilters = () => ({
   when: "",

@@ -137,6 +137,47 @@ class OrderServiceTest {
         assertEquals("USPS", existingOrder.getShippingProvider());
         verify(items, never()).save(any());
         verify(opportunities, never()).recordNewSale(any(), any());
+        verify(opportunities, never()).recordOrderDelivered(any(), any());
+    }
+
+    @Test
+    void channelDeliveredStatusCreatesNotification() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
+        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
+
+        assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS")));
+        assertEquals(OrderStatus.COMPLETED, existingOrder.getStatus());
+        verify(opportunities).recordOrderDelivered(existingOrder, existing);
+        verify(opportunities, never()).recordNewSale(any(), any());
+    }
+
+    @Test
+    void alreadyDeliveredSyncDoesNotNotifyAgain() {
+        Order existingOrder = Order.create(
+                existing, order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS"), false);
+        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED)));
+        verify(opportunities, never()).recordOrderDelivered(any(), any());
+    }
+
+    @Test
+    void manualDeliveredStatusCreatesNotification() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
+        when(orders.findById(existingOrder.getId())).thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
+
+        Order updated = service.update(existingOrder.getId(), new OrderService.UpdateOrderRequest(
+                OrderStatus.COMPLETED, null, null));
+
+        assertEquals(OrderStatus.COMPLETED, updated.getStatus());
+        verify(opportunities).recordOrderDelivered(existingOrder, existing);
     }
 
     @Test

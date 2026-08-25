@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import { api, type SetWatch } from "../api";
+import { useRoute, useRouter } from "vue-router";
+import { api, ApiError, type Catalog, type SetWatch } from "../api";
 import ScanProgressModal from "../components/ScanProgressModal.vue";
 import ChannelLogo from "../components/ChannelLogo.vue";
 
@@ -80,11 +80,17 @@ const emptyBricklinkFilters = (): BricklinkFilters => ({
   qty: "",
 });
 
+type SetMatch = { catalogId: string; setNumber: string; name: string };
+
 const PAGE_SIZE = 10;
 const route = useRoute();
+const router = useRouter();
 const watches = ref<SetWatch[]>([]);
 const selected = ref("");
 const dash = ref<Dashboard | null>(null);
+const lookupQuery = ref("");
+const looking = ref(false);
+const matches = ref<SetMatch[]>([]);
 const error = ref("");
 const ebaySort = ref<Sort>({ key: "total", dir: "asc" });
 const bricklinkSort = ref<Sort>({ key: "price", dir: "asc" });
@@ -97,11 +103,65 @@ const minPriceInput = ref<number | null>(null);
 const maxPriceInput = ref<number | null>(null);
 const scanning = ref<"ebay" | "bricklink" | "all" | "">("");
 const applyingAlertRange = ref(false);
+const togglingWatch = ref(false);
 const filterMessage = ref("");
+
+const setLabel = (row: { setNumber: string; name: string }) =>
+  [row.setNumber, row.name].filter(Boolean).join(" · ");
+
+const normalizeSet = (value: string) => value.trim().toLowerCase().replace(/-1$/, "");
 
 const loadDash = async (catalogId: string) => {
   selected.value = catalogId;
   dash.value = await api.get<Dashboard>(`/api/market/${catalogId}`);
+  lookupQuery.value = dash.value.setNumber;
+  matches.value = [];
+  if (String(route.params.catalogId || "") !== catalogId) {
+    await router.replace(`/market/${catalogId}`);
+  }
+};
+
+const lookupSet = async () => {
+  const needle = lookupQuery.value.trim();
+  error.value = "";
+  filterMessage.value = "";
+  matches.value = [];
+  if (!needle) {
+    error.value = "Enter a set number.";
+    return;
+  }
+  if (looking.value || scanning.value) return;
+  looking.value = true;
+  try {
+    const wanted = normalizeSet(needle);
+    const exact = watches.value.find((watch) => normalizeSet(watch.setNumber) === wanted);
+    if (exact) {
+      await loadDash(exact.catalogId);
+      return;
+    }
+    const watchHits = watches.value.filter((watch) =>
+      normalizeSet(watch.setNumber).includes(wanted)
+      || watch.name.toLowerCase().includes(needle.toLowerCase())
+    );
+    if (watchHits.length === 1) {
+      await loadDash(watchHits[0].catalogId);
+      return;
+    }
+    if (watchHits.length > 1) {
+      matches.value = watchHits.map((watch) => ({
+        catalogId: watch.catalogId,
+        setNumber: watch.setNumber,
+        name: watch.name,
+      }));
+      return;
+    }
+    const catalog = await api.get<Catalog>(`/api/catalog/lookup?setNumber=${encodeURIComponent(needle)}`);
+    await loadDash(catalog.id);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not look up that set";
+  } finally {
+    looking.value = false;
+  }
 };
 
 const scan = async (target: "ebay" | "bricklink" | "all") => {
@@ -428,6 +488,82 @@ const selectedWatch = computed(() =>
   watches.value.find((watch) => watch.catalogId === selected.value) ?? null
 );
 
+const watchEnabled = computed(() => selectedWatch.value?.enabled ?? false);
+
+const watchStatusLabel = computed(() => {
+  if (!selectedWatch.value) return "Off";
+  return selectedWatch.value.enabled ? "Watching" : "Paused";
+});
+
+const persistWatch = (watch: SetWatch, enabled: boolean, minPrice?: number | null, maxPrice?: number | null) =>
+  api.put<SetWatch>(`/api/set-watches/${watch.id}`, {
+    enabled,
+    ebaySearchQuery: watch.ebaySearchQuery,
+    ebayExcludeWords: watch.ebayExcludeWords ?? "",
+    ebayFeedbackMin: watch.ebayFeedbackMin,
+    ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
+    bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
+    minPrice: minPrice !== undefined ? minPrice : watch.minPrice ?? null,
+    maxPrice: maxPrice !== undefined ? maxPrice : watch.maxPrice ?? null,
+  });
+
+const replaceWatch = (saved: SetWatch) => {
+  const exists = watches.value.some((row) => row.id === saved.id);
+  watches.value = exists
+    ? watches.value.map((row) => (row.id === saved.id ? saved : row))
+    : [...watches.value, saved];
+};
+
+const toggleMarketWatch = async () => {
+  if (togglingWatch.value || scanning.value) return;
+  error.value = "";
+  filterMessage.value = "";
+  togglingWatch.value = true;
+  const current = selectedWatch.value;
+  try {
+    if (current) {
+      const next = !current.enabled;
+      watches.value = watches.value.map((row) => (row.id === current.id ? { ...row, enabled: next } : row));
+      try {
+        replaceWatch(await persistWatch(current, next));
+      } catch (e) {
+        watches.value = watches.value.map((row) => (row.id === current.id ? { ...row, enabled: current.enabled } : row));
+        throw e;
+      }
+      return;
+    }
+    if (!dash.value?.setNumber) {
+      throw new Error("Select a set before enabling market watch.");
+    }
+    try {
+      replaceWatch(await api.post<SetWatch>("/api/set-watches", {
+        setNumber: dash.value.setNumber,
+        enabled: true,
+        minPrice: minPriceInput.value,
+        maxPrice: maxPriceInput.value,
+      }));
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 409) {
+        throw e;
+      }
+      const latest = await api.get<SetWatch[]>("/api/set-watches");
+      watches.value = latest;
+      const existing = latest.find((watch) => watch.catalogId === selected.value)
+        || latest.find((watch) => watch.setNumber.toLowerCase() === dash.value?.setNumber.toLowerCase());
+      if (!existing) {
+        throw e;
+      }
+      if (!existing.enabled) {
+        replaceWatch(await persistWatch(existing, true));
+      }
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not update market watch";
+  } finally {
+    togglingWatch.value = false;
+  }
+};
+
 const parsePrice = (raw: string) => {
   if (!raw.trim()) {
     return null;
@@ -443,17 +579,7 @@ const applyRangeForAlert = async () => {
   filterMessage.value = "";
   applyingAlertRange.value = true;
   try {
-    const saved = await api.put<SetWatch>(`/api/set-watches/${watch.id}`, {
-      enabled: watch.enabled,
-      ebaySearchQuery: watch.ebaySearchQuery,
-      ebayExcludeWords: watch.ebayExcludeWords,
-      ebayFeedbackMin: watch.ebayFeedbackMin,
-      ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
-      bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
-      minPrice: minPriceInput.value,
-      maxPrice: maxPriceInput.value,
-    });
-    watches.value = watches.value.map((row) => (row.id === saved.id ? saved : row));
+    replaceWatch(await persistWatch(watch, watch.enabled, minPriceInput.value, maxPriceInput.value));
     filterMessage.value = "Alert price range updated.";
   } catch (e) {
     error.value = e instanceof Error ? e.message : "Could not save alert price range";
@@ -485,6 +611,17 @@ const lastScanLabel = computed(() => {
   return `Last scan ${parsed.toLocaleString()}`;
 });
 
+watch(
+  () => String(route.params.catalogId || ""),
+  (catalogId) => {
+    if (catalogId && catalogId !== selected.value) {
+      void loadDash(catalogId).catch((e) => {
+        error.value = e instanceof Error ? e.message : "Could not load that set";
+      });
+    }
+  }
+);
+
 onMounted(async () => {
   try {
     watches.value = await api.get<SetWatch[]>("/api/set-watches");
@@ -507,17 +644,51 @@ onMounted(async () => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="filterMessage" class="muted">{{ filterMessage }}</p>
-    <p v-if="!watches.length" class="muted">No sets are watched yet. Add one with <router-link to="/watches">New item watch</router-link>.</p>
     <div class="card grid market-controls">
       <div class="toolbar">
-        <label class="watched-set">Watched set
-          <select :value="selected" :disabled="!!scanning" @change="loadDash(($event.target as HTMLSelectElement).value)">
-            <option v-for="watch in watches" :key="watch.catalogId" :value="watch.catalogId">
-              {{ watch.setNumber }} {{ watch.name }}
-            </option>
-          </select>
-        </label>
-        <button class="btn gold" type="button" :disabled="!!scanning" @click="scan('all')">
+        <div class="watched-set-block">
+          <div class="watched-set-head">
+            <span class="watched-set-label">Watched set</span>
+            <label class="switch">
+              <input
+                type="checkbox"
+                :checked="watchEnabled"
+                :disabled="togglingWatch || !!scanning || looking || !dash"
+                :aria-label="watchEnabled ? 'Pause market watch' : 'Enable market watch'"
+                @change="toggleMarketWatch"
+              />
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-label">{{ togglingWatch ? "Saving…" : watchStatusLabel }}</span>
+            </label>
+          </div>
+          <div class="form-modal-lookup market-set-lookup">
+            <input
+              v-model="lookupQuery"
+              type="search"
+              placeholder="Set number"
+              :disabled="!!scanning || looking"
+              @keydown.enter.prevent="lookupSet"
+            />
+            <button class="btn gold" type="button" :disabled="!!scanning || looking" @click="lookupSet">
+              {{ looking ? "Looking…" : "Look up" }}
+            </button>
+          </div>
+          <p v-if="dash" class="muted watched-set-result">{{ setLabel(dash) }}</p>
+          <div v-if="matches.length" class="watched-set-matches">
+            <p class="muted" style="margin:0">{{ matches.length }} matching watches</p>
+            <button
+              v-for="row in matches"
+              :key="row.catalogId"
+              class="btn secondary"
+              type="button"
+              :disabled="!!scanning || looking"
+              @click="loadDash(row.catalogId)"
+            >
+              {{ setLabel(row) }}
+            </button>
+          </div>
+        </div>
+        <button class="btn gold" type="button" :disabled="!!scanning || !selected" @click="scan('all')">
           {{ scanning === "all" ? "Scanning…" : "Scan all" }}
         </button>
         <router-link
@@ -525,11 +696,11 @@ onMounted(async () => {
           class="btn secondary"
           :to="`/watches/${selectedWatch.id}`"
         >Market filters</router-link>
-        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('ebay')">
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning || !selected" @click="scan('ebay')">
           {{ scanning === "ebay" ? "Scanning" : "Scan" }}
           <ChannelLogo platform="EBAY" :height="16" />
         </button>
-        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning" @click="scan('bricklink')">
+        <button class="btn secondary channel-scan" type="button" :disabled="!!scanning || !selected" @click="scan('bricklink')">
           {{ scanning === "bricklink" ? "Scanning" : "Scan" }}
           <ChannelLogo platform="BRICKLINK" :height="16" />
         </button>

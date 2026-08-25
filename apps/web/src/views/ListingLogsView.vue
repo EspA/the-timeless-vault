@@ -27,7 +27,7 @@ type ListingLogsPage = {
   totalPages: number;
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const REFRESH_MS = 60_000;
 const emptyFilters = () => ({
   when: "",

@@ -65,7 +65,7 @@ public class NotificationsController {
     @GetMapping
     public NotificationsPageView list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "10") int size
     ) {
         var result = opportunities.list(page, size);
         return new NotificationsPageView(

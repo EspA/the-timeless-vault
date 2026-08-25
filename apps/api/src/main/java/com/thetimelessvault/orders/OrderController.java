@@ -87,7 +87,7 @@ public class OrderController {
     @GetMapping
     public OrdersPageView list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "10") int size
     ) {
         var result = orders.list(page, size);
         return new OrdersPageView(

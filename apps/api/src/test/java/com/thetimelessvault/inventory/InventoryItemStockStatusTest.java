@@ -4,7 +4,10 @@ import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.StockStatus;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InventoryItemStockStatusTest {
 
@@ -76,5 +79,32 @@ class InventoryItemStockStatusTest {
 
         assertEquals(StockStatus.IN_TRANSIT, item.getStockStatus());
         assertEquals(0, item.getQuantity());
+    }
+
+    @Test
+    void changingStockStatusTouchesUpdatedAt() {
+        InventoryItem item = InventoryItem.create(CatalogItem.create("75192-1"), "TTV-75192-1-AAAA");
+        Instant original = Instant.parse("2026-01-01T00:00:00Z");
+        setUpdatedAt(item, original);
+
+        item.applyStockAndQuantity(StockStatus.IN_STOCK, 0);
+        assertTrue(item.getUpdatedAt().isAfter(original));
+
+        Instant afterInStock = item.getUpdatedAt();
+        item.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
+        assertEquals(afterInStock, item.getUpdatedAt());
+
+        item.applyStockAndQuantity(StockStatus.SOLD, 0);
+        assertTrue(item.getUpdatedAt().isAfter(afterInStock));
+    }
+
+    private static void setUpdatedAt(InventoryItem item, Instant updatedAt) {
+        try {
+            var field = InventoryItem.class.getDeclaredField("updatedAt");
+            field.setAccessible(true);
+            field.set(item, updatedAt);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

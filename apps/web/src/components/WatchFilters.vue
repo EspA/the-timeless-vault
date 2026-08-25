@@ -65,6 +65,24 @@ const parsePrice = (raw: string) => {
     </div>
     <div class="grid two">
       <div class="card grid">
+        <h3 class="channel-heading"><ChannelLogo platform="EBAY" :height="22" /></h3>
+        <label>Automatic scan frequency
+          <select v-model.number="ebayScanIntervalMinutes">
+            <option v-for="option in ebayIntervalOptions" :key="option.minutes" :value="option.minutes">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label>Search <input v-model="ebaySearchQuery" /></label>
+        <label>Exclude words
+          <textarea v-model="ebayExcludeWords" rows="4" placeholder="-yellow -box"></textarea>
+        </label>
+        <label>Item condition <input value="New" disabled /></label>
+        <label>Feedback count min <input v-model.number="ebayFeedbackMin" type="number" min="0" /></label>
+        <label>Items located <input value="North America" disabled /></label>
+        <label>Listing type <input value="All Item Types" disabled /></label>
+      </div>
+      <div class="card grid">
         <h3 class="channel-heading"><ChannelLogo platform="BRICKLINK" :height="22" /></h3>
         <label>Automatic scan frequency
           <select v-model.number="bricklinkScanIntervalMinutes">
@@ -74,28 +92,10 @@ const parsePrice = (raw: string) => {
           </select>
         </label>
         <label>Set ID <input :value="setNumber || ''" disabled /></label>
-      <label>Condition <input value="New and Sealed" disabled /></label>
-      <label>Seller location <input value="Anywhere" disabled /></label>
-      <label>Seller ships to <input value="USA" disabled /></label>
-    </div>
-    <div class="card grid">
-      <h3 class="channel-heading"><ChannelLogo platform="EBAY" :height="22" /></h3>
-      <label>Automatic scan frequency
-        <select v-model.number="ebayScanIntervalMinutes">
-          <option v-for="option in ebayIntervalOptions" :key="option.minutes" :value="option.minutes">
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-      <label>Search <input v-model="ebaySearchQuery" /></label>
-      <label>Exclude words
-        <textarea v-model="ebayExcludeWords" rows="4" placeholder="-yellow -box"></textarea>
-      </label>
-      <label>Item condition <input value="New" disabled /></label>
-      <label>Feedback count min <input v-model.number="ebayFeedbackMin" type="number" min="0" /></label>
-      <label>Items located <input value="North America" disabled /></label>
-      <label>Listing type <input value="All Item Types" disabled /></label>
-    </div>
+        <label>Condition <input value="New and Sealed" disabled /></label>
+        <label>Seller location <input value="Anywhere" disabled /></label>
+        <label>Seller ships to <input value="USA" disabled /></label>
+      </div>
     </div>
   </div>
 </template>

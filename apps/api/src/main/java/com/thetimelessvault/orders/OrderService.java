@@ -100,7 +100,7 @@ public class OrderService {
             Order order = existing.get();
             OrderStatus previous = order.applyChannelUpdate(incoming);
             orders.save(order);
-            applyInventoryTransition(order, previous, order.getStatus());
+            afterStatusChange(order, previous);
             return false;
         }
         try {
@@ -155,7 +155,7 @@ public class OrderService {
         }
         OrderStatus previous = order.applyManual(request.status(), request.trackingNumber(), request.shippingProvider());
         orders.save(order);
-        applyInventoryTransition(order, previous, order.getStatus());
+        afterStatusChange(order, previous);
         return order;
     }
 
@@ -226,15 +226,29 @@ public class OrderService {
     ) {
     }
 
-    private void applyInventoryTransition(Order order, OrderStatus from, OrderStatus to) {
-        if (order == null || from == to) {
+    private void afterStatusChange(Order order, OrderStatus previous) {
+        if (order == null) {
             return;
         }
-        UUID itemId = order.getInventoryItemId();
-        if (itemId == null) {
+        OrderStatus current = order.getStatus();
+        if (previous == current) {
             return;
         }
-        InventoryItem item = items.findById(itemId).orElse(null);
+        InventoryItem item = loadItem(order);
+        applyInventoryTransition(order, previous, current, item);
+        if (current == OrderStatus.COMPLETED) {
+            opportunities.recordOrderDelivered(order, item);
+        }
+    }
+
+    private InventoryItem loadItem(Order order) {
+        if (order.getInventoryItemId() == null) {
+            return null;
+        }
+        return items.findById(order.getInventoryItemId()).orElse(null);
+    }
+
+    private void applyInventoryTransition(Order order, OrderStatus from, OrderStatus to, InventoryItem item) {
         if (item == null) {
             return;
         }

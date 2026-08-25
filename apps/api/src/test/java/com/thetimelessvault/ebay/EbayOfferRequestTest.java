@@ -128,6 +128,8 @@ class EbayOfferRequestTest {
         assertEquals("75870", body.path("product").path("mpn").asText());
         assertEquals("673419247252", body.path("product").path("upc").path(0).asText());
         assertEquals("Complete Set", body.path("product").path("aspects").path("Type").path(0).asText());
+        assertEquals("Plastic", body.path("product").path("aspects").path("Material").path(0).asText());
+        assertEquals("Box", body.path("product").path("aspects").path("Packaging").path(0).asText());
         assertEquals("2017", body.path("product").path("aspects").path("Year Retired").path(0).asText());
         assertEquals("Yes", body.path("product").path("aspects").path("Retired").path(0).asText());
         assertTrue(body.path("product").path("aspects").path("Age Level").isMissingNode());

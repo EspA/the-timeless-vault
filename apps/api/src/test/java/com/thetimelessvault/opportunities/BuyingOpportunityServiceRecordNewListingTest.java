@@ -263,6 +263,84 @@ class BuyingOpportunityServiceRecordNewListingTest {
     }
 
     @Test
+    void recordOrderDeliveredCreatesNotificationAndEmail() {
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
+        Order sale = Order.create(item, new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-1",
+                item.getSku(),
+                null,
+                "LEGO 75017 Duel on Geonosis",
+                "75017-1",
+                1,
+                new BigDecimal("315.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.SHIPPED,
+                "9400111",
+                "USPS"
+        ), false);
+        sale.applyManual(OrderStatus.COMPLETED, null, null);
+        when(opportunities.findByDedupeKey("DELIVERED:" + sale.getId())).thenReturn(Optional.empty());
+        when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(photos.findByInventoryItemIdOrderBySortOrderAscCreatedAtAsc(item.getId())).thenReturn(List.of());
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(false);
+
+        service.recordOrderDelivered(sale, item);
+
+        ArgumentCaptor<BuyingOpportunity> saved = ArgumentCaptor.forClass(BuyingOpportunity.class);
+        verify(opportunities).save(saved.capture());
+        assertEquals(BuyingOpportunity.TYPE_ORDER_DELIVERED, saved.getValue().getType());
+        assertEquals("DELIVERED:" + sale.getId(), saved.getValue().getDedupeKey());
+        assertEquals("Delivered eBay order of 75017-1 Duel on Geonosis", saved.getValue().getTitle());
+        assertEquals("/orders/" + sale.getId(), saved.getValue().getUrl());
+        assertTrue(saved.getValue().getBody().contains("$315.00"));
+        assertTrue(saved.getValue().getBody().contains("order 12-345"));
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
+        verify(notificationMailer).sendQuietly(subject.capture(), any(), html.capture());
+        assertTrue(subject.getValue().contains("ORDER DELIVERED"));
+        assertTrue(html.getValue().contains("Open order"));
+        assertTrue(html.getValue().contains("Tracking 9400111 · USPS"));
+    }
+
+    @Test
+    void recordOrderDeliveredSkipsDuplicateOrder() {
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75017-1-AAAA");
+        Order sale = Order.create(item, new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-1",
+                item.getSku(),
+                null,
+                "LEGO 75017 Duel on Geonosis",
+                "75017-1",
+                1,
+                new BigDecimal("315.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.COMPLETED,
+                null,
+                null
+        ), false);
+        when(opportunities.findByDedupeKey("DELIVERED:" + sale.getId()))
+                .thenReturn(Optional.of(BuyingOpportunity.create(
+                        BuyingOpportunity.TYPE_ORDER_DELIVERED, "already", "DELIVERED:" + sale.getId())));
+
+        service.recordOrderDelivered(sale, item);
+
+        verify(opportunities, never()).save(any());
+        verify(notificationMailer, never()).sendQuietly(any(), any(), any());
+    }
+
+    @Test
     void recordScanFailureCreatesNotificationAndEmail() {
         when(opportunities.findByDedupeKey(org.mockito.ArgumentMatchers.startsWith("SCAN_FAIL:EBAY:")))
                 .thenReturn(Optional.empty());

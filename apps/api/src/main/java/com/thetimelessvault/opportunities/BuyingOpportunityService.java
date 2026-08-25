@@ -212,6 +212,71 @@ public class BuyingOpportunityService {
     }
 
     @Transactional
+    public void recordOrderDelivered(Order order, InventoryItem item) {
+        if (order == null || order.getId() == null) {
+            return;
+        }
+        String dedupe = "DELIVERED:" + order.getId();
+        if (opportunities.findByDedupeKey(dedupe).isPresent()) {
+            return;
+        }
+        CatalogItem catalog = item == null ? null : item.getCatalogItem();
+        String setNumber = catalog == null ? order.getSetNumber() : catalog.getSetNumber();
+        String setName = catalog == null ? order.getItemTitle() : catalog.getName();
+        String heading = ((setNumber == null ? "" : setNumber) + " " + (setName == null ? "" : setName)).trim();
+        String channel = order.getPlatform() == null
+                ? "channel"
+                : NotificationEmailRenderer.platformLabel(order.getPlatform().name());
+        BuyingOpportunity opportunity = BuyingOpportunity.create(
+                BuyingOpportunity.TYPE_ORDER_DELIVERED,
+                "Delivered " + channel + " order" + (heading.isBlank() ? "" : " of " + heading),
+                dedupe
+        );
+        opportunity.setCatalogItem(catalog);
+        opportunity.setPlatform(order.getPlatform());
+        opportunity.setUrl("/orders/" + order.getId());
+        String qty = order.getQuantity() <= 0 ? "1" : String.valueOf(order.getQuantity());
+        StringBuilder body = new StringBuilder();
+        body.append(qty).append(" × ").append(NotificationEmailRenderer.money(order.getUnitPrice()));
+        if (order.getSku() != null && !order.getSku().isBlank()) {
+            body.append(" · ").append(order.getSku());
+        }
+        if (order.getExternalOrderId() != null && !order.getExternalOrderId().isBlank()) {
+            body.append(" · order ").append(order.getExternalOrderId());
+        }
+        opportunity.setBody(body.toString());
+        opportunities.save(opportunity);
+        email(
+                opportunity,
+                order.getUnitPrice(),
+                null,
+                inventoryPhoto(item),
+                item,
+                order.getStatusUpdatedAt(),
+                null,
+                trackingDetail(order)
+        );
+    }
+
+    static String trackingDetail(Order order) {
+        if (order == null) {
+            return null;
+        }
+        String tracking = order.getTrackingNumber() == null ? "" : order.getTrackingNumber().trim();
+        String provider = order.getShippingProvider() == null ? "" : order.getShippingProvider().trim();
+        if (tracking.isBlank() && provider.isBlank()) {
+            return null;
+        }
+        if (tracking.isBlank()) {
+            return provider;
+        }
+        if (provider.isBlank()) {
+            return "Tracking " + tracking;
+        }
+        return "Tracking " + tracking + " · " + provider;
+    }
+
+    @Transactional
     public void recordScanFailure(CatalogItem catalog, Platform platform, String message, ScanTrigger trigger) {
         if (trigger != ScanTrigger.AUTOMATIC) {
             return;
@@ -357,7 +422,8 @@ public class BuyingOpportunityService {
         if (opportunity == null) {
             return null;
         }
-        if (BuyingOpportunity.TYPE_NEW_SALE.equals(opportunity.getType())) {
+        if (BuyingOpportunity.TYPE_NEW_SALE.equals(opportunity.getType())
+                || BuyingOpportunity.TYPE_ORDER_DELIVERED.equals(opportunity.getType())) {
             String path = orderAppPath(opportunity);
             if (path != null) {
                 return path;

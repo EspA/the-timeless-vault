@@ -11,7 +11,7 @@ const emit = defineEmits<{
 
 const setNumber = ref("");
 const catalog = ref<Catalog | null>(null);
-const enabled = ref(true);
+const enabled = ref(false);
 const ebaySearchQuery = ref("");
 const ebayExcludeWords = ref(defaultEbayExcludeWords);
 const ebayFeedbackMin = ref(1);

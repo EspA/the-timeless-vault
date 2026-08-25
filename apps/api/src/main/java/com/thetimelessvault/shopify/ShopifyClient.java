@@ -810,7 +810,7 @@ public class ShopifyClient {
         String locationId = resolveLocationId();
         activateAtLocation(inventoryItemId, locationId);
         ObjectNode input = mapper.createObjectNode();
-        input.put("name", "on_hand");
+        input.put("name", "available");
         input.put("reason", "correction");
         input.put("ignoreCompareQuantity", true);
         ArrayNode quantities = input.putArray("quantities");

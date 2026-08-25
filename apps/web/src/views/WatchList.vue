@@ -12,7 +12,7 @@ const adding = ref(false);
 type Column = "set" | "name" | "median" | "status" | "theme" | "ebayScan" | "bricklinkScan";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const watches = ref<SetWatch[]>([]);
 const page = ref(0);
 const error = ref("");
@@ -314,8 +314,8 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-for="watch in visible" :key="watch.id">
-              <td>{{ watch.setNumber }}</td>
-              <td><router-link :to="`/watches/${watch.id}`">{{ watch.name }}</router-link></td>
+              <td><router-link :to="`/market/${watch.catalogId}`">{{ watch.setNumber }}</router-link></td>
+              <td><router-link :to="`/market/${watch.catalogId}`">{{ watch.name }}</router-link></td>
               <td>{{ money(watch.medianPrice) }}</td>
               <td>
                 <label class="switch">
@@ -334,6 +334,7 @@ onMounted(async () => {
               <td>{{ scanFrequency(watch.ebayScanIntervalMinutes) }}</td>
               <td>{{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</td>
               <td>
+                <router-link class="btn secondary compact" :to="`/watches/${watch.id}`">Filters</router-link>
                 <button class="btn danger compact" type="button" @click="remove(watch)">Delete</button>
               </td>
             </tr>
@@ -345,7 +346,7 @@ onMounted(async () => {
       </div>
       <div class="list-cards mobile-only">
         <article v-for="watch in visible" :key="watch.id" class="list-card">
-          <h3><router-link :to="`/watches/${watch.id}`">{{ watch.name }}</router-link></h3>
+          <h3><router-link :to="`/market/${watch.catalogId}`">{{ watch.name }}</router-link></h3>
           <div class="list-card-meta muted">{{ watch.setNumber }} · {{ watch.theme || "No theme" }} · {{ money(watch.medianPrice) }}</div>
           <label class="switch">
             <input
@@ -363,7 +364,8 @@ onMounted(async () => {
             <span>BrickLink {{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</span>
           </div>
           <div class="list-card-actions">
-            <router-link class="btn secondary compact" :to="`/watches/${watch.id}`">Open</router-link>
+            <router-link class="btn secondary compact" :to="`/market/${watch.catalogId}`">Open market</router-link>
+            <router-link class="btn secondary compact" :to="`/watches/${watch.id}`">Filters</router-link>
             <button class="btn danger compact" type="button" @click="remove(watch)">Delete</button>
           </div>
         </article>
