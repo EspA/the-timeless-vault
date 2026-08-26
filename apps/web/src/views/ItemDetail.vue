@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, isListingDumpShortDescription, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
 import { askAlert, askConfirm, confirmStockStatusChange } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
@@ -97,6 +97,9 @@ watch(
     const generated = brickLinkShortDescriptionFromHtml(html || "");
     if (previous === undefined) {
       lastGeneratedShortDescription = generated;
+      if (generated && isListingDumpShortDescription(item.value.shortDescription)) {
+        item.value.shortDescription = generated;
+      }
       return;
     }
     if (!item.value.shortDescription || item.value.shortDescription === lastGeneratedShortDescription) {
@@ -707,7 +710,9 @@ const applyCatalogRefresh = (catalog: Catalog) => {
   item.value.description = applyCatalogToDescription(item.value.description || "", catalog);
   editorKey.value += 1;
   const generatedShort = brickLinkShortDescriptionFromHtml(item.value.description || "");
-  if (!item.value.shortDescription || item.value.shortDescription === previousGenerated) {
+  if (!item.value.shortDescription
+      || item.value.shortDescription === previousGenerated
+      || isListingDumpShortDescription(item.value.shortDescription)) {
     item.value.shortDescription = generatedShort;
   }
   lastGeneratedShortDescription = generatedShort;

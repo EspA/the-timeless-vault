@@ -3,6 +3,10 @@ package com.thetimelessvault.opportunities;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
+import com.thetimelessvault.inbound.PurchaseOrder;
+import com.thetimelessvault.inbound.PurchaseOrderLine;
+import com.thetimelessvault.inbound.ShippingCarrier;
+import com.thetimelessvault.inbound.Supplier;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
@@ -335,6 +339,51 @@ class BuyingOpportunityServiceRecordNewListingTest {
                         BuyingOpportunity.TYPE_ORDER_DELIVERED, "already", "DELIVERED:" + sale.getId())));
 
         service.recordOrderDelivered(sale, item);
+
+        verify(opportunities, never()).save(any());
+        verify(notificationMailer, never()).sendQuietly(any(), any(), any());
+    }
+
+    @Test
+    void recordPurchaseOrderDeliveredCreatesNotificationAndEmail() {
+        PurchaseOrder order = PurchaseOrder.create(Supplier.create("Brick Depot"), 1);
+        order.setCarrier(ShippingCarrier.UPS);
+        order.setTrackingNumber("1Z123");
+        order.addLine(PurchaseOrderLine.create("75192-1", "Falcon", 2, new BigDecimal("100.00")));
+        InventoryItem item = InventoryItem.create(catalog, "TTV-75192-1-AAAA");
+        when(opportunities.findByDedupeKey("PO_DELIVERED:" + order.getId())).thenReturn(Optional.empty());
+        when(opportunities.save(any(BuyingOpportunity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(photos.findByInventoryItemIdOrderBySortOrderAscCreatedAtAsc(item.getId())).thenReturn(List.of());
+        when(notificationMailer.sendQuietly(any(), any(), any())).thenReturn(false);
+
+        service.recordPurchaseOrderDelivered(order, item);
+
+        ArgumentCaptor<BuyingOpportunity> saved = ArgumentCaptor.forClass(BuyingOpportunity.class);
+        verify(opportunities).save(saved.capture());
+        assertEquals(BuyingOpportunity.TYPE_PURCHASE_ORDER_DELIVERED, saved.getValue().getType());
+        assertEquals("PO_DELIVERED:" + order.getId(), saved.getValue().getDedupeKey());
+        assertEquals("Delivered purchase order PO-1 from Brick Depot", saved.getValue().getTitle());
+        assertEquals("/purchase-orders/" + order.getId(), saved.getValue().getUrl());
+        assertTrue(saved.getValue().getBody().contains("$200.00"));
+        assertTrue(saved.getValue().getBody().contains("75192-1 Falcon"));
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
+        verify(notificationMailer).sendQuietly(subject.capture(), any(), html.capture());
+        assertTrue(subject.getValue().contains("PURCHASE ORDER DELIVERED"));
+        assertTrue(html.getValue().contains("Open purchase order"));
+        assertTrue(html.getValue().contains("Tracking 1Z123 · UPS"));
+    }
+
+    @Test
+    void recordPurchaseOrderDeliveredSkipsDuplicateOrder() {
+        PurchaseOrder order = PurchaseOrder.create(Supplier.create("Brick Depot"), 1);
+        when(opportunities.findByDedupeKey("PO_DELIVERED:" + order.getId()))
+                .thenReturn(Optional.of(BuyingOpportunity.create(
+                        BuyingOpportunity.TYPE_PURCHASE_ORDER_DELIVERED,
+                        "already",
+                        "PO_DELIVERED:" + order.getId())));
+
+        service.recordPurchaseOrderDelivered(order, null);
 
         verify(opportunities, never()).save(any());
         verify(notificationMailer, never()).sendQuietly(any(), any(), any());

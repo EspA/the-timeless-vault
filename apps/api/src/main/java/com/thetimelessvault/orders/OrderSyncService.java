@@ -9,6 +9,7 @@ import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
 import com.thetimelessvault.shopify.ShopifyClient;
+import com.thetimelessvault.inbound.PurchaseOrderDeliverySyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class OrderSyncService {
     private final BrickLinkClient brickLinkClient;
     private final ShopifyClient shopifyClient;
     private final ObjectMapper mapper;
+    private final PurchaseOrderDeliverySyncService purchaseOrderDeliveries;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public OrderSyncService(
@@ -51,7 +53,8 @@ public class OrderSyncService {
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
             ShopifyClient shopifyClient,
-            ObjectMapper mapper
+            ObjectMapper mapper,
+            PurchaseOrderDeliverySyncService purchaseOrderDeliveries
     ) {
         this.orderService = orderService;
         this.orders = orders;
@@ -60,6 +63,7 @@ public class OrderSyncService {
         this.brickLinkClient = brickLinkClient;
         this.shopifyClient = shopifyClient;
         this.mapper = mapper;
+        this.purchaseOrderDeliveries = purchaseOrderDeliveries;
     }
 
     public Map<String, Object> sync() {
@@ -69,16 +73,32 @@ public class OrderSyncService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         int imported = 0;
+        int purchaseOrdersDelivered = 0;
         try {
             imported += syncEbay();
             imported += syncBrickLink();
             imported += syncShopify();
             saveSetting(LAST_SYNC_KEY, Instant.now().toString());
+            purchaseOrdersDelivered = syncPurchaseOrderDeliveries();
         } finally {
             running.set(false);
         }
         result.put("imported", imported);
+        result.put("purchaseOrdersDelivered", purchaseOrdersDelivered);
         return result;
+    }
+
+    int syncPurchaseOrderDeliveries() {
+        try {
+            int delivered = purchaseOrderDeliveries.syncDeliveredShipments();
+            if (delivered > 0) {
+                log.info("Purchase order delivery sync marked {} in-transit orders delivered", delivered);
+            }
+            return delivered;
+        } catch (Exception e) {
+            log.warn("Purchase order delivery sync failed: {}", e.getMessage());
+            return 0;
+        }
     }
 
     int syncEbay() {

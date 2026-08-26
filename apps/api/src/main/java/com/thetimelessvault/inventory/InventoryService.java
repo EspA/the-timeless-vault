@@ -10,6 +10,8 @@ import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.common.ThemeMapper;
+import com.thetimelessvault.inbound.PurchaseOrderLineRepository;
+import com.thetimelessvault.inbound.PurchaseOrderStatus;
 import com.thetimelessvault.market.MarketScanLauncher;
 import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.publish.ChannelListingRepository;
@@ -43,6 +45,7 @@ public class InventoryService {
     private final ObjectStorage storage;
     private final SetWatchService setWatches;
     private final MarketScanLauncher marketScans;
+    private final PurchaseOrderLineRepository purchaseOrderLines;
 
     public InventoryService(
             InventoryItemRepository items,
@@ -53,7 +56,8 @@ public class InventoryService {
             CatalogService catalogService,
             ObjectStorage storage,
             SetWatchService setWatches,
-            MarketScanLauncher marketScans
+            MarketScanLauncher marketScans,
+            PurchaseOrderLineRepository purchaseOrderLines
     ) {
         this.items = items;
         this.photos = photos;
@@ -64,6 +68,7 @@ public class InventoryService {
         this.storage = storage;
         this.setWatches = setWatches;
         this.marketScans = marketScans;
+        this.purchaseOrderLines = purchaseOrderLines;
     }
 
     @Transactional
@@ -163,6 +168,11 @@ public class InventoryService {
 
     @Transactional
     public void delete(UUID id) {
+        if (purchaseOrderLines.existsByInventoryItemIdAndPurchaseOrder_StatusIn(
+                id, List.of(PurchaseOrderStatus.IN_TRANSIT, PurchaseOrderStatus.DELIVERED))) {
+            throw ApiException.conflict(
+                    "This SKU is on an open purchase order. Remove the line or cancel the purchase order first.");
+        }
         InventoryItem item = get(id);
         List<Photo> itemPhotos = photos.findByInventoryItemIdOrderBySortOrderAscCreatedAtAsc(id);
         itemPhotos.forEach(photo -> storage.delete(photo.getStorageKey()));
@@ -322,7 +332,10 @@ public class InventoryService {
                 ? ThemeMapper.suggestedTitle(catalog.getTheme(), catalog.getSetNumber(), catalog.getName(), condition)
                 : request.title()));
         item.setDescription(com.thetimelessvault.common.DescriptionHtml.sanitize(request.description()));
-        item.setShortDescription(com.thetimelessvault.common.DescriptionHtml.forBrickLink(request.shortDescription()));
+        String shortDescription = request.shortDescription() == null || request.shortDescription().isBlank()
+                ? com.thetimelessvault.common.DescriptionHtml.shortDescriptionFromListingHtml(request.description())
+                : request.shortDescription();
+        item.setShortDescription(com.thetimelessvault.common.DescriptionHtml.forBrickLink(shortDescription));
         item.setEbayPrice(request.ebayPrice());
         item.setBricklinkPrice(request.bricklinkPrice());
         item.setShopifyPrice(request.shopifyPrice());

@@ -97,8 +97,8 @@ public final class NotificationEmailRenderer {
     }
 
     public static String html(NotificationEmail email, String assetBaseUrl) {
-        String badgeBg = email.scanFailed() ? BADGE_FAIL : email.buyingOpportunity() || email.orderAlert() ? BADGE_OK : BADGE_PRICE;
-        String badgeInk = email.scanFailed() ? BADGE_FAIL_INK : email.buyingOpportunity() || email.orderAlert() ? BADGE_OK_INK : GOLD_INK;
+        String badgeBg = email.scanFailed() ? BADGE_FAIL : email.buyingOpportunity() || email.orderAlert() || email.inboundAlert() ? BADGE_OK : BADGE_PRICE;
+        String badgeInk = email.scanFailed() ? BADGE_FAIL_INK : email.buyingOpportunity() || email.orderAlert() || email.inboundAlert() ? BADGE_OK_INK : GOLD_INK;
         String heading = heading(email);
         StringBuilder priceHtml = new StringBuilder();
         if (email.price() != null && !email.price().isBlank()) {
@@ -227,6 +227,9 @@ public final class NotificationEmailRenderer {
     }
 
     static String scanFailedLinkLabel(NotificationEmail email) {
+        if (email.purchaseOrderDelivered()) {
+            return "Open purchase order";
+        }
         if (email.orderAlert()) {
             return "Open order";
         }
@@ -246,6 +249,12 @@ public final class NotificationEmailRenderer {
             case "BRICKLINK" -> "BrickLink";
             case "SHOPIFY" -> "Shopify";
             case "LOCAL" -> "Local";
+            case "FEDEX" -> "FedEx";
+            case "UPS" -> "UPS";
+            case "USPS" -> "USPS";
+            case "DHL" -> "DHL";
+            case "COLISSIMO" -> "Colissimo";
+            case "POSTNL" -> "PostNL";
             default -> platform.trim();
         };
     }

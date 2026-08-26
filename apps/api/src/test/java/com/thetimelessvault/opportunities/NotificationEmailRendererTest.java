@@ -217,4 +217,36 @@ class NotificationEmailRendererTest {
         assertTrue(NotificationEmailRenderer.text(email).contains("Open order:"));
         assertTrue(NotificationEmailRenderer.text(email).contains("Tracking 9400111 · USPS"));
     }
+
+    @Test
+    void purchaseOrderDeliveredIncludesOpenPurchaseOrderLinkAndTracking() {
+        NotificationEmail email = new NotificationEmail(
+                BuyingOpportunity.TYPE_PURCHASE_ORDER_DELIVERED,
+                "PO-1",
+                "Brick Depot",
+                null,
+                "$200.00",
+                null,
+                "https://admin.thetimelessvault.com/purchase-orders/abc",
+                null,
+                "UPS",
+                null,
+                null,
+                SCANNED,
+                "Tracking 1Z123 · UPS"
+        );
+
+        String html = NotificationEmailRenderer.html(email);
+        assertTrue(html.contains("PURCHASE ORDER DELIVERED"));
+        assertTrue(html.contains("PO-1 / Brick Depot"));
+        assertTrue(html.contains("$200.00"));
+        assertTrue(html.contains("Open purchase order"));
+        assertTrue(html.contains("https://admin.thetimelessvault.com/purchase-orders/abc"));
+        assertTrue(html.contains("Tracking 1Z123 · UPS"));
+        assertEquals(
+                "[The Timeless Vault] PURCHASE ORDER DELIVERED · UPS · PO-1 / Brick Depot",
+                NotificationEmailRenderer.subject(email)
+        );
+        assertTrue(NotificationEmailRenderer.text(email).contains("Open purchase order:"));
+    }
 }

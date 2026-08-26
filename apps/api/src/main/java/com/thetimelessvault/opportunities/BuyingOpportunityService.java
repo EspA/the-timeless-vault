@@ -10,6 +10,8 @@ import com.thetimelessvault.inventory.PhotoRepository;
 import com.thetimelessvault.market.MarketListing;
 import com.thetimelessvault.market.ScanTrigger;
 import com.thetimelessvault.publish.ChannelListing;
+import com.thetimelessvault.inbound.PurchaseOrder;
+import com.thetimelessvault.inbound.PurchaseOrderLine;
 import com.thetimelessvault.orders.Order;
 import com.thetimelessvault.orders.OrderRepository;
 import com.thetimelessvault.settings.NotificationMailer;
@@ -258,22 +260,95 @@ public class BuyingOpportunityService {
         );
     }
 
+    @Transactional
+    public void recordPurchaseOrderDelivered(PurchaseOrder order, InventoryItem item) {
+        if (order == null || order.getId() == null) {
+            return;
+        }
+        String dedupe = "PO_DELIVERED:" + order.getId();
+        if (opportunities.findByDedupeKey(dedupe).isPresent()) {
+            return;
+        }
+        CatalogItem catalog = item == null ? null : item.getCatalogItem();
+        String supplierName = order.getSupplier() == null || order.getSupplier().getName() == null
+                ? ""
+                : order.getSupplier().getName().trim();
+        BuyingOpportunity opportunity = BuyingOpportunity.create(
+                BuyingOpportunity.TYPE_PURCHASE_ORDER_DELIVERED,
+                "Delivered purchase order " + order.displayNumber()
+                        + (supplierName.isBlank() ? "" : " from " + supplierName),
+                dedupe
+        );
+        opportunity.setCatalogItem(catalog);
+        opportunity.setUrl("/purchase-orders/" + order.getId());
+        opportunity.setBody(purchaseOrderBody(order, supplierName));
+        opportunities.save(opportunity);
+        NotificationEmail email = new NotificationEmail(
+                opportunity.getType(),
+                order.displayNumber(),
+                supplierName,
+                inventoryPhoto(item),
+                NotificationEmailRenderer.money(order.totalValue()),
+                "",
+                absoluteUrl(opportunity.getUrl()),
+                null,
+                order.getCarrier() == null ? null : order.getCarrier().name(),
+                null,
+                null,
+                order.getUpdatedAt(),
+                trackingDetail(order)
+        );
+        sendEmail(opportunity, email);
+    }
+
+    static String purchaseOrderBody(PurchaseOrder order, String supplierName) {
+        StringBuilder body = new StringBuilder();
+        body.append(NotificationEmailRenderer.money(order.totalValue()));
+        int lines = order.getLines() == null ? 0 : order.getLines().size();
+        if (lines == 1) {
+            PurchaseOrderLine line = order.getLines().getFirst();
+            String heading = ((line.getSetNumber() == null ? "" : line.getSetNumber()) + " "
+                    + (line.getTitle() == null ? "" : line.getTitle())).trim();
+            if (!heading.isBlank()) {
+                body.append(" · ").append(heading);
+            }
+        } else if (lines > 1) {
+            body.append(" · ").append(lines).append(" lines");
+        }
+        if (supplierName != null && !supplierName.isBlank()) {
+            body.append(" · ").append(supplierName);
+        }
+        return body.toString();
+    }
+
     static String trackingDetail(Order order) {
         if (order == null) {
             return null;
         }
-        String tracking = order.getTrackingNumber() == null ? "" : order.getTrackingNumber().trim();
-        String provider = order.getShippingProvider() == null ? "" : order.getShippingProvider().trim();
-        if (tracking.isBlank() && provider.isBlank()) {
+        return trackingDetail(order.getTrackingNumber(), order.getShippingProvider());
+    }
+
+    static String trackingDetail(PurchaseOrder order) {
+        if (order == null) {
+            return null;
+        }
+        String carrier = order.getCarrier() == null ? null : NotificationEmailRenderer.platformLabel(order.getCarrier().name());
+        return trackingDetail(order.getTrackingNumber(), carrier);
+    }
+
+    static String trackingDetail(String trackingNumber, String provider) {
+        String tracking = trackingNumber == null ? "" : trackingNumber.trim();
+        String label = provider == null ? "" : provider.trim();
+        if (tracking.isBlank() && label.isBlank()) {
             return null;
         }
         if (tracking.isBlank()) {
-            return provider;
+            return label;
         }
-        if (provider.isBlank()) {
+        if (label.isBlank()) {
             return "Tracking " + tracking;
         }
-        return "Tracking " + tracking + " · " + provider;
+        return "Tracking " + tracking + " · " + label;
     }
 
     @Transactional
@@ -376,6 +451,10 @@ public class BuyingOpportunityService {
                 when,
                 detail
         );
+        sendEmail(opportunity, email);
+    }
+
+    private void sendEmail(BuyingOpportunity opportunity, NotificationEmail email) {
         if (notificationMailer.sendQuietly(
                 NotificationEmailRenderer.subject(email),
                 NotificationEmailRenderer.text(email),

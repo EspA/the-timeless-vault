@@ -27,8 +27,16 @@ public record NotificationEmail(
         return BuyingOpportunity.TYPE_ORDER_DELIVERED.equals(type);
     }
 
+    boolean purchaseOrderDelivered() {
+        return BuyingOpportunity.TYPE_PURCHASE_ORDER_DELIVERED.equals(type);
+    }
+
     boolean orderAlert() {
         return newSale() || orderDelivered();
+    }
+
+    boolean inboundAlert() {
+        return purchaseOrderDelivered();
     }
 
     boolean priceGuard() {

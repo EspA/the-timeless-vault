@@ -144,6 +144,53 @@ button, .btn {
   gap: 0.45rem;
 }
 
+.po-table th,
+.po-table td {
+  padding: 0.35rem 0.4rem;
+  vertical-align: middle;
+}
+
+.po-table thead th {
+  padding-top: 0.45rem;
+  padding-bottom: 0.35rem;
+}
+
+.po-table .column-filter {
+  margin-top: 0.25rem;
+}
+
+.po-table input,
+.po-table select {
+  padding: 0.28rem 0.45rem;
+  font-size: 0.85rem;
+  border-radius: 8px;
+}
+
+.po-table .order-field {
+  min-width: 0;
+}
+
+.po-table .stock-status.compact .stock-status-btn {
+  padding: 0.22rem 0.5rem;
+}
+
+.po-tracking {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.po-tracking .order-field {
+  flex: 1;
+  min-width: 7rem;
+}
+
+.po-tracking a {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .shopify-status {
   display: flex;
   gap: 0.45rem;
@@ -543,6 +590,73 @@ textarea.short-description {
 
 .grid { display: grid; gap: 1rem; }
 .grid.two { grid-template-columns: 1fr 1fr; }
+
+.po-header-fields {
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(9rem, 1fr) minmax(7rem, 0.9fr) minmax(9rem, 1.1fr);
+  align-items: start;
+}
+
+.po-supplier-field {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.po-supplier-field select {
+  min-width: 0;
+  flex: 1;
+}
+
+.po-supplier-field .btn {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.po-note {
+  display: block;
+}
+
+.po-note:not([open]) textarea {
+  display: none;
+}
+
+.po-note[open] {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.po-note summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.po-note summary::-webkit-details-marker {
+  display: none;
+}
+
+.po-note summary::before {
+  content: "▸";
+  flex: 0 0 auto;
+  color: var(--slate);
+}
+
+.po-note[open] summary::before {
+  content: "▾";
+}
+
+.po-note summary .muted {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
 
 .stacked-field {
   display: grid;
@@ -1179,6 +1293,53 @@ th .sort-btn { width: 100%; }
   gap: 0.6rem;
 }
 
+.po-lines {
+  table-layout: fixed;
+}
+
+.po-col-set { width: 11.25rem; }
+.po-col-title { width: auto; }
+.po-col-qty { width: 4rem; }
+.po-col-unit { width: 6.5rem; }
+.po-col-sku { width: 9.25rem; }
+.po-col-actions { width: 5.25rem; }
+
+.po-lines th,
+.po-lines td {
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+}
+
+.po-lines th:nth-child(3),
+.po-lines td:nth-child(3),
+.po-lines th:nth-child(4),
+.po-lines td:nth-child(4) {
+  white-space: nowrap;
+}
+
+.po-lines .form-modal-lookup {
+  gap: 0.3rem;
+}
+
+.po-lines .form-modal-lookup input {
+  width: 5.75rem;
+  min-width: 0;
+  flex: 0 0 5.75rem;
+}
+
+.po-lines .form-modal-lookup .btn {
+  flex: 0 0 auto;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+}
+
+.po-lines td:nth-child(3) input,
+.po-lines td:nth-child(4) input {
+  min-width: 0;
+  padding-left: 0.35rem;
+  padding-right: 0.2rem;
+}
+
 .catalog-aspects {
   width: 100%;
 }
@@ -1365,8 +1526,14 @@ th .sort-btn { width: 100%; }
   color: var(--ink);
 }
 
+.stock-status-btn.active.delivered {
+  background: var(--badge-price);
+  color: var(--ink);
+}
+
 .stock-status-btn.active.in_stock,
-.stock-status-btn.active.in-stock {
+.stock-status-btn.active.in-stock,
+.stock-status-btn.active.received {
   background: var(--badge-ok);
   color: var(--ok);
 }
@@ -1407,6 +1574,11 @@ th .sort-btn { width: 100%; }
   align-items: start;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.page-head .stock-status {
+  flex: 0 0 auto;
+  align-self: start;
 }
 
 .page-head h1 {
@@ -1909,6 +2081,10 @@ td.negative {
     grid-template-columns: 1fr;
   }
 
+  .po-header-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
   .grid.three.hero-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1945,6 +2121,12 @@ td.negative {
 
   .page-head {
     align-items: stretch;
+  }
+
+  .page-head .stock-status {
+    width: auto;
+    max-width: 100%;
+    align-self: start;
   }
 
   .page-title-row .page-meta {

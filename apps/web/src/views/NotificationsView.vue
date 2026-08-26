@@ -30,6 +30,7 @@ const TYPE_OPTIONS = [
   { value: "PRICE_LOW", label: "PRICE LOW" },
   { value: "NEW_SALE", label: "NEW SALE" },
   { value: "ORDER_DELIVERED", label: "ORDER DELIVERED" },
+  { value: "PURCHASE_ORDER_DELIVERED", label: "PURCHASE ORDER DELIVERED" },
   { value: "SCAN_FAILED", label: "SCAN FAILED" },
 ];
 
@@ -57,7 +58,7 @@ const refreshUnread = inject<() => Promise<void>>("refreshUnread", async () => {
 const typeLabel = (type: string) => (type || "").replaceAll("_", " ");
 
 const typeBadge = (type: string) => {
-  if (type === "BUYING_OPPORTUNITY" || type === "NEW_SALE" || type === "ORDER_DELIVERED") return "ok";
+  if (type === "BUYING_OPPORTUNITY" || type === "NEW_SALE" || type === "ORDER_DELIVERED" || type === "PURCHASE_ORDER_DELIVERED") return "ok";
   if (type === "PRICE_HIGH" || type === "PRICE_LOW") return "price";
   if (type === "SCAN_FAILED") return "bad";
   return "";
@@ -103,6 +104,9 @@ const linkLabel = (alert: NotificationEvent) => {
   }
   if (alert.type === "NEW_SALE" || alert.type === "ORDER_DELIVERED") {
     return alert.url?.startsWith("/orders/") ? "Open order" : listingHref(alert.url) ? "Open item" : "Open order";
+  }
+  if (alert.type === "PURCHASE_ORDER_DELIVERED") {
+    return "Open purchase order";
   }
   return "Open listing";
 };

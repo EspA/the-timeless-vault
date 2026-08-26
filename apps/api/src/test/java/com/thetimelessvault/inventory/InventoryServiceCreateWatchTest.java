@@ -5,6 +5,7 @@ import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.catalog.CatalogService;
 import com.thetimelessvault.common.ItemCondition;
 import com.thetimelessvault.common.ItemType;
+import com.thetimelessvault.inbound.PurchaseOrderLineRepository;
 import com.thetimelessvault.market.MarketScanLauncher;
 import com.thetimelessvault.publish.ChannelListingRepository;
 import com.thetimelessvault.publish.PublishJobRepository;
@@ -37,6 +38,7 @@ class InventoryServiceCreateWatchTest {
     @Mock ObjectStorage storage;
     @Mock SetWatchService setWatches;
     @Mock MarketScanLauncher marketScans;
+    @Mock PurchaseOrderLineRepository purchaseOrderLines;
 
     InventoryService service;
     CatalogItem catalog;
@@ -44,7 +46,7 @@ class InventoryServiceCreateWatchTest {
     @BeforeEach
     void setUp() {
         service = new InventoryService(
-                items, photos, listings, publishJobs, priceGuards, catalogService, storage, setWatches, marketScans
+                items, photos, listings, publishJobs, priceGuards, catalogService, storage, setWatches, marketScans, purchaseOrderLines
         );
         catalog = CatalogItem.create("75192-1");
         catalog.setName("Millennium Falcon");

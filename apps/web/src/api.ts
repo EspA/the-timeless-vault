@@ -36,6 +36,13 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     }).then(json<T>),
+  patch: <T>(path: string, body?: unknown) =>
+    fetch(path, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(json<T>),
   del: <T = void>(path: string) => fetch(path, { method: "DELETE", credentials: "include" }).then(json<T>),
 };
 
@@ -201,11 +208,33 @@ export const isUpsTracking = (tracking?: string | null, provider?: string | null
   return number.toUpperCase().startsWith("1Z") || (provider ?? "").toUpperCase().includes("UPS");
 };
 
-export const upsTrackingUrl = (tracking?: string | null, provider?: string | null) => {
+export const trackingUrl = (tracking?: string | null, provider?: string | null) => {
   const number = tracking?.trim();
-  if (!number || !isUpsTracking(number, provider)) return "";
-  return `https://www.ups.com/track?loc=en_US&requester=ST&trackNums=${encodeURIComponent(number)}`;
+  if (!number) return "";
+  const encoded = encodeURIComponent(number);
+  const carrier = (provider ?? "").toUpperCase();
+  if (isUpsTracking(number, provider) || carrier === "UPS") {
+    return `https://www.ups.com/track?loc=en_US&requester=ST&trackNums=${encoded}`;
+  }
+  if (carrier === "USPS") {
+    return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encoded}`;
+  }
+  if (carrier === "DHL") {
+    return `https://www.dhl.com/en/express/tracking.html?AWB=${encoded}`;
+  }
+  if (carrier === "FEDEX") {
+    return `https://www.fedex.com/fedextrack/?trknbr=${encoded}`;
+  }
+  if (carrier === "COLISSIMO") {
+    return `https://www.laposte.fr/outils/suivre-vos-envois?code=${encoded}`;
+  }
+  if (carrier === "POSTNL") {
+    return `https://jouw.postnl.nl/track-and-trace/${encoded}`;
+  }
+  return "";
 };
+
+export const upsTrackingUrl = trackingUrl;
 
 export type LedgerSale = {
   kind: "SET" | "MINIFIG";
@@ -334,33 +363,62 @@ const catalogFacts = (catalog?: Partial<Catalog> | null) => {
   };
 };
 
+const paragraphHtmlPattern = () => /<p\b[^>]*>[\s\S]*?<\/p>/gi;
+
+const paragraphPlainText = (paragraph: string) =>
+  paragraph
+    .replace(/^<p\b[^>]*>/i, "")
+    .replace(/<\/p>\s*$/i, "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const mapParagraphs = (html: string, fn: (paragraph: string, plain: string) => string) =>
+  html.replace(paragraphHtmlPattern(), (paragraph) => fn(paragraph, paragraphPlainText(paragraph)));
+
 const replaceLabeledValue = (html: string, label: string, value: string) => {
-  const pattern = new RegExp(
-    `<p\\b[^>]*>[\\s\\S]*?<strong>[\\s\\S]*?${label}:[\\s\\S]*?</strong>[\\s\\S]*?</p>`,
-    "i"
-  );
-  if (!pattern.test(html)) {
-    return html;
-  }
-  return html.replace(pattern, `<p><strong>${label}:</strong> <span>${value}</span></p>`);
+  const prefix = new RegExp(`^${label}:`, "i");
+  let replaced = false;
+  const next = mapParagraphs(html, (paragraph, plain) => {
+    if (replaced || !prefix.test(plain)) {
+      return paragraph;
+    }
+    replaced = true;
+    return `<p><strong>${label}:</strong> <span>${value}</span></p>`;
+  });
+  return replaced ? next : html;
 };
 
 const removeMinifigsLine = (html: string) =>
-  html.replace(/<p>\s*(?:<span>)?<strong>Minifigs:<\/strong>[\s\S]*?<\/p>/i, "");
+  mapParagraphs(html, (paragraph, plain) => (/^minifigs:/i.test(plain) ? "" : paragraph));
 
 const minifigsLine = (count: string) => `<p><strong>Minifigs:</strong> <span>${count}</span></p>`;
 
 const insertMinifigsAfterPieces = (html: string, count: string) => {
   const line = minifigsLine(count);
-  const piecesPara = /<p>\s*<strong>Pieces:[\s\S]*?<\/p>/i;
-  if (piecesPara.test(html)) {
-    return html.replace(piecesPara, (match) => `${match}${line}`);
+  let inserted = false;
+  const next = mapParagraphs(html, (paragraph, plain) => {
+    if (inserted || !/^pieces:/i.test(plain)) {
+      return paragraph;
+    }
+    inserted = true;
+    return `${paragraph}${line}`;
+  });
+  if (inserted) {
+    return next;
   }
-  const gradingPara = /<p>[\s\S]*?grading system[\s\S]*?<\/p>/i;
-  if (gradingPara.test(html)) {
-    return html.replace(gradingPara, (match) => `${line}${match}`);
-  }
-  return `${html}${line}`;
+  let gradingInserted = false;
+  const withGrading = mapParagraphs(html, (paragraph, plain) => {
+    if (gradingInserted || !/grading system/i.test(plain)) {
+      return paragraph;
+    }
+    gradingInserted = true;
+    return `${line}${paragraph}`;
+  });
+  return gradingInserted ? withGrading : `${html}${line}`;
 };
 
 const htmlParagraphPlainTexts = (html: string) =>
@@ -387,6 +445,9 @@ export const brickLinkShortDescriptionFromHtml = (html: string) => {
   const text = `${nisb} ${boxGrade} ${BRICKLINK_PHOTO_ASK}`.replace(/\s+/g, " ").trim();
   return text.length <= 255 ? text : text.slice(0, 255);
 };
+
+export const isListingDumpShortDescription = (short?: string) =>
+  /^set number:/i.test((short || "").trim());
 
 export const CHANNEL_PRICE_MARKUPS = {
   ebayPrice: 1.45,
@@ -508,6 +569,76 @@ export type SetWatch = {
 
 export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 5;
 export const DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES = 360;
+
+export type Supplier = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  street?: string;
+  city?: string;
+  zip?: string;
+  country?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ShippingCarrier = "UPS" | "USPS" | "DHL" | "FEDEX" | "COLISSIMO" | "POSTNL";
+
+export const SHIPPING_CARRIERS: { value: ShippingCarrier; label: string }[] = [
+  { value: "UPS", label: "UPS" },
+  { value: "USPS", label: "USPS" },
+  { value: "DHL", label: "DHL" },
+  { value: "FEDEX", label: "FedEx" },
+  { value: "COLISSIMO", label: "Colissimo" },
+  { value: "POSTNL", label: "PostNL" },
+];
+
+export type PurchaseOrderStatus = "IN_TRANSIT" | "DELIVERED" | "RECEIVED" | "CANCELLED";
+
+export const PURCHASE_ORDER_STATUSES = [
+  { value: "IN_TRANSIT", label: "In transit", shortLabel: "Transit" },
+  { value: "DELIVERED", label: "Delivered", shortLabel: "Delivered" },
+  { value: "RECEIVED", label: "Received", shortLabel: "Received" },
+  { value: "CANCELLED", label: "Cancelled", shortLabel: "Cancel" },
+] as const;
+
+export type PurchaseOrderLine = {
+  id: string;
+  setNumber: string;
+  title: string;
+  quantity: number;
+  unitValue: number;
+  lineTotal: number;
+  inventoryItemId?: string;
+  sku?: string;
+};
+
+export type PurchaseOrder = {
+  id: string;
+  number: string;
+  supplierId: string;
+  supplierName: string;
+  status: PurchaseOrderStatus;
+  totalValue: number;
+  expectedArrival?: string;
+  trackingNumber?: string;
+  carrier?: ShippingCarrier | null;
+  note?: string;
+  lines: PurchaseOrderLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PurchaseOrderPage = {
+  items: PurchaseOrder[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+};
+
 
 export const SCAN_INTERVALS = [
   { minutes: 5, label: "Every 5 minutes" },

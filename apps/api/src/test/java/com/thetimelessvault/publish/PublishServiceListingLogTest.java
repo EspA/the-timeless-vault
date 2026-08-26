@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,7 +65,7 @@ class PublishServiceListingLogTest {
         listing = ChannelListing.create(item, Platform.SHOPIFY);
         listing.markPublished("gid://shopify/Product/1", "https://shop.example/products/1", new BigDecimal("99.00"));
         listing.setShopifyStatus("ACTIVE");
-        when(inventoryService.get(item.getId())).thenReturn(item);
+        lenient().when(inventoryService.get(item.getId())).thenReturn(item);
     }
 
     @Test
@@ -150,5 +151,15 @@ class PublishServiceListingLogTest {
                 "Make the Shopify listing inactive before deleting it."
         );
         verify(shopifyClient, never()).deleteProduct(any());
+    }
+
+    @Test
+    void deleteIfPresentSkipsMissingListings() {
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.empty());
+
+        service.deleteChannelListingIfPresent(item.getId(), Platform.SHOPIFY);
+
+        verify(shopifyClient, never()).deleteProduct(any());
+        verify(listingLogs, never()).record(any(), any(), any(), any(), any());
     }
 }

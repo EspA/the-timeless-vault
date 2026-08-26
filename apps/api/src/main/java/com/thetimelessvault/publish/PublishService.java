@@ -410,6 +410,23 @@ public class PublishService {
     }
 
     @Transactional
+    public void deleteChannelListingIfPresent(UUID itemId, Platform platform) {
+        if (platform == null || !platform.isListingChannel()) {
+            return;
+        }
+        if (listings.findByInventoryItemIdAndPlatform(itemId, platform).isEmpty()) {
+            return;
+        }
+        switch (platform) {
+            case SHOPIFY -> deleteShopifyListing(itemId);
+            case BRICKLINK -> deleteBricklinkListing(itemId);
+            case EBAY -> deleteEbayListing(itemId);
+            case LOCAL -> {
+            }
+        }
+    }
+
+    @Transactional
     public void deleteShopifyListing(UUID itemId) {
         InventoryItem item = inventoryService.get(itemId);
         try {

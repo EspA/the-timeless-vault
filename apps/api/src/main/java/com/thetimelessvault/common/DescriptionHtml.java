@@ -67,4 +67,31 @@ public final class DescriptionHtml {
         String plain = toPlainText(html);
         return plain.length() <= 255 ? plain : plain.substring(0, 255);
     }
+
+    /**
+     * BrickLink short description: condition remainder + box grade + photo ask.
+     * Matches the admin UI autocomplete in brickLinkShortDescriptionFromHtml.
+     */
+    public static String shortDescriptionFromListingHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return "";
+        }
+        Document doc = Jsoup.parseBodyFragment(html);
+        String condition = null;
+        String boxGrade = null;
+        for (Element paragraph : doc.select("p")) {
+            String text = paragraph.text().replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+            if (condition == null && text.regionMatches(true, 0, "condition:", 0, "condition:".length())) {
+                condition = text;
+            } else if (boxGrade == null && text.regionMatches(true, 0, "box grade:", 0, "box grade:".length())) {
+                boxGrade = text;
+            }
+        }
+        if (condition == null || boxGrade == null) {
+            return "";
+        }
+        String remainder = condition.replaceFirst("(?i)^condition:\\s*new sealed in box\\s*", "").trim();
+        String text = (remainder + " " + boxGrade + " Ask for more photos!").replaceAll("\\s+", " ").trim();
+        return text.length() <= 255 ? text : text.substring(0, 255);
+    }
 }

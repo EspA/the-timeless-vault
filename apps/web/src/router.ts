@@ -9,6 +9,9 @@ import ScanLogsView from "./views/ScanLogsView.vue";
 import ListingLogsView from "./views/ListingLogsView.vue";
 import OrdersView from "./views/OrdersView.vue";
 import OrderDetail from "./views/OrderDetail.vue";
+import PurchaseOrdersView from "./views/PurchaseOrdersView.vue";
+import PurchaseOrderDetail from "./views/PurchaseOrderDetail.vue";
+import SuppliersView from "./views/SuppliersView.vue";
 import SalesLedgerView from "./views/SalesLedgerView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import StatisticsView from "./views/StatisticsView.vue";
@@ -23,6 +26,10 @@ export const router = createRouter({
     { path: "/inventory/new", redirect: "/inventory" },
     { path: "/inventory/:id", component: ItemDetail },
     { path: "/listing-logs", component: ListingLogsView },
+    { path: "/purchase-orders", component: PurchaseOrdersView },
+    { path: "/purchase-orders/new", component: PurchaseOrderDetail },
+    { path: "/purchase-orders/:id", component: PurchaseOrderDetail },
+    { path: "/suppliers", component: SuppliersView },
     { path: "/orders", component: OrdersView },
     { path: "/orders/:id", component: OrderDetail },
     { path: "/sales", redirect: "/orders" },

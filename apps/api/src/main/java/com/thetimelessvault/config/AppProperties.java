@@ -20,6 +20,9 @@ public class AppProperties {
     private final Shopify shopify = new Shopify();
     private final Bricklink bricklink = new Bricklink();
     private final Ebay ebay = new Ebay();
+    private final OAuthApi ups = new OAuthApi();
+    private final OAuthApi usps = new OAuthApi();
+    private final OAuthApi fedex = new OAuthApi();
 
     public List<String> allowedEmailList() {
         return Arrays.stream(allowedEmails.split(","))
@@ -99,6 +102,18 @@ public class AppProperties {
 
     public Ebay getEbay() {
         return ebay;
+    }
+
+    public OAuthApi getUps() {
+        return ups;
+    }
+
+    public OAuthApi getUsps() {
+        return usps;
+    }
+
+    public OAuthApi getFedex() {
+        return fedex;
     }
 
     public static class Security {
@@ -497,6 +512,48 @@ public class AppProperties {
 
         public void setAccountDeletionEndpointUrl(String accountDeletionEndpointUrl) {
             this.accountDeletionEndpointUrl = accountDeletionEndpointUrl;
+        }
+    }
+
+    public static class OAuthApi {
+        private String clientId = "";
+        private String clientSecret = "";
+        private String baseUrl = "";
+
+        public boolean configured() {
+            return notBlank(clientId) && notBlank(clientSecret);
+        }
+
+        public String host() {
+            String url = baseUrl == null ? "" : baseUrl.trim();
+            while (url.endsWith("/")) {
+                url = url.substring(0, url.length() - 1);
+            }
+            return url;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = clientId;
+        }
+
+        public String getClientSecret() {
+            return clientSecret;
+        }
+
+        public void setClientSecret(String clientSecret) {
+            this.clientSecret = clientSecret;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
         }
     }
 
