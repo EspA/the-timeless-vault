@@ -672,6 +672,58 @@ export type PurchaseOrderPage = {
   totalPages: number;
 };
 
+export type QuoteStatus = "DRAFT" | "CONVERTED";
+
+export const QUOTE_STATUSES = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "CONVERTED", label: "Converted" },
+] as const;
+
+export type QuoteMarginTone = "low" | "mid" | "high";
+
+export type QuoteLine = {
+  id: string;
+  catalogItemId: string;
+  setNumber: string;
+  title: string;
+  cost: number;
+  proratedShipping: number;
+  costWithShipping: number;
+  medianMarketPrice?: number | null;
+  marginPercent?: number | null;
+  marginDollars?: number | null;
+  marginTone?: QuoteMarginTone | null;
+};
+
+export type Quote = {
+  id: string;
+  number: string;
+  status: QuoteStatus;
+  description?: string | null;
+  lineCount: number;
+  shippingTotal: number;
+  totalCost: number;
+  totalProratedShipping: number;
+  totalCostWithShipping: number;
+  totalMedianMarketPrice?: number | null;
+  averageMarginPercent?: number | null;
+  averageMarginTone?: QuoteMarginTone | null;
+  totalMarginDollars?: number | null;
+  purchaseOrderId?: string | null;
+  purchaseOrderNumber?: string | null;
+  lines: QuoteLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuotePage = {
+  items: Quote[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+};
+
 
 export const SCAN_INTERVALS = [
   { minutes: 5, label: "Every 5 minutes" },

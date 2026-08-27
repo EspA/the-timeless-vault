@@ -133,6 +133,7 @@ onUnmounted(() => {
           <p class="nav-label">Inbound</p>
           <router-link to="/purchase-orders">Purchase orders</router-link>
           <router-link to="/suppliers">Suppliers</router-link>
+          <router-link to="/quotes">Quotes</router-link>
         </div>
         <div class="nav-group">
           <p class="nav-label">Orders</p>

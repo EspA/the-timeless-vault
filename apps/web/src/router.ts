@@ -11,6 +11,8 @@ import OrdersView from "./views/OrdersView.vue";
 import OrderDetail from "./views/OrderDetail.vue";
 import PurchaseOrdersView from "./views/PurchaseOrdersView.vue";
 import PurchaseOrderDetail from "./views/PurchaseOrderDetail.vue";
+import QuotesView from "./views/QuotesView.vue";
+import QuoteDetail from "./views/QuoteDetail.vue";
 import SuppliersView from "./views/SuppliersView.vue";
 import SalesLedgerView from "./views/SalesLedgerView.vue";
 import SettingsView from "./views/SettingsView.vue";
@@ -30,6 +32,9 @@ export const router = createRouter({
     { path: "/purchase-orders/new", component: PurchaseOrderDetail },
     { path: "/purchase-orders/:id", component: PurchaseOrderDetail },
     { path: "/suppliers", component: SuppliersView },
+    { path: "/quotes", component: QuotesView },
+    { path: "/quotes/new", component: QuoteDetail },
+    { path: "/quotes/:id", component: QuoteDetail },
     { path: "/orders", component: OrdersView },
     { path: "/orders/:id", component: OrderDetail },
     { path: "/sales", redirect: "/orders" },
