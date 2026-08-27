@@ -107,6 +107,24 @@ public class PurchaseOrderService {
     }
 
     @Transactional
+    public PurchaseOrder applyExpectedArrival(UUID id, LocalDate expectedArrival) {
+        if (expectedArrival == null) {
+            return get(id);
+        }
+        PurchaseOrder order = get(id);
+        if (!order.isOpen()) {
+            return order;
+        }
+        if (expectedArrival.equals(order.getExpectedArrival())) {
+            return order;
+        }
+        order.setExpectedArrival(expectedArrival);
+        order.touch();
+        log.info("Updated {} expected arrival to {}", order.displayNumber(), expectedArrival);
+        return orders.save(order);
+    }
+
+    @Transactional
     public PurchaseOrder receive(UUID id) {
         PurchaseOrder order = get(id);
         requireOpen(order);

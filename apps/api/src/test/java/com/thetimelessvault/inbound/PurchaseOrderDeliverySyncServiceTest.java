@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,10 +38,26 @@ class PurchaseOrderDeliverySyncServiceTest {
         order.setCarrier(ShippingCarrier.UPS);
         order.setTrackingNumber("1Z999AA10123456784");
         when(orders.findByStatusAndTrackingNumberIsNotNull(PurchaseOrderStatus.IN_TRANSIT)).thenReturn(List.of(order));
-        when(tracking.isDelivered(ShippingCarrier.UPS, "1Z999AA10123456784")).thenReturn(true);
+        when(tracking.track(ShippingCarrier.UPS, "1Z999AA10123456784"))
+                .thenReturn(new CarrierTrackingClient.Snapshot(true, LocalDate.of(2026, 8, 27)));
 
         assertEquals(1, service.syncDeliveredShipments());
+        verify(purchaseOrders).applyExpectedArrival(order.getId(), LocalDate.of(2026, 8, 27));
         verify(purchaseOrders).markDelivered(order.getId());
+    }
+
+    @Test
+    void updatesExpectedArrivalWithoutMarkingDelivered() {
+        PurchaseOrder order = PurchaseOrder.create(supplier, 11);
+        order.setCarrier(ShippingCarrier.FEDEX);
+        order.setTrackingNumber("123456789012");
+        when(orders.findByStatusAndTrackingNumberIsNotNull(PurchaseOrderStatus.IN_TRANSIT)).thenReturn(List.of(order));
+        when(tracking.track(ShippingCarrier.FEDEX, "123456789012"))
+                .thenReturn(new CarrierTrackingClient.Snapshot(false, LocalDate.of(2026, 8, 30)));
+
+        assertEquals(0, service.syncDeliveredShipments());
+        verify(purchaseOrders).applyExpectedArrival(order.getId(), LocalDate.of(2026, 8, 30));
+        verify(purchaseOrders, never()).markDelivered(org.mockito.ArgumentMatchers.any(UUID.class));
     }
 
     @Test

@@ -14,6 +14,11 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Map;
@@ -42,27 +47,31 @@ public class CarrierTrackingClient {
     }
 
     public boolean isDelivered(ShippingCarrier carrier, String trackingNumber) {
+        return track(carrier, trackingNumber).delivered();
+    }
+
+    public Snapshot track(ShippingCarrier carrier, String trackingNumber) {
         if (carrier == null || trackingNumber == null || trackingNumber.isBlank()) {
-            return false;
+            return Snapshot.EMPTY;
         }
         String tracking = trackingNumber.trim();
         try {
             return switch (carrier) {
-                case UPS -> upsDelivered(tracking);
-                case USPS -> uspsDelivered(tracking);
-                case FEDEX -> fedexDelivered(tracking);
-                default -> false;
+                case UPS -> upsTrack(tracking);
+                case USPS -> uspsTrack(tracking);
+                case FEDEX -> fedexTrack(tracking);
+                default -> Snapshot.EMPTY;
             };
         } catch (RuntimeException e) {
             log.warn("Could not track {} {}: {}", carrier, tracking, e.getMessage());
-            return false;
+            return Snapshot.EMPTY;
         }
     }
 
-    private boolean upsDelivered(String tracking) {
+    private Snapshot upsTrack(String tracking) {
         AppProperties.OAuthApi config = properties.getUps();
         if (!config.configured()) {
-            return false;
+            return Snapshot.EMPTY;
         }
         String token = token("ups", () -> upsToken(config));
         JsonNode body = getJson(
@@ -73,26 +82,26 @@ public class CarrierTrackingClient {
                         "transactionSrc", "TheTimelessVault"
                 )
         );
-        return upsLooksDelivered(body);
+        return upsSnapshot(body);
     }
 
-    private boolean uspsDelivered(String tracking) {
+    private Snapshot uspsTrack(String tracking) {
         AppProperties.OAuthApi config = properties.getUsps();
         if (!config.configured()) {
-            return false;
+            return Snapshot.EMPTY;
         }
         String token = token("usps", () -> uspsToken(config));
         JsonNode body = getJson(
                 config.host() + "/tracking/v3/tracking/" + tracking + "?expand=DETAIL",
                 Map.of("Authorization", "Bearer " + token)
         );
-        return uspsLooksDelivered(body);
+        return uspsSnapshot(body);
     }
 
-    private boolean fedexDelivered(String tracking) {
+    private Snapshot fedexTrack(String tracking) {
         AppProperties.OAuthApi config = properties.getFedex();
         if (!config.configured()) {
-            return false;
+            return Snapshot.EMPTY;
         }
         String token = token("fedex", () -> fedexToken(config));
         JsonNode body = postJson(
@@ -107,7 +116,189 @@ public class CarrierTrackingClient {
                         "trackingInfo", java.util.List.of(Map.of("trackingNumberInfo", Map.of("trackingNumber", tracking)))
                 )
         );
-        return fedexLooksDelivered(body);
+        return fedexSnapshot(body);
+    }
+
+    static Snapshot upsSnapshot(JsonNode body) {
+        boolean delivered = upsLooksDelivered(body);
+        return new Snapshot(delivered, upsExpectedArrival(body, delivered));
+    }
+
+    static Snapshot uspsSnapshot(JsonNode body) {
+        boolean delivered = uspsLooksDelivered(body);
+        return new Snapshot(delivered, uspsExpectedArrival(body, delivered));
+    }
+
+    static Snapshot fedexSnapshot(JsonNode body) {
+        boolean delivered = fedexLooksDelivered(body);
+        return new Snapshot(delivered, fedexExpectedArrival(body, delivered));
+    }
+
+    static LocalDate upsExpectedArrival(JsonNode body, boolean delivered) {
+        if (body == null || body.isMissingNode()) {
+            return null;
+        }
+        JsonNode shipments = body.path("trackResponse").path("shipment");
+        if (!shipments.isArray()) {
+            return null;
+        }
+        LocalDate scheduled = null;
+        LocalDate rescheduled = null;
+        LocalDate actual = null;
+        for (JsonNode shipment : shipments) {
+            JsonNode packages = shipment.path("package");
+            if (!packages.isArray()) {
+                continue;
+            }
+            for (JsonNode pkg : packages) {
+                JsonNode dates = pkg.path("deliveryDate");
+                if (!dates.isArray()) {
+                    continue;
+                }
+                for (JsonNode date : dates) {
+                    LocalDate parsed = parseDate(date.path("date").asText(""));
+                    if (parsed == null) {
+                        continue;
+                    }
+                    String type = date.path("type").asText("").trim().toUpperCase(Locale.ROOT);
+                    if ("RDD".equals(type) && rescheduled == null) {
+                        rescheduled = parsed;
+                    } else if ("SDD".equals(type) && scheduled == null) {
+                        scheduled = parsed;
+                    } else if ("DEL".equals(type) && actual == null) {
+                        actual = parsed;
+                    }
+                }
+            }
+        }
+        if (delivered && actual != null) {
+            return actual;
+        }
+        return rescheduled != null ? rescheduled : scheduled;
+    }
+
+    static LocalDate uspsExpectedArrival(JsonNode body, boolean delivered) {
+        if (body == null || body.isMissingNode()) {
+            return null;
+        }
+        if (delivered) {
+            LocalDate actual = firstPresentDate(body, "deliveryDate", "actualDeliveryDate");
+            if (actual != null) {
+                return actual;
+            }
+        }
+        JsonNode commitment = body.path("commitment");
+        LocalDate fromCommitment = firstPresentDate(commitment, "scheduledDeliveryDate", "expectedDeliveryDate");
+        if (fromCommitment != null) {
+            return fromCommitment;
+        }
+        return firstPresentDate(
+                body,
+                "expectedDeliveryDate",
+                "estimatedDeliveryDate",
+                "predictedDeliveryDate",
+                "scheduledDeliveryDate"
+        );
+    }
+
+    static LocalDate fedexExpectedArrival(JsonNode body, boolean delivered) {
+        if (body == null || body.isMissingNode()) {
+            return null;
+        }
+        JsonNode results = body.path("output").path("completeTrackResults");
+        if (!results.isArray()) {
+            return null;
+        }
+        LocalDate estimated = null;
+        LocalDate actual = null;
+        for (JsonNode complete : results) {
+            JsonNode tracks = complete.path("trackResults");
+            if (!tracks.isArray()) {
+                continue;
+            }
+            for (JsonNode track : tracks) {
+                JsonNode dates = track.path("dateAndTimes");
+                if (dates.isArray()) {
+                    for (JsonNode date : dates) {
+                        String type = dateType(date);
+                        LocalDate parsed = parseDate(date.path("dateTime").asText(""));
+                        if (parsed == null) {
+                            parsed = parseDate(date.path("date").asText(""));
+                        }
+                        if (parsed == null) {
+                            continue;
+                        }
+                        if (type.contains("ACTUAL_DELIVERY") && actual == null) {
+                            actual = parsed;
+                        } else if ((type.contains("ESTIMATED_DELIVERY") || type.equals("ESTIMATED")) && estimated == null) {
+                            estimated = parsed;
+                        }
+                    }
+                }
+                if (estimated == null) {
+                    estimated = parseDate(track.path("estimatedDeliveryTimeWindow").path("window").path("begins").asText(""));
+                }
+            }
+        }
+        if (delivered && actual != null) {
+            return actual;
+        }
+        return estimated;
+    }
+
+    private static String dateType(JsonNode date) {
+        String type = date.path("type").asText("");
+        if (type.isBlank() && date.path("type").isObject()) {
+            type = date.path("type").path("code").asText("");
+        }
+        return type.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static LocalDate firstPresentDate(JsonNode body, String... fields) {
+        if (body == null || body.isMissingNode()) {
+            return null;
+        }
+        for (String field : fields) {
+            LocalDate parsed = parseDate(body.path(field).asText(""));
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    static LocalDate parseDate(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String value = raw.trim();
+        if (value.isBlank() || "null".equalsIgnoreCase(value)) {
+            return null;
+        }
+        if (value.length() == 8 && value.chars().allMatch(Character::isDigit)) {
+            try {
+                return LocalDate.parse(value, DateTimeFormatter.BASIC_ISO_DATE);
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+        if (value.length() >= 10 && value.charAt(4) == '-' && value.charAt(7) == '-') {
+            try {
+                return LocalDate.parse(value.substring(0, 10));
+            } catch (DateTimeParseException ignored) {
+                // Fall through to date-time parsers.
+            }
+        }
+        try {
+            return OffsetDateTime.parse(value).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+            // Fall through.
+        }
+        try {
+            return LocalDateTime.parse(value).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 
     static boolean upsLooksDelivered(JsonNode body) {
@@ -273,6 +464,10 @@ public class CarrierTrackingClient {
         } catch (RestClientResponseException e) {
             throw new IllegalStateException(e.getStatusCode() + " " + e.getResponseBodyAsString(), e);
         }
+    }
+
+    public record Snapshot(boolean delivered, LocalDate expectedArrival) {
+        static final Snapshot EMPTY = new Snapshot(false, null);
     }
 
     private record CachedToken(String value, Instant expiry) {

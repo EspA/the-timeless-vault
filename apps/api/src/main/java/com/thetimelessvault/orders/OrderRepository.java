@@ -28,4 +28,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     List<Order> findByPlatformAndStatusSource(Platform platform, OrderStatusSource statusSource);
 
     List<Order> findByPlatformAndStatusIn(Platform platform, Collection<OrderStatus> statuses);
+
+    List<Order> findByStatusInAndTrackingNumberIsNotNull(Collection<OrderStatus> statuses);
 }

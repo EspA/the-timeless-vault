@@ -80,6 +80,7 @@ class OrderServiceTest {
         assertFalse(captor.getValue().isInventoryCreated());
         assertEquals(existing.getId(), captor.getValue().getInventoryItemId());
         assertEquals(OrderStatus.OPEN, captor.getValue().getStatus());
+        assertEquals("UPS", captor.getValue().getShippingProvider());
         verify(publishService).deactivatePublishedListingsAfterSale(existing.getId(), Platform.EBAY);
         verify(items).save(existing);
         verify(opportunities).recordNewSale(any(), eq(existing));
@@ -141,6 +142,18 @@ class OrderServiceTest {
     }
 
     @Test
+    void laterChannelSyncKeepsProviderWhenChannelOmitsIt() {
+        Order existingOrder = Order.create(
+                existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED, "9400111", "USPS"), false);
+        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED, "9400111", null)));
+        assertEquals("USPS", existingOrder.getShippingProvider());
+    }
+
+    @Test
     void channelDeliveredStatusCreatesNotification() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
         when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
@@ -152,6 +165,20 @@ class OrderServiceTest {
         assertEquals(OrderStatus.COMPLETED, existingOrder.getStatus());
         verify(opportunities).recordOrderDelivered(existingOrder, existing);
         verify(opportunities, never()).recordNewSale(any(), any());
+    }
+
+    @Test
+    void carrierDeliveredMarksCompletedAndNotifiesWithoutManualOverride() {
+        Order existingOrder = Order.create(
+                existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED, "1Z999", "UPS"), false);
+        when(orders.findById(existingOrder.getId())).thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
+
+        service.markDeliveredFromCarrier(existingOrder.getId());
+        assertEquals(OrderStatus.COMPLETED, existingOrder.getStatus());
+        assertEquals(OrderStatusSource.CHANNEL, existingOrder.getStatusSource());
+        verify(opportunities).recordOrderDelivered(existingOrder, existing);
     }
 
     @Test
@@ -400,6 +427,35 @@ class OrderServiceTest {
     }
 
     @Test
+    void addManualDefaultsShippingProviderToUpsWhenOmitted() {
+        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(eq(Platform.LOCAL), any(), eq("manual")))
+                .thenReturn(false);
+        when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order saved = service.addManual(new OrderService.ManualOrderRequest(
+                null,
+                "TTV-75192-1-AAAA",
+                null,
+                null,
+                null,
+                null,
+                1,
+                new BigDecimal("250.00"),
+                "USD",
+                Instant.parse("2026-08-21T12:00:00Z"),
+                OrderStatus.OPEN,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertEquals("UPS", saved.getShippingProvider());
+    }
+
+    @Test
     void addManualRequiresAnItemIdentity() {
         org.junit.jupiter.api.Assertions.assertThrows(
                 com.thetimelessvault.common.ApiException.class,
@@ -486,7 +542,7 @@ class OrderServiceTest {
                 Instant.parse("2026-08-20T12:00:00Z"), null, BigDecimal.ZERO, BigDecimal.ZERO,
                 OrderStatus.OPEN, null, null);
         assertFalse(service.importOrder(incoming));
-        assertNull(existingOrder.getShippingProvider());
+        assertEquals("UPS", existingOrder.getShippingProvider());
     }
 
     @Test

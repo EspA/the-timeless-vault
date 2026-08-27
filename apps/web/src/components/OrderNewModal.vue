@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   api,
   isUpsTracking,
+  TRACKABLE_SHIPPING_PROVIDERS,
   type InventoryItem,
   type InventoryPage,
   type Order,
@@ -39,7 +40,7 @@ const form = reactive({
   shippingCost: "",
   platformFee: "",
   trackingNumber: "",
-  shippingProvider: "",
+  shippingProvider: "UPS",
 });
 
 const itemLabel = (item: InventoryItem) => {
@@ -245,7 +246,14 @@ onUnmounted(() => {
             <input v-model="form.trackingNumber" placeholder="Optional" />
           </label>
           <label>Shipping provider
-            <input v-model="form.shippingProvider" placeholder="Optional" />
+            <select v-model="form.shippingProvider">
+              <option value="">None</option>
+              <option
+                v-for="row in TRACKABLE_SHIPPING_PROVIDERS"
+                :key="row.value"
+                :value="row.value"
+              >{{ row.label }}</option>
+            </select>
           </label>
         </div>
         <div class="confirm-actions">

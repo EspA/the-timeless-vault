@@ -44,9 +44,13 @@ const onKey = (event: KeyboardEvent) => {
 
 onMounted(async () => {
   window.addEventListener("keydown", onKey);
-  const status = await api.get<{ authenticated: boolean; devBypass: boolean }>("/api/auth/status");
-  authenticated.value = status.authenticated || status.devBypass;
-  await refreshUnread();
+  try {
+    const status = await api.get<{ authenticated: boolean; devBypass: boolean }>("/api/auth/status");
+    authenticated.value = status.authenticated || status.devBypass;
+    await refreshUnread();
+  } catch {
+    authenticated.value = false;
+  }
   ready.value = true;
 });
 

@@ -250,6 +250,22 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void applyExpectedArrivalUpdatesOpenOrdersOnlyWhenTheDateChanges() {
+        PurchaseOrder order = service.create(request(line(null, "75192-1", "Falcon", 1, "100.00")));
+        LocalDate arrival = LocalDate.of(2026, 8, 30);
+
+        PurchaseOrder updated = service.applyExpectedArrival(order.getId(), arrival);
+        assertEquals(arrival, updated.getExpectedArrival());
+
+        PurchaseOrder same = service.applyExpectedArrival(order.getId(), arrival);
+        assertEquals(arrival, same.getExpectedArrival());
+
+        service.receive(order.getId());
+        PurchaseOrder received = service.applyExpectedArrival(order.getId(), LocalDate.of(2026, 9, 1));
+        assertEquals(arrival, received.getExpectedArrival());
+    }
+
+    @Test
     void cancelStillWorksAfterDelivered() {
         PurchaseOrder order = service.create(request(line(null, "75192-1", "Falcon", 1, "100.00")));
         UUID itemId = order.getLines().get(0).getInventoryItemId();

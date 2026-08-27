@@ -44,6 +44,7 @@ const uploading = ref(false);
 const uploadIndex = ref(0);
 const uploadTotal = ref(0);
 const uploadName = ref("");
+const photoCapture = ref<{ openCamera: () => Promise<void> } | null>(null);
 
 const uploadTitle = computed(() => uploadTotal.value === 1 ? "Uploading photo" : "Uploading photos");
 const uploadMessage = computed(() => {
@@ -760,11 +761,26 @@ const remove = async () => {
 
 <template>
   <div v-if="item" class="grid">
-    <div class="page-head">
+    <div class="page-head item-detail-head">
       <div>
         <p class="muted">{{ item.catalog.setNumber }} · {{ item.sku }}</p>
         <h1>{{ item.title }}</h1>
       </div>
+      <button
+        class="btn gold compact item-take-photo mobile-only"
+        type="button"
+        aria-label="Take photo"
+        title="Take photo"
+        :disabled="uploading"
+        @click="photoCapture?.openCamera()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M20 5.5h-2.55l-1.5-2h-8l-1.5 2H4A1.5 1.5 0 0 0 2.5 7v11A1.5 1.5 0 0 0 4 19.5h16a1.5 1.5 0 0 0 1.5-1.5V7A1.5 1.5 0 0 0 20 5.5ZM12 16.75A4.25 4.25 0 1 1 16.25 12.5 4.25 4.25 0 0 1 12 16.75Zm0-6.5A2.25 2.25 0 1 0 14.25 12.5 2.25 2.25 0 0 0 12 10.25Z"
+          />
+        </svg>
+      </button>
       <StockStatusButtons
         :model-value="item.stockStatus"
         :disabled="stockBusy"
@@ -873,7 +889,7 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Photos</h3>
-      <PhotoCapture :disabled="uploading" @files="upload" />
+      <PhotoCapture ref="photoCapture" :disabled="uploading" @files="upload" />
       <div class="photos">
         <div v-for="photo in item.photos" :key="photo.id" class="photo-tile">
           <img

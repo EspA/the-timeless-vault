@@ -134,6 +134,26 @@ button, .btn {
   font-size: 0.85rem;
 }
 
+.btn.item-take-photo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.7rem;
+  height: 2.7rem;
+  min-width: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.btn.item-take-photo svg {
+  width: 1.45rem;
+  height: 1.45rem;
+  display: block;
+  flex: 0 0 auto;
+}
+
 .order-field {
   min-width: 6.5rem;
   width: 100%;
@@ -2144,6 +2164,38 @@ td.negative {
     text-align: center;
   }
 
+  .page-head .btn.gold.item-take-photo {
+    width: 2.7rem;
+    height: 2.7rem;
+    min-width: 2.7rem;
+    min-height: 2.7rem;
+    padding: 0;
+    justify-self: end;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .page-head .btn.gold.item-take-photo svg {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .item-detail-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .item-detail-head .stock-status {
+    grid-column: 1 / -1;
+  }
+
+  .item-take-photo.mobile-only {
+    display: inline-flex !important;
+  }
+
   .page-head .pager-actions .btn {
     flex: 1;
     width: auto;
@@ -2195,6 +2247,10 @@ td.negative {
 
   .mobile-only {
     display: block !important;
+  }
+
+  .page-head .btn.item-take-photo.mobile-only {
+    display: inline-flex !important;
   }
 
   .list-cards.mobile-only {

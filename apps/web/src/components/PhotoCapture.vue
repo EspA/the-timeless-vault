@@ -80,6 +80,8 @@ const openCamera = async () => {
   }
 };
 
+defineExpose({ openCamera });
+
 const flipCamera = async () => {
   facingMode.value = facingMode.value === "environment" ? "user" : "environment";
   try {

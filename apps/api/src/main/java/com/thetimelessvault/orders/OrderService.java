@@ -160,6 +160,15 @@ public class OrderService {
     }
 
     @Transactional
+    public Order markDeliveredFromCarrier(UUID id) {
+        Order order = get(id);
+        OrderStatus previous = order.markDeliveredFromCarrier();
+        orders.save(order);
+        afterStatusChange(order, previous);
+        return order;
+    }
+
+    @Transactional
     public void delete(UUID id) {
         Order order = orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
         ignore(order.getPlatform(), order.getExternalOrderId(), order.getExternalLineId());

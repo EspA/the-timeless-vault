@@ -202,17 +202,50 @@ export const ORDER_STATUSES: { value: OrderStatus; label: string; shortLabel: st
 export const orderStatusLabel = (status?: string | null) =>
   ORDER_STATUSES.find((row) => row.value === status)?.label || status || "";
 
+export const TRACKABLE_SHIPPING_PROVIDERS: { value: "UPS" | "USPS" | "FEDEX"; label: string }[] = [
+  { value: "UPS", label: "UPS" },
+  { value: "USPS", label: "USPS" },
+  { value: "FEDEX", label: "FedEx" },
+];
+
+export const canonicalizeShippingProvider = (value?: string | null) => {
+  if (!value?.trim()) return "";
+  const normalized = value.trim().toUpperCase();
+  if (normalized.includes("USPS") || normalized.includes("POSTAL SERVICE") || normalized === "US POSTAL") {
+    return "USPS";
+  }
+  if (normalized.includes("FEDEX") || normalized.includes("FED EX") || normalized.includes("FEDERAL EXPRESS")) {
+    return "FEDEX";
+  }
+  if (normalized === "UPS" || normalized.startsWith("UPS ") || normalized.includes("UNITED PARCEL")) {
+    return "UPS";
+  }
+  return value.trim();
+};
+
+export const shippingProviderSelectOptions = (current?: string | null) => {
+  const options: { value: string; label: string }[] = TRACKABLE_SHIPPING_PROVIDERS.map((row) => ({ ...row }));
+  const trimmed = current?.trim() ?? "";
+  if (!trimmed) return options;
+  const canonical = canonicalizeShippingProvider(trimmed);
+  if (TRACKABLE_SHIPPING_PROVIDERS.some((row) => row.value === canonical)) {
+    return options;
+  }
+  options.push({ value: trimmed, label: trimmed });
+  return options;
+};
+
 export const isUpsTracking = (tracking?: string | null, provider?: string | null) => {
   const number = tracking?.trim() ?? "";
   if (!number) return false;
-  return number.toUpperCase().startsWith("1Z") || (provider ?? "").toUpperCase().includes("UPS");
+  return number.toUpperCase().startsWith("1Z") || canonicalizeShippingProvider(provider) === "UPS";
 };
 
 export const trackingUrl = (tracking?: string | null, provider?: string | null) => {
   const number = tracking?.trim();
   if (!number) return "";
   const encoded = encodeURIComponent(number);
-  const carrier = (provider ?? "").toUpperCase();
+  const carrier = canonicalizeShippingProvider(provider);
   if (isUpsTracking(number, provider) || carrier === "UPS") {
     return `https://www.ups.com/track?loc=en_US&requester=ST&trackNums=${encoded}`;
   }

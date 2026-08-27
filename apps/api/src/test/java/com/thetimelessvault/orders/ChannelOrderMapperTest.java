@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChannelOrderMapperTest {
@@ -177,7 +176,7 @@ class ChannelOrderMapperTest {
         List<ChannelOrder> shippedLines = ChannelOrderMapper.fromBrickLinkOrder(shipped, items);
         assertEquals(OrderStatus.SHIPPED, shippedLines.getFirst().status());
         assertEquals("9400222", shippedLines.getFirst().trackingNumber());
-        assertNull(shippedLines.getFirst().shippingProvider());
+        assertEquals("USPS", shippedLines.getFirst().shippingProvider());
 
         List<ChannelOrder> cancelledLines = ChannelOrderMapper.fromBrickLinkOrder(cancelled, items);
         assertEquals(OrderStatus.CANCELLED, cancelledLines.getFirst().status());

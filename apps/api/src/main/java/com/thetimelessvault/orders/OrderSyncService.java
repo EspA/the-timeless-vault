@@ -44,6 +44,7 @@ public class OrderSyncService {
     private final ShopifyClient shopifyClient;
     private final ObjectMapper mapper;
     private final PurchaseOrderDeliverySyncService purchaseOrderDeliveries;
+    private final OrderDeliverySyncService orderDeliveries;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public OrderSyncService(
@@ -54,7 +55,8 @@ public class OrderSyncService {
             BrickLinkClient brickLinkClient,
             ShopifyClient shopifyClient,
             ObjectMapper mapper,
-            PurchaseOrderDeliverySyncService purchaseOrderDeliveries
+            PurchaseOrderDeliverySyncService purchaseOrderDeliveries,
+            OrderDeliverySyncService orderDeliveries
     ) {
         this.orderService = orderService;
         this.orders = orders;
@@ -64,6 +66,7 @@ public class OrderSyncService {
         this.shopifyClient = shopifyClient;
         this.mapper = mapper;
         this.purchaseOrderDeliveries = purchaseOrderDeliveries;
+        this.orderDeliveries = orderDeliveries;
     }
 
     public Map<String, Object> sync() {
@@ -73,19 +76,35 @@ public class OrderSyncService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         int imported = 0;
+        int ordersDelivered = 0;
         int purchaseOrdersDelivered = 0;
         try {
             imported += syncEbay();
             imported += syncBrickLink();
             imported += syncShopify();
             saveSetting(LAST_SYNC_KEY, Instant.now().toString());
+            ordersDelivered = syncOrderDeliveries();
             purchaseOrdersDelivered = syncPurchaseOrderDeliveries();
         } finally {
             running.set(false);
         }
         result.put("imported", imported);
+        result.put("ordersDelivered", ordersDelivered);
         result.put("purchaseOrdersDelivered", purchaseOrdersDelivered);
         return result;
+    }
+
+    int syncOrderDeliveries() {
+        try {
+            int delivered = orderDeliveries.syncDeliveredShipments();
+            if (delivered > 0) {
+                log.info("Sales order delivery sync marked {} open or shipped orders delivered", delivered);
+            }
+            return delivered;
+        } catch (Exception e) {
+            log.warn("Sales order delivery sync failed: {}", e.getMessage());
+            return 0;
+        }
     }
 
     int syncPurchaseOrderDeliveries() {

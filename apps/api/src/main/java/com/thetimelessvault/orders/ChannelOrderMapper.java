@@ -2,6 +2,7 @@ package com.thetimelessvault.orders;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.inbound.ShippingCarrier;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -327,11 +328,11 @@ public final class ChannelOrderMapper {
 
     static Tracking brickLinkTracking(JsonNode order) {
         JsonNode shipping = order == null ? null : order.path("shipping");
-        return new Tracking(
-                firstText(shipping, "tracking_no", "tracking_number"),
-                null,
-                false
-        );
+        String tracking = firstText(shipping, "tracking_no", "tracking_number");
+        String method = firstText(shipping, "method");
+        ShippingCarrier carrier = ShippingCarrier.resolve(method, tracking);
+        String provider = carrier != null && carrier.trackable() ? carrier.name() : null;
+        return new Tracking(tracking, provider, false);
     }
 
     static Tracking shopifyTracking(JsonNode order) {

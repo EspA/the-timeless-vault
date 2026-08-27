@@ -34,11 +34,15 @@ public class PurchaseOrderDeliverySyncService {
                 continue;
             }
             ShippingCarrier carrier = order.getCarrier();
-            if (carrier != ShippingCarrier.UPS && carrier != ShippingCarrier.USPS && carrier != ShippingCarrier.FEDEX) {
+            if (carrier == null || !carrier.trackable()) {
                 continue;
             }
             try {
-                if (!tracking.isDelivered(carrier, order.getTrackingNumber())) {
+                CarrierTrackingClient.Snapshot snapshot = tracking.track(carrier, order.getTrackingNumber());
+                if (snapshot.expectedArrival() != null) {
+                    purchaseOrders.applyExpectedArrival(order.getId(), snapshot.expectedArrival());
+                }
+                if (!snapshot.delivered()) {
                     continue;
                 }
                 purchaseOrders.markDelivered(order.getId());

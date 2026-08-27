@@ -108,7 +108,7 @@ public class Order {
         order.status = incoming.status() == null ? OrderStatus.OPEN : incoming.status();
         order.statusSource = OrderStatusSource.CHANNEL;
         order.trackingNumber = incoming.trackingNumber();
-        order.shippingProvider = ShippingProviders.infer(order.trackingNumber, incoming.shippingProvider());
+        order.shippingProvider = ShippingProviders.inferOrDefault(order.trackingNumber, incoming.shippingProvider());
         Instant now = Instant.now();
         order.statusUpdatedAt = now;
         order.createdAt = now;
@@ -125,12 +125,13 @@ public class Order {
             this.trackingNumber = incoming.trackingNumber();
         }
         if (incoming.platform() == Platform.BRICKLINK) {
-            this.shippingProvider = ShippingProviders.infer(this.trackingNumber, null);
+            this.shippingProvider = ShippingProviders.infer(this.trackingNumber, incoming.shippingProvider());
         } else if (incoming.shippingProvider() != null) {
             this.shippingProvider = incoming.shippingProvider();
         } else {
             this.shippingProvider = ShippingProviders.infer(this.trackingNumber, this.shippingProvider);
         }
+        this.shippingProvider = ShippingProviders.defaulted(this.shippingProvider);
         if (shouldApplyIncomingStatus(incoming.status())) {
             this.status = incoming.status();
             this.statusUpdatedAt = Instant.now();
@@ -164,12 +165,22 @@ public class Order {
             String trimmed = provider.trim();
             this.shippingProvider = trimmed.isEmpty() ? null : trimmed;
         }
-        this.shippingProvider = ShippingProviders.infer(this.trackingNumber, this.shippingProvider);
+        this.shippingProvider = ShippingProviders.inferOrDefault(this.trackingNumber, this.shippingProvider);
         if (nextStatus != null && nextStatus != status) {
             this.status = nextStatus;
             this.statusSource = OrderStatusSource.MANUAL;
             this.statusUpdatedAt = Instant.now();
         }
+        return previous;
+    }
+
+    public OrderStatus markDeliveredFromCarrier() {
+        OrderStatus previous = status;
+        if (status == OrderStatus.COMPLETED || status == OrderStatus.CANCELLED) {
+            return previous;
+        }
+        this.status = OrderStatus.COMPLETED;
+        this.statusUpdatedAt = Instant.now();
         return previous;
     }
 

@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, isUpsTracking, ORDER_STATUSES, type Order, type OrderStatus } from "../api";
+import {
+  api,
+  canonicalizeShippingProvider,
+  isUpsTracking,
+  ORDER_STATUSES,
+  shippingProviderSelectOptions,
+  type Order,
+  type OrderStatus,
+} from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
 import TrackingNumber from "../components/TrackingNumber.vue";
@@ -44,8 +52,11 @@ const subtitle = computed(() => {
 const apply = (loaded: Order) => {
   order.value = loaded;
   trackingNumber.value = loaded.trackingNumber || "";
-  shippingProvider.value = loaded.shippingProvider || "";
+  const provider = loaded.shippingProvider || "";
+  shippingProvider.value = canonicalizeShippingProvider(provider) || provider || "UPS";
 };
+
+const providerOptions = computed(() => shippingProviderSelectOptions(shippingProvider.value));
 
 watch(trackingNumber, (value) => {
   if (!shippingProvider.value.trim() && isUpsTracking(value, shippingProvider.value)) {
@@ -204,13 +215,20 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
           <label>Tracking
             <input v-model="trackingNumber" placeholder="Tracking number" />
             <TrackingNumber
-              v-if="isUpsTracking(trackingNumber, shippingProvider)"
+              v-if="trackingNumber.trim()"
               :tracking="trackingNumber"
               :provider="shippingProvider"
             />
           </label>
           <label>Shipping provider
-            <input v-model="shippingProvider" placeholder="Shipping provider" />
+            <select v-model="shippingProvider">
+              <option value="">None</option>
+              <option
+                v-for="row in providerOptions"
+                :key="row.value"
+                :value="row.value"
+              >{{ row.label }}</option>
+            </select>
           </label>
         </div>
         <div class="save-row">
