@@ -279,4 +279,113 @@ class ChannelOrderMapperTest {
                 """);
         assertTrue(ChannelOrderMapper.fromShopifyOrders(connection, "thetimelessvault.myshopify.com").isEmpty());
     }
+
+    @Test
+    void skipsUnpaidBrickOwlOrders() throws Exception {
+        var pending = mapper.readTree("""
+                { "order_id": "1", "status_id": 0, "order_date": "1724788800" }
+                """);
+        var submitted = mapper.readTree("""
+                { "order_id": "2", "status_id": 1, "order_date": "1724788800" }
+                """);
+        var items = mapper.readTree("""
+                { "items": [{ "lot_id": "9", "name": "Falcon", "ordered_quantity": 1, "base_price": "100.00" }] }
+                """);
+        assertTrue(ChannelOrderMapper.fromBrickOwlOrder(pending, items).isEmpty());
+        assertTrue(ChannelOrderMapper.fromBrickOwlOrder(submitted, items).isEmpty());
+    }
+
+    @Test
+    void mapsBrickOwlStatusesAndShippingOnFirstLineOnly() throws Exception {
+        var order = mapper.readTree("""
+                {
+                  "order_id": "88",
+                  "status_id": 2,
+                  "order_date": "1724788800",
+                  "iso_currency": "USD",
+                  "shipping_total": "12.50"
+                }
+                """);
+        var items = mapper.readTree("""
+                {
+                  "items": [
+                    {
+                      "lot_id": "555",
+                      "external_id": "TTV-75192-1-AAAA",
+                      "name": "Millennium Falcon",
+                      "ordered_quantity": 1,
+                      "base_price": "820.00",
+                      "ids": [{ "id_type": "set_number", "id": "75192-1" }]
+                    },
+                    {
+                      "lot_id": "556",
+                      "external_id": "TTV-10236-1-BBBB",
+                      "name": "Eiffel Tower",
+                      "ordered_quantity": 1,
+                      "base_price": "50.00",
+                      "ids": [{ "id_type": "set_number", "id": "10236-1" }]
+                    }
+                  ]
+                }
+                """);
+
+        List<ChannelOrder> orders = ChannelOrderMapper.fromBrickOwlOrder(order, items);
+
+        assertEquals(2, orders.size());
+        ChannelOrder first = orders.getFirst();
+        assertEquals(Platform.BRICKOWL, first.platform());
+        assertEquals("88", first.orderId());
+        assertEquals("555", first.listingExternalId());
+        assertEquals("TTV-75192-1-AAAA", first.sku());
+        assertEquals("75192-1", first.setNumber());
+        assertEquals(new BigDecimal("820.00"), first.unitPrice());
+        assertEquals(new BigDecimal("12.50"), first.shippingCost());
+        assertEquals(BigDecimal.ZERO, first.platformFee());
+        assertEquals(OrderStatus.OPEN, first.status());
+        assertEquals(BigDecimal.ZERO, orders.get(1).shippingCost());
+        assertEquals(OrderStatus.OPEN, orders.get(1).status());
+    }
+
+    @Test
+    void mapsShippedBrickOwlTrackingAndCancelledStatus() throws Exception {
+        var shipped = mapper.readTree("""
+                {
+                  "order_id": "89",
+                  "status_id": 5,
+                  "order_date": "1724788800",
+                  "tracking_id": "9400222",
+                  "shipping_method": "USPS Priority"
+                }
+                """);
+        var trackedOpen = mapper.readTree("""
+                {
+                  "order_id": "91",
+                  "status_id": 3,
+                  "order_date": "1724788800",
+                  "tracking_id": "1Z14V5340327789307"
+                }
+                """);
+        var received = mapper.readTree("""
+                { "order_id": "92", "status_id": 6, "order_date": "1724788800" }
+                """);
+        var cancelled = mapper.readTree("""
+                { "order_id": "90", "status_id": 8, "order_date": "1724788800" }
+                """);
+        var items = mapper.readTree("""
+                { "items": [{ "lot_id": "1", "name": "X", "ordered_quantity": 1, "base_price": "10.00" }] }
+                """);
+
+        ChannelOrder shippedLine = ChannelOrderMapper.fromBrickOwlOrder(shipped, items).getFirst();
+        assertEquals(OrderStatus.SHIPPED, shippedLine.status());
+        assertEquals("9400222", shippedLine.trackingNumber());
+        assertEquals("USPS", shippedLine.shippingProvider());
+
+        ChannelOrder tracked = ChannelOrderMapper.fromBrickOwlOrder(trackedOpen, items).getFirst();
+        assertEquals(OrderStatus.SHIPPED, tracked.status());
+        assertEquals("1Z14V5340327789307", tracked.trackingNumber());
+        assertEquals("UPS", tracked.shippingProvider());
+
+        assertEquals(OrderStatus.COMPLETED, ChannelOrderMapper.fromBrickOwlOrder(received, items).getFirst().status());
+        assertEquals(OrderStatus.CANCELLED, ChannelOrderMapper.fromBrickOwlOrder(cancelled, items).getFirst().status());
+    }
 }

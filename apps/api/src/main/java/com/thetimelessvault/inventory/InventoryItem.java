@@ -61,6 +61,9 @@ public class InventoryItem {
     @Column(name = "shopify_price", nullable = false)
     private BigDecimal shopifyPrice;
 
+    @Column(name = "brickowl_price", nullable = false)
+    private BigDecimal brickowlPrice;
+
     @Column(nullable = false)
     private int quantity = 0;
 
@@ -193,10 +196,19 @@ public class InventoryItem {
         this.shopifyPrice = shopifyPrice;
     }
 
+    public BigDecimal getBrickowlPrice() {
+        return brickowlPrice;
+    }
+
+    public void setBrickowlPrice(BigDecimal brickowlPrice) {
+        this.brickowlPrice = brickowlPrice;
+    }
+
     public BigDecimal priceFor(Platform platform) {
         return switch (platform) {
             case EBAY -> ebayPrice;
             case BRICKLINK -> bricklinkPrice;
+            case BRICKOWL -> brickowlPrice;
             case SHOPIFY -> shopifyPrice;
             case LOCAL -> price;
         };

@@ -338,6 +338,7 @@ public class OrderService {
         item.setEbayPrice(price);
         item.setBricklinkPrice(price);
         item.setShopifyPrice(price);
+        item.setBrickowlPrice(price);
         item.setPrice(price);
         item.setItemType(ItemType.SET);
         item.setCondition(ItemCondition.NEW_SEALED);

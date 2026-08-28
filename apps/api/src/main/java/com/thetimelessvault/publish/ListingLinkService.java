@@ -3,6 +3,7 @@ package com.thetimelessvault.publish;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thetimelessvault.bricklink.BrickLinkClient;
 import com.thetimelessvault.bricklink.BrickLinkPublisher;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
@@ -25,6 +26,7 @@ public class ListingLinkService {
     private final ChannelListingRepository listings;
     private final EbayClient ebayClient;
     private final BrickLinkClient brickLinkClient;
+    private final BrickOwlClient brickOwlClient;
     private final ShopifyClient shopifyClient;
 
     public ListingLinkService(
@@ -32,19 +34,21 @@ public class ListingLinkService {
             ChannelListingRepository listings,
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
+            BrickOwlClient brickOwlClient,
             ShopifyClient shopifyClient
     ) {
         this.inventoryService = inventoryService;
         this.listings = listings;
         this.ebayClient = ebayClient;
         this.brickLinkClient = brickLinkClient;
+        this.brickOwlClient = brickOwlClient;
         this.shopifyClient = shopifyClient;
     }
 
     @Transactional
     public ChannelListing link(UUID itemId, Platform platform, String reference, boolean replaceExisting) {
         if (platform == null || platform == Platform.LOCAL) {
-            throw ApiException.badRequest("Choose eBay, BrickLink, or Shopify");
+            throw ApiException.badRequest("Choose eBay, BrickLink, Brick Owl, or Shopify");
         }
         InventoryItem item = inventoryService.get(itemId);
         ResolvedListing resolved = resolve(platform, reference, item);
@@ -75,6 +79,7 @@ public class ListingLinkService {
         switch (platform) {
             case SHOPIFY -> local.setShopifyStatus(resolved.status());
             case BRICKLINK -> local.setBricklinkStatus(resolved.status());
+            case BRICKOWL -> local.setBrickowlStatus(resolved.status());
             case EBAY -> local.setEbayStatus(resolved.status());
             case LOCAL -> {
             }
@@ -87,6 +92,7 @@ public class ListingLinkService {
         return switch (platform) {
             case EBAY -> resolveEbay(parsed, item);
             case BRICKLINK -> resolveBrickLink(parsed);
+            case BRICKOWL -> resolveBrickOwl(parsed);
             case SHOPIFY -> resolveShopify(parsed);
             case LOCAL -> throw ApiException.badRequest("Local listings cannot be linked");
         };
@@ -120,6 +126,28 @@ public class ListingLinkService {
                 BrickLinkPublisher.listingUrl(parsed.externalId()),
                 stockRoom ? "UNLISTED" : "ACTIVE",
                 decimal(lot, "unit_price")
+        );
+    }
+
+    private ResolvedListing resolveBrickOwl(ListingReference parsed) {
+        JsonNode lot;
+        try {
+            lot = brickOwlClient.getLot(parsed.externalId());
+        } catch (ApiException e) {
+            if (e.getStatus() == HttpStatus.NOT_FOUND) {
+                throw ApiException.badRequest("That Brick Owl lot was not found");
+            }
+            throw e;
+        }
+        String liveUrl = BrickOwlClient.lotUrl(lot, parsed.externalId(), BrickOwlClient.firstText(lot, "boid"));
+        if (liveUrl == null) {
+            liveUrl = parsed.liveUrl();
+        }
+        return new ResolvedListing(
+                parsed.externalId(),
+                liveUrl,
+                BrickOwlClient.lotForSale(lot) ? "ACTIVE" : "UNLISTED",
+                firstDecimal(lot, "price", "base_price")
         );
     }
 
@@ -174,6 +202,7 @@ public class ListingLinkService {
         return switch (platform) {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
+            case BRICKOWL -> "Brick Owl";
             case EBAY -> "eBay";
             case LOCAL -> "Local";
         };
@@ -198,6 +227,16 @@ public class ListingLinkService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private static BigDecimal firstDecimal(JsonNode node, String... fields) {
+        for (String field : fields) {
+            BigDecimal value = decimal(node, field);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private record ResolvedListing(String externalId, String liveUrl, String status, BigDecimal price) {

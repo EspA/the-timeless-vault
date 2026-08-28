@@ -57,6 +57,9 @@ public class ChannelListing {
     @Column(name = "ebay_status")
     private String ebayStatus;
 
+    @Column(name = "brickowl_status")
+    private String brickowlStatus;
+
     @Column(name = "last_error", columnDefinition = "text")
     private String lastError;
 
@@ -172,6 +175,15 @@ public class ChannelListing {
         this.updatedAt = Instant.now();
     }
 
+    public String getBrickowlStatus() {
+        return brickowlStatus;
+    }
+
+    public void setBrickowlStatus(String brickowlStatus) {
+        this.brickowlStatus = brickowlStatus;
+        this.updatedAt = Instant.now();
+    }
+
     public void setExternalId(String externalId) {
         this.externalId = externalId;
         this.updatedAt = Instant.now();
@@ -186,6 +198,7 @@ public class ChannelListing {
         switch (platform) {
             case SHOPIFY -> setShopifyStatus("UNLISTED");
             case BRICKLINK -> setBricklinkStatus("UNLISTED");
+            case BRICKOWL -> setBrickowlStatus("UNLISTED");
             case EBAY -> setEbayStatus("UNLISTED");
             case LOCAL -> {
             }

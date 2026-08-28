@@ -41,6 +41,7 @@ public class PublishController {
             String shopifyStatus,
             String bricklinkStatus,
             String ebayStatus,
+            String brickowlStatus,
             String externalId,
             String liveUrl,
             BigDecimal lastPublishedPrice,
@@ -56,6 +57,7 @@ public class PublishController {
                     listing.getShopifyStatus(),
                     listing.getBricklinkStatus(),
                     listing.getEbayStatus(),
+                    listing.getBrickowlStatus(),
                     listing.getExternalId(),
                     listing.getLiveUrl(),
                     listing.getLastPublishedPrice(),
@@ -152,6 +154,11 @@ public class PublishController {
         return ListingView.from(publishService.setBricklinkStatus(id, request == null ? null : request.status()));
     }
 
+    @PutMapping("/listings/brickowl/status")
+    public ListingView setBrickowlStatus(@PathVariable UUID id, @RequestBody StatusRequest request) {
+        return ListingView.from(publishService.setBrickowlStatus(id, request == null ? null : request.status()));
+    }
+
     @PutMapping("/listings/ebay/status")
     public ListingView setEbayStatus(@PathVariable UUID id, @RequestBody StatusRequest request) {
         return ListingView.from(publishService.setEbayStatus(id, request == null ? null : request.status()));
@@ -166,6 +173,12 @@ public class PublishController {
     @DeleteMapping("/listings/bricklink")
     public ResponseEntity<Void> deleteBricklinkListing(@PathVariable UUID id) {
         publishService.deleteBricklinkListing(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/listings/brickowl")
+    public ResponseEntity<Void> deleteBrickowlListing(@PathVariable UUID id) {
+        publishService.deleteBrickowlListing(id);
         return ResponseEntity.noContent().build();
     }
 

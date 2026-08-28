@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, isListingDumpShortDescription, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, isListingDumpShortDescription, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, BRICKOWL_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
 import { askAlert, askConfirm, confirmStockStatusChange } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
@@ -20,7 +20,7 @@ const saving = ref(false);
 const stockBusy = ref(false);
 const justSaved = ref(false);
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
-const platforms = ref(["SHOPIFY", "BRICKLINK", "EBAY"]);
+const platforms = ref(["SHOPIFY", "BRICKLINK", "BRICKOWL", "EBAY"]);
 const showLinkListing = ref(false);
 const linkPlatform = ref("BRICKLINK");
 const linkReference = ref("");
@@ -117,6 +117,7 @@ watch(
     const generated = numericChannelPricesFromCost(cost);
     item.value.ebayPrice = generated.ebayPrice;
     item.value.bricklinkPrice = generated.bricklinkPrice;
+    item.value.brickowlPrice = generated.brickowlPrice;
     item.value.shopifyPrice = generated.shopifyPrice;
   }
 );
@@ -142,6 +143,7 @@ const setStockStatus = async (next: string) => {
     item.value.shopifyStatus = updated.shopifyStatus;
     item.value.bricklinkStatus = updated.bricklinkStatus;
     item.value.ebayStatus = updated.ebayStatus;
+    item.value.brickowlStatus = updated.brickowlStatus;
     listings.value = await api.get<ChannelListing[]>(`/api/inventory/${item.value.id}/listings`);
   } catch (e) {
     error.value = (e as Error).message;
@@ -326,6 +328,7 @@ const includesEbay = (selected: string[]) => selected.includes("EBAY");
 const platformLabel = (platform: string) => {
   if (platform === "EBAY") return "eBay";
   if (platform === "BRICKLINK") return "BrickLink";
+  if (platform === "BRICKOWL") return "Brick Owl";
   if (platform === "SHOPIFY") return "Shopify";
   return platform;
 };
@@ -474,6 +477,7 @@ const runRetry = async (platform: string, bypassEbayCatalog = false) => {
 const listingVisibility = (listing: ChannelListing) => {
   if (listing.platform === "SHOPIFY") return listing.shopifyStatus;
   if (listing.platform === "BRICKLINK") return listing.bricklinkStatus;
+  if (listing.platform === "BRICKOWL") return listing.brickowlStatus;
   if (listing.platform === "EBAY") {
     if (listing.ebayStatus) return listing.ebayStatus;
     return listing.liveUrl ? "ACTIVE" : "";
@@ -482,13 +486,16 @@ const listingVisibility = (listing: ChannelListing) => {
 };
 
 const canToggleListing = (listing: ChannelListing) =>
-  listing.status === "PUBLISHED" && !!listing.externalId && ["SHOPIFY", "BRICKLINK", "EBAY"].includes(listing.platform);
+  listing.status === "PUBLISHED" && !!listing.externalId && ["SHOPIFY", "BRICKLINK", "BRICKOWL", "EBAY"].includes(listing.platform);
 
 const canToggleShopify = (listing: ChannelListing) =>
   listing.platform === "SHOPIFY" && listing.status === "PUBLISHED" && !!listing.externalId;
 
 const canToggleBricklink = (listing: ChannelListing) =>
   listing.platform === "BRICKLINK" && listing.status === "PUBLISHED" && !!listing.externalId;
+
+const canToggleBrickowl = (listing: ChannelListing) =>
+  listing.platform === "BRICKOWL" && listing.status === "PUBLISHED" && !!listing.externalId;
 
 const canToggleEbay = (listing: ChannelListing) =>
   listing.platform === "EBAY" && listing.status === "PUBLISHED" && !!listing.externalId;
@@ -498,6 +505,9 @@ const canDeleteShopify = (listing: ChannelListing) =>
 
 const canDeleteBricklink = (listing: ChannelListing) =>
   listing.platform === "BRICKLINK" && listing.bricklinkStatus === "UNLISTED";
+
+const canDeleteBrickowl = (listing: ChannelListing) =>
+  listing.platform === "BRICKOWL" && listing.brickowlStatus === "UNLISTED";
 
 const canDeleteEbay = (listing: ChannelListing) =>
   listing.platform === "EBAY" && listing.ebayStatus === "UNLISTED";
@@ -526,6 +536,7 @@ const updateSelected = () => updateListings(selectedUpdatable.value);
 const linkHint = computed(() => {
   if (linkPlatform.value === "EBAY") return "eBay listing URL or item id, for example https://www.ebay.com/itm/227311449843";
   if (linkPlatform.value === "SHOPIFY") return "Shopify product URL, handle, or product id";
+  if (linkPlatform.value === "BRICKOWL") return "Brick Owl lot URL or lot id, for example https://www.brickowl.com/inventory/778899";
   return "BrickLink listing URL or inventory id, for example https://www.bricklink.com/v2/inventory_detail.page?invID=525841562";
 });
 
@@ -585,9 +596,12 @@ const updateListings = async (targets: ChannelListing[]) => {
   if (!item.value || publishing.value || !targets.length) return;
   const names = targets.map((listing) => platformLabel(listing.platform));
   const bricklink = targets.some((listing) => listing.platform === "BRICKLINK");
+  const brickowl = targets.some((listing) => listing.platform === "BRICKOWL");
+  const photoNote = (bricklink ? " BrickLink photos still have to be uploaded on BrickLink." : "")
+    + (brickowl ? " Brick Owl photos still have to be uploaded on Brick Owl." : "");
   const confirmed = await askConfirm(
     `Push the saved title, description, photos, price, and quantity to the existing ${joinAnd(names)} listing${names.length === 1 ? "" : "s"}?`
-      + (bricklink ? " BrickLink photos still have to be uploaded on BrickLink." : ""),
+      + photoNote,
     { title: names.length === 1 ? `Update ${names[0]}` : "Update listings", confirmLabel: "Update", cancelLabel: "Cancel", variant: "gold" }
   );
   if (!confirmed) return;
@@ -652,6 +666,19 @@ const toggleBricklink = async (listing: ChannelListing) => {
   });
 };
 
+const toggleBrickowl = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canToggleBrickowl(listing)) return;
+  const next = nextVisibilityStatus(listing.brickowlStatus);
+  const action = visibilityActionLabel(listing.brickowlStatus);
+  await runChannelAction(`${action} Brick Owl…`, async () => {
+    logLine("Calling Brick Owl…");
+    const updated = await api.put<ChannelListing>(`/api/inventory/${item.value!.id}/listings/brickowl/status`, {
+      status: next,
+    });
+    logLine(`Brick Owl is now ${visibilityStatusLabel(updated.brickowlStatus || next).toLowerCase()}.`, "ok");
+  });
+};
+
 const toggleEbay = async (listing: ChannelListing) => {
   if (!item.value || publishing.value || !canToggleEbay(listing)) return;
   const next = listing.ebayStatus === "ACTIVE" ? "UNLISTED" : "ACTIVE";
@@ -686,6 +713,18 @@ const deleteBricklinkListing = async (listing: ChannelListing) => {
     logLine("Deleting BrickLink inventory item…");
     await api.del(`/api/inventory/${item.value!.id}/listings/bricklink`);
     logLine("BrickLink inventory item deleted.", "ok");
+  });
+};
+
+const deleteBrickowlListing = async (listing: ChannelListing) => {
+  if (!item.value || publishing.value || !canDeleteBrickowl(listing)) return;
+  if (!(await askConfirm(BRICKOWL_DELETE_CONFIRM, { title: "Delete listing" }))) {
+    return;
+  }
+  await runChannelAction("Deleting Brick Owl listing…", async () => {
+    logLine("Deleting Brick Owl lot…");
+    await api.del(`/api/inventory/${item.value!.id}/listings/brickowl`);
+    logLine("Brick Owl lot deleted.", "ok");
   });
 };
 
@@ -831,7 +870,7 @@ const remove = async () => {
     </div>
 
     <div class="card grid">
-      <div class="grid three">
+      <div class="grid four">
         <label>
           <span class="channel-field-label"><ChannelLogo platform="EBAY" :height="16" /> price (default 45% margin)</span>
           <input v-model.number="item.ebayPrice" type="number" step="0.01" />
@@ -839,6 +878,10 @@ const remove = async () => {
         <label>
           <span class="channel-field-label"><ChannelLogo platform="BRICKLINK" :height="16" /> price (default 40% margin)</span>
           <input v-model.number="item.bricklinkPrice" type="number" step="0.01" />
+        </label>
+        <label>
+          <span class="channel-field-label"><ChannelLogo platform="BRICKOWL" :height="16" /> price (default 40% margin)</span>
+          <input v-model.number="item.brickowlPrice" type="number" step="0.01" />
         </label>
         <label>
           <span class="channel-field-label"><ChannelLogo platform="SHOPIFY" :height="16" /> price (default 32% margin)</span>
@@ -931,7 +974,7 @@ const remove = async () => {
     <div class="card grid">
       <h3>Listing channels</h3>
       <div class="channel-picks">
-        <label v-for="p in ['SHOPIFY','BRICKLINK','EBAY']" :key="p" class="channel-pick">
+        <label v-for="p in ['SHOPIFY','BRICKLINK','BRICKOWL','EBAY']" :key="p" class="channel-pick">
           <input type="checkbox" :value="p" v-model="platforms" />
           <ChannelLogo :platform="p" />
         </label>
@@ -987,6 +1030,11 @@ const remove = async () => {
                   :class="{ ok: listing.bricklinkStatus === 'ACTIVE', warn: listing.bricklinkStatus === 'UNLISTED' }"
                 >{{ visibilityStatusLabel(listing.bricklinkStatus) }}</span>
                 <span
+                  v-if="listing.platform === 'BRICKOWL' && listing.brickowlStatus"
+                  class="badge"
+                  :class="{ ok: listing.brickowlStatus === 'ACTIVE', warn: listing.brickowlStatus === 'UNLISTED' }"
+                >{{ visibilityStatusLabel(listing.brickowlStatus) }}</span>
+                <span
                   v-if="listing.platform === 'EBAY' && listing.ebayStatus"
                   class="badge"
                   :class="{ ok: listing.ebayStatus === 'ACTIVE', warn: listing.ebayStatus === 'UNLISTED' }"
@@ -1017,6 +1065,15 @@ const remove = async () => {
                   @click="toggleBricklink(listing)"
                 >
                   {{ visibilityActionLabel(listing.bricklinkStatus) }}
+                </button>
+                <button
+                  v-if="canToggleBrickowl(listing)"
+                  class="btn secondary compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="toggleBrickowl(listing)"
+                >
+                  {{ visibilityActionLabel(listing.brickowlStatus) }}
                 </button>
                 <button
                   v-if="canToggleEbay(listing)"
@@ -1051,6 +1108,15 @@ const remove = async () => {
                   type="button"
                   :disabled="publishing"
                   @click="deleteBricklinkListing(listing)"
+                >
+                  Delete listing
+                </button>
+                <button
+                  v-if="canDeleteBrickowl(listing)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="publishing"
+                  @click="deleteBrickowlListing(listing)"
                 >
                   Delete listing
                 </button>
@@ -1140,6 +1206,7 @@ const remove = async () => {
         Channel
         <select v-model="linkPlatform">
           <option value="BRICKLINK">BrickLink</option>
+          <option value="BRICKOWL">Brick Owl</option>
           <option value="EBAY">eBay</option>
           <option value="SHOPIFY">Shopify</option>
         </select>

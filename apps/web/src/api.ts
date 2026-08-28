@@ -113,6 +113,7 @@ export type InventoryItem = {
   ebayPrice?: number;
   bricklinkPrice?: number;
   shopifyPrice?: number;
+  brickowlPrice?: number;
   quantity: number;
   stockStatus: string;
   cost?: number;
@@ -130,9 +131,11 @@ export type InventoryItem = {
   shopifyStatus?: string;
   bricklinkStatus?: string;
   ebayStatus?: string;
+  brickowlStatus?: string;
   shopifyLiveUrl?: string;
   bricklinkLiveUrl?: string;
   ebayLiveUrl?: string;
+  brickowlLiveUrl?: string;
   photos: Photo[];
   createdAt?: string;
   updatedAt?: string;
@@ -153,6 +156,7 @@ export type ChannelListing = {
   shopifyStatus?: string;
   bricklinkStatus?: string;
   ebayStatus?: string;
+  brickowlStatus?: string;
   externalId?: string;
   liveUrl?: string;
   lastPublishedPrice?: number;
@@ -322,6 +326,9 @@ export const SHOPIFY_DELETE_CONFIRM =
 export const BRICKLINK_DELETE_CONFIRM =
   "Permanently delete this BrickLink inventory item? This cannot be undone.";
 
+export const BRICKOWL_DELETE_CONFIRM =
+  "Permanently delete this Brick Owl lot? This cannot be undone.";
+
 export type EbayCatalogPreview = {
   setNumber: string;
   title: string;
@@ -485,17 +492,19 @@ export const isListingDumpShortDescription = (short?: string) =>
 export const CHANNEL_PRICE_MARKUPS = {
   ebayPrice: 1.45,
   bricklinkPrice: 1.4,
+  brickowlPrice: 1.4,
   shopifyPrice: 1.32,
 } as const;
 
 export type ChannelPriceFields = {
   ebayPrice: string;
   bricklinkPrice: string;
+  brickowlPrice: string;
   shopifyPrice: string;
 };
 
 export const channelPricesFromCost = (cost: string | number | null | undefined): ChannelPriceFields => {
-  const empty = { ebayPrice: "", bricklinkPrice: "", shopifyPrice: "" };
+  const empty = { ebayPrice: "", bricklinkPrice: "", brickowlPrice: "", shopifyPrice: "" };
   if (cost == null || cost === "") {
     return empty;
   }
@@ -508,6 +517,7 @@ export const channelPricesFromCost = (cost: string | number | null | undefined):
   return {
     ebayPrice: money(CHANNEL_PRICE_MARKUPS.ebayPrice),
     bricklinkPrice: money(CHANNEL_PRICE_MARKUPS.bricklinkPrice),
+    brickowlPrice: money(CHANNEL_PRICE_MARKUPS.brickowlPrice),
     shopifyPrice: money(CHANNEL_PRICE_MARKUPS.shopifyPrice),
   };
 };
@@ -515,11 +525,12 @@ export const channelPricesFromCost = (cost: string | number | null | undefined):
 export const numericChannelPricesFromCost = (cost: string | number | null | undefined) => {
   const generated = channelPricesFromCost(cost);
   if (!generated.ebayPrice) {
-    return { ebayPrice: undefined, bricklinkPrice: undefined, shopifyPrice: undefined };
+    return { ebayPrice: undefined, bricklinkPrice: undefined, brickowlPrice: undefined, shopifyPrice: undefined };
   }
   return {
     ebayPrice: Number(generated.ebayPrice),
     bricklinkPrice: Number(generated.bricklinkPrice),
+    brickowlPrice: Number(generated.brickowlPrice),
     shopifyPrice: Number(generated.shopifyPrice),
   };
 };

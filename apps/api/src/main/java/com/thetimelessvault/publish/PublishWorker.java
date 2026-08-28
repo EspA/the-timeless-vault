@@ -116,6 +116,9 @@ public class PublishWorker {
         if (result.ebayStatus() != null) {
             listing.setEbayStatus(result.ebayStatus());
         }
+        if (result.brickowlStatus() != null) {
+            listing.setBrickowlStatus(result.brickowlStatus());
+        }
     }
 
     private static String successNote(ListingAction action, PublishResult result, ChannelListing listing) {

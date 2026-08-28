@@ -68,6 +68,56 @@ public class CarrierTrackingClient {
         }
     }
 
+    public Snapshot trackRequired(ShippingCarrier carrier, String trackingNumber) {
+        if (carrier == null || !carrier.trackable()) {
+            throw new IllegalStateException("Choose UPS, USPS, or FedEx");
+        }
+        if (trackingNumber == null || trackingNumber.isBlank()) {
+            throw new IllegalStateException("Add a tracking number");
+        }
+        if (!configured(carrier)) {
+            throw new IllegalStateException(carrier + " tracking is not configured");
+        }
+        String tracking = trackingNumber.trim();
+        try {
+            return switch (carrier) {
+                case UPS -> upsTrack(tracking);
+                case USPS -> uspsTrack(tracking);
+                case FEDEX -> fedexTrack(tracking);
+                default -> Snapshot.EMPTY;
+            };
+        } catch (RuntimeException e) {
+            log.warn("Could not refresh {} tracking {}: {}", carrier, tracking, e.getMessage());
+            throw new IllegalStateException(shortTrackError(carrier, e), e);
+        }
+    }
+
+    private static String shortTrackError(ShippingCarrier carrier, RuntimeException e) {
+        String raw = e.getMessage() == null ? "" : e.getMessage();
+        if (raw.startsWith("403") || raw.contains(" 403 ")) {
+            return "Could not refresh " + carrier + " tracking (access denied)";
+        }
+        if (raw.startsWith("404") || raw.contains(" 404 ")) {
+            return "Could not refresh " + carrier + " tracking (not found)";
+        }
+        if (raw.matches("(?s)^\\d{3}\\s.*")) {
+            return "Could not refresh " + carrier + " tracking (" + raw.substring(0, 3) + ")";
+        }
+        return "Could not refresh " + carrier + " tracking";
+    }
+
+    public boolean configured(ShippingCarrier carrier) {
+        if (carrier == null) {
+            return false;
+        }
+        return switch (carrier) {
+            case UPS -> properties.getUps().configured();
+            case USPS -> properties.getUsps().configured();
+            case FEDEX -> properties.getFedex().configured();
+            default -> false;
+        };
+    }
+
     private Snapshot upsTrack(String tracking) {
         AppProperties.OAuthApi config = properties.getUps();
         if (!config.configured()) {

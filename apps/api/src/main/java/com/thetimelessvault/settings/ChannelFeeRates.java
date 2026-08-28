@@ -15,10 +15,12 @@ public class ChannelFeeRates {
 
     public static final String BRICKLINK_PERCENT_KEY = "sales.bricklink.fee_percent";
     public static final String SHOPIFY_PERCENT_KEY = "sales.shopify.fee_percent";
+    public static final String BRICKOWL_PERCENT_KEY = "sales.brickowl.fee_percent";
     public static final BigDecimal DEFAULT_BRICKLINK_PERCENT = new BigDecimal("5.4");
     public static final BigDecimal DEFAULT_SHOPIFY_PERCENT = new BigDecimal("2.9");
+    public static final BigDecimal DEFAULT_BRICKOWL_PERCENT = new BigDecimal("5.65");
 
-    public record Rates(BigDecimal bricklinkPercent, BigDecimal shopifyPercent) {
+    public record Rates(BigDecimal bricklinkPercent, BigDecimal shopifyPercent, BigDecimal brickowlPercent) {
     }
 
     private final AppSettingRepository settings;
@@ -35,8 +37,12 @@ public class ChannelFeeRates {
         return read(SHOPIFY_PERCENT_KEY, DEFAULT_SHOPIFY_PERCENT);
     }
 
+    public BigDecimal brickowlPercent() {
+        return read(BRICKOWL_PERCENT_KEY, DEFAULT_BRICKOWL_PERCENT);
+    }
+
     public Rates rates() {
-        return new Rates(bricklinkPercent(), shopifyPercent());
+        return new Rates(bricklinkPercent(), shopifyPercent(), brickowlPercent());
     }
 
     public BigDecimal feeFor(Platform platform, BigDecimal unitPrice, int quantity, BigDecimal shippingCost) {
@@ -47,19 +53,20 @@ public class ChannelFeeRates {
         BigDecimal price = unitPrice == null ? BigDecimal.ZERO : unitPrice;
         BigDecimal shipping = shippingCost == null ? BigDecimal.ZERO : shippingCost;
         BigDecimal rate = percent.movePointLeft(2);
-        return price.multiply(BigDecimal.valueOf(Math.max(1, quantity)))
-                .add(shipping)
-                .multiply(rate)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal merchandise = price.multiply(BigDecimal.valueOf(Math.max(1, quantity)));
+        BigDecimal taxable = platform == Platform.BRICKOWL ? merchandise : merchandise.add(shipping);
+        return taxable.multiply(rate).setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional
-    public Rates save(BigDecimal bricklinkPercent, BigDecimal shopifyPercent) {
+    public Rates save(BigDecimal bricklinkPercent, BigDecimal shopifyPercent, BigDecimal brickowlPercent) {
         BigDecimal bricklink = normalize(bricklinkPercent, "BrickLink fee percent");
         BigDecimal shopify = normalize(shopifyPercent, "Shopify fee percent");
+        BigDecimal brickowl = normalize(brickowlPercent, "Brick Owl fee percent");
         settings.save(new AppSetting(BRICKLINK_PERCENT_KEY, bricklink.toPlainString()));
         settings.save(new AppSetting(SHOPIFY_PERCENT_KEY, shopify.toPlainString()));
-        return new Rates(bricklink, shopify);
+        settings.save(new AppSetting(BRICKOWL_PERCENT_KEY, brickowl.toPlainString()));
+        return new Rates(bricklink, shopify, brickowl);
     }
 
     private BigDecimal percentFor(Platform platform) {
@@ -68,6 +75,9 @@ public class ChannelFeeRates {
         }
         if (platform == Platform.SHOPIFY) {
             return shopifyPercent();
+        }
+        if (platform == Platform.BRICKOWL) {
+            return brickowlPercent();
         }
         return null;
     }

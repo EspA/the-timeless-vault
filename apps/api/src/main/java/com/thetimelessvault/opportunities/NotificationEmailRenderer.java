@@ -247,6 +247,7 @@ public final class NotificationEmailRenderer {
         return switch (platform.trim().toUpperCase(Locale.ROOT)) {
             case "EBAY" -> "eBay";
             case "BRICKLINK" -> "BrickLink";
+            case "BRICKOWL" -> "Brick Owl";
             case "SHOPIFY" -> "Shopify";
             case "LOCAL" -> "Local";
             case "FEDEX" -> "FedEx";

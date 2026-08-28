@@ -172,6 +172,14 @@ onUnmounted(() => {
           >
             <ChannelLogo platform="BRICKLINK" :height="18" />
           </a>
+          <a
+            class="sales-channel"
+            href="https://www.brickowl.com/mystore"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ChannelLogo platform="BRICKOWL" :height="18" />
+          </a>
         </div>
         <div class="nav-group">
           <p class="nav-label">Settings</p>

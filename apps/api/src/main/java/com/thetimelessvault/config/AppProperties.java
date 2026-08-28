@@ -19,6 +19,7 @@ public class AppProperties {
     private final Brickeconomy brickeconomy = new Brickeconomy();
     private final Shopify shopify = new Shopify();
     private final Bricklink bricklink = new Bricklink();
+    private final Brickowl brickowl = new Brickowl();
     private final Ebay ebay = new Ebay();
     private final OAuthApi ups = new OAuthApi();
     private final OAuthApi usps = new OAuthApi();
@@ -98,6 +99,10 @@ public class AppProperties {
 
     public Bricklink getBricklink() {
         return bricklink;
+    }
+
+    public Brickowl getBrickowl() {
+        return brickowl;
     }
 
     public Ebay getEbay() {
@@ -332,6 +337,48 @@ public class AppProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+    }
+
+    public static class Brickowl {
+        private String apiKey = "";
+        private String baseUrl = "https://api.brickowl.com/v1";
+        private String userAgent = "TheTimelessVault/1.0";
+
+        public boolean configured() {
+            return notBlank(apiKey);
+        }
+
+        public String host() {
+            String url = baseUrl == null ? "" : baseUrl.trim();
+            while (url.endsWith("/")) {
+                url = url.substring(0, url.length() - 1);
+            }
+            return url;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getUserAgent() {
+            return userAgent;
+        }
+
+        public void setUserAgent(String userAgent) {
+            this.userAgent = userAgent;
         }
     }
 

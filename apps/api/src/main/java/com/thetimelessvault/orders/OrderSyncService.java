@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.identity.AppSetting;
@@ -31,6 +32,7 @@ public class OrderSyncService {
     static final String LAST_EBAY_KEY = "sales.last_sync.ebay";
     static final String LAST_BRICKLINK_KEY = "sales.last_sync.bricklink";
     static final String LAST_SHOPIFY_KEY = "sales.last_sync.shopify";
+    static final String LAST_BRICKOWL_KEY = "sales.last_sync.brickowl";
 
     private static final Logger log = LoggerFactory.getLogger(OrderSyncService.class);
     private static final Duration LOOKBACK = Duration.ofDays(1);
@@ -41,6 +43,7 @@ public class OrderSyncService {
     private final AppSettingRepository settings;
     private final EbayClient ebayClient;
     private final BrickLinkClient brickLinkClient;
+    private final BrickOwlClient brickOwlClient;
     private final ShopifyClient shopifyClient;
     private final ObjectMapper mapper;
     private final PurchaseOrderDeliverySyncService purchaseOrderDeliveries;
@@ -53,6 +56,7 @@ public class OrderSyncService {
             AppSettingRepository settings,
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
+            BrickOwlClient brickOwlClient,
             ShopifyClient shopifyClient,
             ObjectMapper mapper,
             PurchaseOrderDeliverySyncService purchaseOrderDeliveries,
@@ -63,6 +67,7 @@ public class OrderSyncService {
         this.settings = settings;
         this.ebayClient = ebayClient;
         this.brickLinkClient = brickLinkClient;
+        this.brickOwlClient = brickOwlClient;
         this.shopifyClient = shopifyClient;
         this.mapper = mapper;
         this.purchaseOrderDeliveries = purchaseOrderDeliveries;
@@ -82,6 +87,7 @@ public class OrderSyncService {
             imported += syncEbay();
             imported += syncBrickLink();
             imported += syncShopify();
+            imported += syncBrickOwl();
             saveSetting(LAST_SYNC_KEY, Instant.now().toString());
             ordersDelivered = syncOrderDeliveries();
             purchaseOrdersDelivered = syncPurchaseOrderDeliveries();
@@ -196,6 +202,27 @@ public class OrderSyncService {
             return imported;
         } catch (Exception e) {
             log.warn("Shopify order sync failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    int syncBrickOwl() {
+        if (!brickOwlClient.configured()) {
+            log.info("Skipping Brick Owl order sync; API is not configured");
+            return 0;
+        }
+        Instant since = since(LAST_BRICKOWL_KEY);
+        try {
+            int imported = 0;
+            List<BrickOwlClient.OrderBundle> orders = brickOwlClient.fetchStoreOrdersSince(since);
+            for (BrickOwlClient.OrderBundle bundle : orders) {
+                imported += importAll(ChannelOrderMapper.fromBrickOwlOrder(bundle.order(), bundle.items()));
+            }
+            log.info("Brick Owl order sync: {} store orders since {}, imported {}", orders.size(), since, imported);
+            saveSetting(LAST_BRICKOWL_KEY, Instant.now().toString());
+            return imported;
+        } catch (Exception e) {
+            log.warn("Brick Owl order sync failed: {}", e.getMessage());
             return 0;
         }
     }

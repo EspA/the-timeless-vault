@@ -357,6 +357,7 @@ public class PurchaseOrderService {
                 ebay,
                 ChannelPrices.bricklink(draft.unitValue()),
                 ChannelPrices.shopify(draft.unitValue()),
+                ChannelPrices.brickowl(draft.unitValue()),
                 draft.quantity(),
                 draft.unitValue(),
                 ItemType.SET,
@@ -384,6 +385,7 @@ public class PurchaseOrderService {
                 ebay,
                 ChannelPrices.bricklink(draft.unitValue()),
                 ChannelPrices.shopify(draft.unitValue()),
+                ChannelPrices.brickowl(draft.unitValue()),
                 draft.quantity(),
                 draft.unitValue(),
                 null,
@@ -407,6 +409,7 @@ public class PurchaseOrderService {
         item.setPrice(ebay);
         item.setBricklinkPrice(ChannelPrices.bricklink(cost));
         item.setShopifyPrice(ChannelPrices.shopify(cost));
+        item.setBrickowlPrice(ChannelPrices.brickowl(cost));
         item.setMinimumOffer(ChannelPrices.minimumOffer(ebay));
     }
 
@@ -421,6 +424,7 @@ public class PurchaseOrderService {
         }
         publishService.deleteChannelListingIfPresent(itemId, Platform.SHOPIFY);
         publishService.deleteChannelListingIfPresent(itemId, Platform.BRICKLINK);
+        publishService.deleteChannelListingIfPresent(itemId, Platform.BRICKOWL);
         publishService.deleteChannelListingIfPresent(itemId, Platform.EBAY);
         inventory.delete(itemId);
     }

@@ -26,6 +26,7 @@ public final class ChannelPrice {
         return switch (platform) {
             case EBAY -> "eBay price";
             case BRICKLINK -> "BrickLink price";
+            case BRICKOWL -> "Brick Owl price";
             case SHOPIFY -> "Shopify price";
             case LOCAL -> "price";
         };

@@ -2,6 +2,7 @@ package com.thetimelessvault.publish;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
@@ -32,6 +33,7 @@ class ListingLinkServiceTest {
     @Mock ChannelListingRepository listings;
     @Mock EbayClient ebayClient;
     @Mock BrickLinkClient brickLinkClient;
+    @Mock BrickOwlClient brickOwlClient;
     @Mock ShopifyClient shopifyClient;
 
     ListingLinkService service;
@@ -39,7 +41,7 @@ class ListingLinkServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ListingLinkService(inventoryService, listings, ebayClient, brickLinkClient, shopifyClient);
+        service = new ListingLinkService(inventoryService, listings, ebayClient, brickLinkClient, brickOwlClient, shopifyClient);
         item = InventoryItem.create(CatalogItem.create("7665"), "TTV-7665-AAAA");
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.findByPlatformAndExternalId(any(), any())).thenReturn(Optional.empty());

@@ -4,7 +4,7 @@ import { visibilityStatusLabel } from "../api";
 import ChannelLogo from "./ChannelLogo.vue";
 
 const props = defineProps<{
-  platform: "SHOPIFY" | "BRICKLINK" | "EBAY";
+  platform: "SHOPIFY" | "BRICKLINK" | "BRICKOWL" | "EBAY";
   status?: string;
   href?: string;
 }>();
@@ -12,6 +12,7 @@ const props = defineProps<{
 const name = computed(() => {
   if (props.platform === "SHOPIFY") return "Shopify";
   if (props.platform === "BRICKLINK") return "BrickLink";
+  if (props.platform === "BRICKOWL") return "Brick Owl";
   return "eBay";
 });
 </script>

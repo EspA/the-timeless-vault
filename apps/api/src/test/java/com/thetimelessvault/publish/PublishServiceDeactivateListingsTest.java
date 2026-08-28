@@ -2,6 +2,7 @@ package com.thetimelessvault.publish;
 
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.ebay.EbayClient;
@@ -35,6 +36,7 @@ class PublishServiceDeactivateListingsTest {
     @Mock PublishWorker worker;
     @Mock ShopifyClient shopifyClient;
     @Mock BrickLinkClient brickLinkClient;
+    @Mock BrickOwlClient brickOwlClient;
     @Mock EbayClient ebayClient;
     @Mock EbayPublisher ebayPublisher;
     @Mock PriceGuardRepository priceGuards;
@@ -52,6 +54,7 @@ class PublishServiceDeactivateListingsTest {
                 worker,
                 shopifyClient,
                 brickLinkClient,
+                brickOwlClient,
                 ebayClient,
                 ebayPublisher,
                 priceGuards,
@@ -68,12 +71,15 @@ class PublishServiceDeactivateListingsTest {
         shopify.setShopifyStatus("ACTIVE");
         ChannelListing bricklink = published(Platform.BRICKLINK, "12345", "https://bricklink.example/1");
         bricklink.setBricklinkStatus("ACTIVE");
+        ChannelListing brickowl = published(Platform.BRICKOWL, "lot-9", "https://www.brickowl.com/inventory/9");
+        brickowl.setBrickowlStatus("ACTIVE");
         ChannelListing ebay = published(Platform.EBAY, "offer-1", "https://www.ebay.com/itm/999");
         ebay.setEbayStatus("ACTIVE");
 
-        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, ebay));
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, brickowl, ebay));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKOWL)).thenReturn(Optional.of(brickowl));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -83,6 +89,7 @@ class PublishServiceDeactivateListingsTest {
 
         verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
         verify(brickLinkClient).updateStockRoom("12345", true);
+        verify(brickOwlClient).setForSale("lot-9", false);
         verify(ebayClient).withdrawOffer("offer-1");
         verify(ebayClient, never()).endListing(any());
     }
@@ -93,12 +100,15 @@ class PublishServiceDeactivateListingsTest {
         shopify.setShopifyStatus("UNLISTED");
         ChannelListing bricklink = published(Platform.BRICKLINK, "12345", "https://bricklink.example/1");
         bricklink.setBricklinkStatus("UNLISTED");
+        ChannelListing brickowl = published(Platform.BRICKOWL, "lot-9", "https://www.brickowl.com/inventory/9");
+        brickowl.setBrickowlStatus("UNLISTED");
         ChannelListing ebay = published(Platform.EBAY, "offer-1", "https://www.ebay.com/itm/999");
         ebay.setEbayStatus("UNLISTED");
 
-        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, ebay));
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, brickowl, ebay));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKOWL)).thenReturn(Optional.of(brickowl));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)).thenReturn(Optional.of(ebay));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -109,10 +119,12 @@ class PublishServiceDeactivateListingsTest {
 
         verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", true, item.getQuantity());
         verify(brickLinkClient).updateStockRoom("12345", false);
+        verify(brickOwlClient).setForSale("lot-9", true);
         verify(ebayPublisher).syncInventory(item);
         verify(ebayClient).publishOffer("offer-1");
         assertEquals("ACTIVE", shopify.getShopifyStatus());
         assertEquals("ACTIVE", bricklink.getBricklinkStatus());
+        assertEquals("ACTIVE", brickowl.getBrickowlStatus());
         assertEquals("ACTIVE", ebay.getEbayStatus());
     }
 
@@ -172,12 +184,15 @@ class PublishServiceDeactivateListingsTest {
         shopify.setShopifyStatus("ACTIVE");
         ChannelListing bricklink = published(Platform.BRICKLINK, "12345", "https://bricklink.example/1");
         bricklink.setBricklinkStatus("ACTIVE");
+        ChannelListing brickowl = published(Platform.BRICKOWL, "lot-9", "https://www.brickowl.com/inventory/9");
+        brickowl.setBrickowlStatus("ACTIVE");
         ChannelListing ebay = published(Platform.EBAY, "offer-1", "https://www.ebay.com/itm/999");
         ebay.setEbayStatus("ACTIVE");
 
-        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, ebay));
+        when(listings.findByInventoryItemId(item.getId())).thenReturn(List.of(shopify, bricklink, brickowl, ebay));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.SHOPIFY)).thenReturn(Optional.of(shopify));
         when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKLINK)).thenReturn(Optional.of(bricklink));
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKOWL)).thenReturn(Optional.of(brickowl));
         when(inventoryService.get(item.getId())).thenReturn(item);
         when(listings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(brickLinkClient.updateStockRoom("12345", true)).thenReturn(true);
@@ -186,6 +201,7 @@ class PublishServiceDeactivateListingsTest {
 
         verify(shopifyClient).setProductStoreAvailability("gid://shopify/Product/1", false, 0);
         verify(brickLinkClient).updateStockRoom("12345", true);
+        verify(brickOwlClient).setForSale("lot-9", false);
         verify(ebayClient, never()).withdrawOffer(any());
         assertEquals("UNLISTED", ebay.getEbayStatus());
         verify(listingLogs).record(
@@ -219,6 +235,20 @@ class PublishServiceDeactivateListingsTest {
                 eq(ListingLogStatus.SUCCESS),
                 eq("Marked inactive locally after unlist failed: already sold")
         );
+    }
+
+    @Test
+    void deletesUnlistedBrickOwlLot() {
+        ChannelListing brickowl = published(Platform.BRICKOWL, "lot-9", "https://www.brickowl.com/inventory/9");
+        brickowl.setBrickowlStatus("UNLISTED");
+        when(listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKOWL)).thenReturn(Optional.of(brickowl));
+        when(inventoryService.get(item.getId())).thenReturn(item);
+        when(priceGuards.findByChannelListingId(brickowl.getId())).thenReturn(Optional.empty());
+
+        service.deleteBrickowlListing(item.getId());
+
+        verify(brickOwlClient).deleteLot("lot-9");
+        verify(listings).delete(brickowl);
     }
 
     private ChannelListing published(Platform platform, String externalId, String liveUrl) {

@@ -19,6 +19,9 @@ const meta = computed(() => {
   if (platform === "SHOPIFY") {
     return { src: "/logos/shopify-logo.png", alt: "Shopify" };
   }
+  if (platform === "BRICKOWL") {
+    return { src: "/logos/brickowl-logo.svg", alt: "Brick Owl" };
+  }
   return null;
 });
 

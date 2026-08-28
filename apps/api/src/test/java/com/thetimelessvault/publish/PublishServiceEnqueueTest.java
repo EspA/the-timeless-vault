@@ -2,6 +2,7 @@ package com.thetimelessvault.publish;
 
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.Platform;
@@ -36,6 +37,7 @@ class PublishServiceEnqueueTest {
     @Mock PublishWorker worker;
     @Mock ShopifyClient shopifyClient;
     @Mock BrickLinkClient brickLinkClient;
+    @Mock BrickOwlClient brickOwlClient;
     @Mock EbayClient ebayClient;
     @Mock EbayPublisher ebayPublisher;
     @Mock PriceGuardRepository priceGuards;
@@ -54,6 +56,7 @@ class PublishServiceEnqueueTest {
                 worker,
                 shopifyClient,
                 brickLinkClient,
+                brickOwlClient,
                 ebayClient,
                 ebayPublisher,
                 priceGuards,

@@ -82,6 +82,7 @@ class InventoryServiceCreateWatchTest {
                 new BigDecimal("800"),
                 new BigDecimal("800"),
                 new BigDecimal("800"),
+                new BigDecimal("800"),
                 1,
                 null,
                 ItemType.SET,

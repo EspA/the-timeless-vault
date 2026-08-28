@@ -2,6 +2,7 @@ package com.thetimelessvault.publish;
 
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
@@ -35,6 +36,7 @@ public class PublishService {
     private final PublishWorker worker;
     private final ShopifyClient shopifyClient;
     private final BrickLinkClient brickLinkClient;
+    private final BrickOwlClient brickOwlClient;
     private final EbayClient ebayClient;
     private final EbayPublisher ebayPublisher;
     private final PriceGuardRepository priceGuards;
@@ -47,6 +49,7 @@ public class PublishService {
             PublishWorker worker,
             ShopifyClient shopifyClient,
             BrickLinkClient brickLinkClient,
+            BrickOwlClient brickOwlClient,
             EbayClient ebayClient,
             EbayPublisher ebayPublisher,
             PriceGuardRepository priceGuards,
@@ -58,6 +61,7 @@ public class PublishService {
         this.worker = worker;
         this.shopifyClient = shopifyClient;
         this.brickLinkClient = brickLinkClient;
+        this.brickOwlClient = brickOwlClient;
         this.ebayClient = ebayClient;
         this.ebayPublisher = ebayPublisher;
         this.priceGuards = priceGuards;
@@ -150,6 +154,7 @@ public class PublishService {
         return switch (platform) {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
+            case BRICKOWL -> "Brick Owl";
             case EBAY -> "eBay";
             case LOCAL -> "Local";
         };
@@ -256,6 +261,33 @@ public class PublishService {
     }
 
     @Transactional
+    public ChannelListing setBrickowlStatus(UUID itemId, String status) {
+        String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
+            throw ApiException.badRequest("Brick Owl status must be Unlisted or Active");
+        }
+        InventoryItem item = inventoryService.get(itemId);
+        ListingAction action = ListingAction.fromVisibility(normalized);
+        try {
+            ChannelListing listing = listings.findByInventoryItemIdAndPlatform(itemId, Platform.BRICKOWL)
+                    .orElseThrow(() -> ApiException.notFound("Brick Owl listing not found"));
+            if (listing.getStatus() != ListingStatus.PUBLISHED
+                    || listing.getExternalId() == null
+                    || listing.getExternalId().isBlank()) {
+                throw ApiException.badRequest("Publish to Brick Owl first");
+            }
+            brickOwlClient.setForSale(listing.getExternalId(), normalized.equals("ACTIVE"));
+            listing.setBrickowlStatus(normalized);
+            ChannelListing saved = listings.save(listing);
+            listingLogs.record(item, Platform.BRICKOWL, action, ListingLogStatus.SUCCESS, visibilityNote(normalized));
+            return saved;
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.BRICKOWL, action, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Transactional
     public ChannelListing setEbayStatus(UUID itemId, String status) {
         String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         if (!normalized.equals("ACTIVE") && !normalized.equals("UNLISTED")) {
@@ -357,6 +389,7 @@ public class PublishService {
         switch (platform) {
             case SHOPIFY -> setShopifyStatus(itemId, status);
             case BRICKLINK -> setBricklinkStatus(itemId, status);
+            case BRICKOWL -> setBrickowlStatus(itemId, status);
             case EBAY -> setEbayStatus(itemId, status);
             case LOCAL -> {
             }
@@ -384,6 +417,7 @@ public class PublishService {
         String visibility = switch (listing.getPlatform()) {
             case SHOPIFY -> listing.getShopifyStatus();
             case BRICKLINK -> listing.getBricklinkStatus();
+            case BRICKOWL -> listing.getBrickowlStatus();
             case EBAY -> listing.getEbayStatus();
             case LOCAL -> null;
         };
@@ -404,6 +438,7 @@ public class PublishService {
         return switch (platform) {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
+            case BRICKOWL -> "Brick Owl";
             case EBAY -> "eBay";
             case LOCAL -> "Local";
         };
@@ -420,6 +455,7 @@ public class PublishService {
         switch (platform) {
             case SHOPIFY -> deleteShopifyListing(itemId);
             case BRICKLINK -> deleteBricklinkListing(itemId);
+            case BRICKOWL -> deleteBrickowlListing(itemId);
             case EBAY -> deleteEbayListing(itemId);
             case LOCAL -> {
             }
@@ -459,6 +495,22 @@ public class PublishService {
     }
 
     @Transactional
+    public void deleteBrickowlListing(UUID itemId) {
+        InventoryItem item = inventoryService.get(itemId);
+        try {
+            ChannelListing listing = requireInactiveListing(itemId, Platform.BRICKOWL, "brickowlStatus");
+            if (listing.getExternalId() != null && !listing.getExternalId().isBlank()) {
+                brickOwlClient.deleteLot(listing.getExternalId());
+            }
+            removeListing(listing);
+            listingLogs.record(item, Platform.BRICKOWL, ListingAction.DELETE, ListingLogStatus.SUCCESS, "Listing deleted");
+        } catch (RuntimeException e) {
+            listingLogs.record(item, Platform.BRICKOWL, ListingAction.DELETE, ListingLogStatus.FAILED, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Transactional
     public void deleteEbayListing(UUID itemId) {
         InventoryItem item = inventoryService.get(itemId);
         try {
@@ -480,6 +532,7 @@ public class PublishService {
         String name = switch (platform) {
             case SHOPIFY -> "Shopify";
             case BRICKLINK -> "BrickLink";
+            case BRICKOWL -> "Brick Owl";
             case EBAY -> "eBay";
             case LOCAL -> "Local";
         };
@@ -488,6 +541,7 @@ public class PublishService {
         String status = switch (statusField) {
             case "shopifyStatus" -> listing.getShopifyStatus();
             case "bricklinkStatus" -> listing.getBricklinkStatus();
+            case "brickowlStatus" -> listing.getBrickowlStatus();
             default -> listing.getEbayStatus();
         };
         if (!"UNLISTED".equalsIgnoreCase(status)) {

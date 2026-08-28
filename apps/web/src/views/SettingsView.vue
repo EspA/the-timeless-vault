@@ -26,6 +26,7 @@ const highPercent = ref("15");
 const lowPercent = ref("15");
 const bricklinkFeePercent = ref("5.4");
 const shopifyFeePercent = ref("2.9");
+const brickowlFeePercent = ref("5.65");
 const feeBusy = ref(false);
 const feeMessage = ref("");
 const feeError = ref("");
@@ -63,6 +64,7 @@ onMounted(async () => {
   lowPercent.value = String(health.value?.priceGuardLowPercent ?? "15");
   bricklinkFeePercent.value = String(health.value?.bricklinkFeePercent ?? "5.4");
   shopifyFeePercent.value = String(health.value?.shopifyFeePercent ?? "2.9");
+  brickowlFeePercent.value = String(health.value?.brickowlFeePercent ?? "5.65");
   const words = health.value?.ebayDefaultExcludeWords;
   defaultExcludeWords.value = typeof words === "string" ? words : defaultEbayExcludeWords;
   try {
@@ -199,15 +201,17 @@ const saveChannelFeeRates = async () => {
   feeMessage.value = "";
   feeError.value = "";
   try {
-    const saved = await api.put<{ bricklinkPercent: number; shopifyPercent: number }>(
+    const saved = await api.put<{ bricklinkPercent: number; shopifyPercent: number; brickowlPercent: number }>(
       "/api/settings/channel-fee-rates",
       {
         bricklinkPercent: Number(bricklinkFeePercent.value),
         shopifyPercent: Number(shopifyFeePercent.value),
+        brickowlPercent: Number(brickowlFeePercent.value),
       }
     );
     bricklinkFeePercent.value = String(saved.bricklinkPercent);
     shopifyFeePercent.value = String(saved.shopifyPercent);
+    brickowlFeePercent.value = String(saved.brickowlPercent);
     feeMessage.value = "Fee rates saved. New sales will use these values; existing sales keep the fee they already have.";
     await loadHealth();
   } catch (e) {
@@ -302,6 +306,7 @@ const onThemeToggle = (event: Event) => {
       <p>BrickEconomy <span class="badge" :class="pill(health.brickeconomy)">{{ health.brickeconomy ? "configured" : "missing" }}</span></p>
       <p>Shopify <span class="badge" :class="pill(health.shopify)">{{ health.shopify ? "configured" : "missing" }}</span></p>
       <p>BrickLink <span class="badge" :class="pill(health.bricklink)">{{ health.bricklink ? "configured" : "missing" }}</span></p>
+      <p>Brick Owl <span class="badge" :class="pill(health.brickowl)">{{ health.brickowl ? "configured" : "missing" }}</span></p>
       <p>eBay app <span class="badge" :class="pill(health.ebay)">{{ health.ebay ? "configured" : "missing" }}</span></p>
       <p>eBay OAuth <span class="badge" :class="pill(health.ebayOAuth)">{{ health.ebayOAuth ? "refresh token stored" : "needs consent" }}</span></p>
       <p>eBay sell-ready <span class="badge" :class="pill(health.ebaySellReady && health.ebayPoliciesReady)">{{ health.ebayPoliciesReady ? "location and policies found" : (health.ebaySellReady ? "OAuth ok, policies/location missing" : "needs OAuth") }}</span></p>
@@ -383,17 +388,20 @@ const onThemeToggle = (event: Event) => {
     <div class="card grid">
       <h3>Sales channel fees</h3>
       <p class="muted">
-        Applied when a sale is recorded: (price + shipping) × rate. Changing these values does not rewrite past sales.
+        BrickLink and Shopify apply (price + shipping) × rate. Brick Owl is merchandise only (price × qty × rate; shipping excluded). Changing these values does not rewrite past sales.
       </p>
-      <div class="grid two">
+      <div class="grid three">
         <label>BrickLink fee (%)
           <input v-model="bricklinkFeePercent" type="number" min="0" max="100" step="0.1" />
         </label>
         <label>Shopify fee (%)
           <input v-model="shopifyFeePercent" type="number" min="0" max="100" step="0.1" />
         </label>
+        <label>Brick Owl fee (%)
+          <input v-model="brickowlFeePercent" type="number" min="0" max="100" step="0.1" />
+        </label>
       </div>
-      <p class="muted">Defaults are 5.4% for BrickLink and 2.9% for Shopify. eBay fees still come from the order.</p>
+      <p class="muted">Defaults are 5.4% for BrickLink, 2.9% for Shopify, and 5.65% for Brick Owl. eBay fees still come from the order.</p>
       <button class="btn gold" type="button" :disabled="feeBusy" @click="saveChannelFeeRates">
         {{ feeBusy ? "Saving…" : "Save fee rates" }}
       </button>

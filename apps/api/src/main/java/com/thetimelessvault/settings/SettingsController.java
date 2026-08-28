@@ -1,6 +1,7 @@
 package com.thetimelessvault.settings;
 
 import com.thetimelessvault.bricklink.BrickLinkClient;
+import com.thetimelessvault.brickowl.BrickOwlClient;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.ebay.EbayBrowseContext;
 import com.thetimelessvault.ebay.EbayClient;
@@ -32,6 +33,7 @@ public class SettingsController {
     private final AppProperties properties;
     private final ShopifyClient shopifyClient;
     private final BrickLinkClient brickLinkClient;
+    private final BrickOwlClient brickOwlClient;
     private final EbayClient ebayClient;
     private final EbayTokenService ebayTokens;
     private final AppSettingRepository appSettings;
@@ -47,6 +49,7 @@ public class SettingsController {
             AppProperties properties,
             ShopifyClient shopifyClient,
             BrickLinkClient brickLinkClient,
+            BrickOwlClient brickOwlClient,
             EbayClient ebayClient,
             EbayTokenService ebayTokens,
             AppSettingRepository appSettings,
@@ -61,6 +64,7 @@ public class SettingsController {
         this.properties = properties;
         this.shopifyClient = shopifyClient;
         this.brickLinkClient = brickLinkClient;
+        this.brickOwlClient = brickOwlClient;
         this.ebayClient = ebayClient;
         this.ebayTokens = ebayTokens;
         this.appSettings = appSettings;
@@ -91,6 +95,7 @@ public class SettingsController {
         health.put("brickeconomy", properties.getBrickeconomy().configured());
         health.put("shopify", shopifyClient.configured());
         health.put("bricklink", brickLinkClient.configured());
+        health.put("brickowl", brickOwlClient.healthy());
         health.put("ebay", ebayClient.configured());
         health.put("ebayBrowseReady", ebayClient.browseConfigured());
         health.put("ebaySellReady", ebayClient.sellReady());
@@ -109,6 +114,7 @@ public class SettingsController {
         ChannelFeeRates.Rates fees = channelFeeRates.rates();
         health.put("bricklinkFeePercent", fees.bricklinkPercent());
         health.put("shopifyFeePercent", fees.shopifyPercent());
+        health.put("brickowlFeePercent", fees.brickowlPercent());
         return health;
     }
 
@@ -155,9 +161,14 @@ public class SettingsController {
     public Map<String, Object> saveChannelFeeRates(@RequestBody(required = false) Map<String, Object> body) {
         ChannelFeeRates.Rates saved = channelFeeRates.save(
                 decimal(body == null ? null : body.get("bricklinkPercent")),
-                decimal(body == null ? null : body.get("shopifyPercent"))
+                decimal(body == null ? null : body.get("shopifyPercent")),
+                decimal(body == null ? null : body.get("brickowlPercent"))
         );
-        return Map.of("bricklinkPercent", saved.bricklinkPercent(), "shopifyPercent", saved.shopifyPercent());
+        return Map.of(
+                "bricklinkPercent", saved.bricklinkPercent(),
+                "shopifyPercent", saved.shopifyPercent(),
+                "brickowlPercent", saved.brickowlPercent()
+        );
     }
 
     @GetMapping("/shopify/collections")

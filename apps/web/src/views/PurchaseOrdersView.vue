@@ -14,6 +14,7 @@ const total = ref(0);
 const totalPages = ref(1);
 const error = ref("");
 const loading = ref(false);
+const syncing = ref(false);
 const emptyFilters = () => ({
   number: "",
   supplier: "",
@@ -150,6 +151,20 @@ const load = async (pageIndex = page.value) => {
   }
 };
 
+const syncNow = async () => {
+  if (syncing.value) return;
+  syncing.value = true;
+  error.value = "";
+  try {
+    await api.post("/api/purchase-orders/sync");
+    await load(page.value);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not sync purchase orders";
+  } finally {
+    syncing.value = false;
+  }
+};
+
 onMounted(() => {
   void load(0);
 });
@@ -159,7 +174,12 @@ onMounted(() => {
   <div class="grid">
     <div class="page-head">
       <h1>Purchase orders</h1>
-      <button class="btn gold" type="button" @click="router.push('/purchase-orders/new')">New purchase order</button>
+      <div class="pager-actions">
+        <button class="btn gold" type="button" @click="router.push('/purchase-orders/new')">New purchase order</button>
+        <button class="btn" type="button" :disabled="syncing || loading" @click="syncNow">
+          {{ syncing ? "Syncing…" : "Sync now" }}
+        </button>
+      </div>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">

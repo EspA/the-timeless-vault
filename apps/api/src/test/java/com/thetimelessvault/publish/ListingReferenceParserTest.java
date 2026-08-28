@@ -31,6 +31,21 @@ class ListingReferenceParserTest {
     }
 
     @Test
+    void readsBrickOwlLotUrlsAndIds() {
+        ListingReference parsed = ListingReferenceParser.parse(
+                Platform.BRICKOWL,
+                "https://www.brickowl.com/inventory/778899"
+        );
+        assertEquals("778899", parsed.externalId());
+        assertEquals("https://www.brickowl.com/inventory/778899", parsed.liveUrl());
+        assertEquals("778899", ListingReferenceParser.parse(Platform.BRICKOWL, "778899").externalId());
+        assertEquals(
+                "445566",
+                ListingReferenceParser.parse(Platform.BRICKOWL, "https://www.brickowl.com/store/the-timeless-vault?lot_id=445566").externalId()
+        );
+    }
+
+    @Test
     void readsShopifyGidsHandlesAndUrls() {
         assertEquals(
                 "gid://shopify/Product/123",

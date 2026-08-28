@@ -7,6 +7,7 @@ public final class ChannelPrices {
 
     private static final BigDecimal EBAY = new BigDecimal("1.45");
     private static final BigDecimal BRICKLINK = new BigDecimal("1.40");
+    private static final BigDecimal BRICKOWL = new BigDecimal("1.40");
     private static final BigDecimal SHOPIFY = new BigDecimal("1.32");
 
     private ChannelPrices() {
@@ -18,6 +19,10 @@ public final class ChannelPrices {
 
     public static BigDecimal bricklink(BigDecimal cost) {
         return markedUp(cost, BRICKLINK);
+    }
+
+    public static BigDecimal brickowl(BigDecimal cost) {
+        return markedUp(cost, BRICKOWL);
     }
 
     public static BigDecimal shopify(BigDecimal cost) {

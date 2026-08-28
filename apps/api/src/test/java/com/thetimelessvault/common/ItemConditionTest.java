@@ -31,4 +31,14 @@ class ItemConditionTest {
         assertEquals("NEW_OTHER", ItemCondition.NEW_OTHER.ebayCondition());
         assertEquals("USED_EXCELLENT", ItemCondition.USED_COMPLETE.ebayCondition());
     }
+
+    @Test
+    void mapsBrickOwlConditions() {
+        assertEquals("news", ItemCondition.NEW_SEALED.brickOwlCondition());
+        assertEquals("newc", ItemCondition.NEW_COMPLETE.brickOwlCondition());
+        assertEquals("newi", ItemCondition.NEW_INCOMPLETE.brickOwlCondition());
+        assertEquals("new", ItemCondition.NEW_OTHER.brickOwlCondition());
+        assertEquals("usedc", ItemCondition.USED_COMPLETE.brickOwlCondition());
+        assertEquals("usedi", ItemCondition.USED_INCOMPLETE.brickOwlCondition());
+    }
 }

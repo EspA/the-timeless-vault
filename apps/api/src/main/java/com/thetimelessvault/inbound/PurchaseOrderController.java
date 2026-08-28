@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -17,9 +18,11 @@ import java.util.UUID;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService orders;
+    private final PurchaseOrderDeliverySyncService deliverySync;
 
-    public PurchaseOrderController(PurchaseOrderService orders) {
+    public PurchaseOrderController(PurchaseOrderService orders, PurchaseOrderDeliverySyncService deliverySync) {
         this.orders = orders;
+        this.deliverySync = deliverySync;
     }
 
     @GetMapping
@@ -56,6 +59,11 @@ public class PurchaseOrderController {
         return orders.updateHeaderView(id, request);
     }
 
+    @PostMapping("/sync")
+    public Map<String, Object> sync() {
+        return Map.of("status", "ok", "delivered", deliverySync.syncDeliveredShipments());
+    }
+
     @PostMapping("/{id}/deliver")
     public PurchaseOrderDtos.PurchaseOrderView deliver(@PathVariable UUID id) {
         return orders.markDeliveredView(id);
@@ -69,5 +77,10 @@ public class PurchaseOrderController {
     @PostMapping("/{id}/cancel")
     public PurchaseOrderDtos.PurchaseOrderView cancel(@PathVariable UUID id) {
         return orders.cancelView(id);
+    }
+
+    @PostMapping("/{id}/sync")
+    public PurchaseOrderDtos.PurchaseOrderView sync(@PathVariable UUID id) {
+        return deliverySync.syncView(id);
     }
 }

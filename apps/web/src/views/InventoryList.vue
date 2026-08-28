@@ -10,7 +10,7 @@ import StockStatusButtons from "../components/StockStatusButtons.vue";
 const router = useRouter();
 const adding = ref(false);
 
-type Column = "sku" | "set" | "title" | "created" | "updated" | "ebayPrice" | "bricklinkPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "ebay";
+type Column = "sku" | "set" | "title" | "created" | "updated" | "ebayPrice" | "bricklinkPrice" | "brickowlPrice" | "shopifyPrice" | "cost" | "stockStatus" | "quantity" | "condition" | "shopify" | "bricklink" | "brickowl" | "ebay";
 type Sort = { key: Column; dir: "asc" | "desc" };
 
 const PAGE_SIZE = 10;
@@ -31,6 +31,7 @@ const filters = ref({
   updated: "",
   ebayPrice: "",
   bricklinkPrice: "",
+  brickowlPrice: "",
   shopifyPrice: "",
   cost: "",
   stockStatus: "",
@@ -38,6 +39,7 @@ const filters = ref({
   condition: "",
   shopify: "",
   bricklink: "",
+  brickowl: "",
   ebay: "",
 });
 
@@ -106,6 +108,7 @@ const clearFilters = () => {
     updated: "",
     ebayPrice: "",
     bricklinkPrice: "",
+    brickowlPrice: "",
     shopifyPrice: "",
     cost: "",
     stockStatus: "",
@@ -113,6 +116,7 @@ const clearFilters = () => {
     condition: "",
     shopify: "",
     bricklink: "",
+    brickowl: "",
     ebay: "",
   };
   page.value = 0;
@@ -203,12 +207,15 @@ const onSaved = async (item: InventoryItem) => {
   await router.push(`/inventory/${item.id}`);
 };
 
-const listingUrl = (item: InventoryItem, platform: "SHOPIFY" | "BRICKLINK" | "EBAY") => {
+const listingUrl = (item: InventoryItem, platform: "SHOPIFY" | "BRICKLINK" | "BRICKOWL" | "EBAY") => {
   if (platform === "SHOPIFY") {
     return item.shopifyStatus === "ACTIVE" && item.shopifyLiveUrl ? item.shopifyLiveUrl : "";
   }
   if (platform === "BRICKLINK") {
     return item.bricklinkStatus === "ACTIVE" && item.bricklinkLiveUrl ? item.bricklinkLiveUrl : "";
+  }
+  if (platform === "BRICKOWL") {
+    return item.brickowlStatus === "ACTIVE" && item.brickowlLiveUrl ? item.brickowlLiveUrl : "";
   }
   return item.ebayStatus === "ACTIVE" && item.ebayLiveUrl ? item.ebayLiveUrl : "";
 };
@@ -262,6 +269,7 @@ onMounted(async () => {
               <th><button class="sort-btn" type="button" @click="sortBy('title')">Title{{ sortMark("title") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('ebayPrice')">eBay ${{ sortMark("ebayPrice") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('bricklinkPrice')">BrickLink ${{ sortMark("bricklinkPrice") }}</button></th>
+              <th><button class="sort-btn" type="button" @click="sortBy('brickowlPrice')">Brick Owl ${{ sortMark("brickowlPrice") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('shopifyPrice')">Shopify ${{ sortMark("shopifyPrice") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('cost')">Cost{{ sortMark("cost") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('stockStatus')">Status{{ sortMark("stockStatus") }}</button></th>
@@ -269,6 +277,7 @@ onMounted(async () => {
               <th><button class="sort-btn" type="button" @click="sortBy('condition')">Condition{{ sortMark("condition") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('shopify')">Shopify{{ sortMark("shopify") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('bricklink')">BrickLink{{ sortMark("bricklink") }}</button></th>
+              <th><button class="sort-btn" type="button" @click="sortBy('brickowl')">Brick Owl{{ sortMark("brickowl") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('ebay')">eBay{{ sortMark("ebay") }}</button></th>
               <th><button class="sort-btn" type="button" @click="sortBy('updated')">Updated{{ sortMark("updated") }}</button></th>
               <th></th>
@@ -279,6 +288,7 @@ onMounted(async () => {
               <th><input v-model="filters.title" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.ebayPrice" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.bricklinkPrice" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.brickowlPrice" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.shopifyPrice" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.cost" class="column-filter" type="search" placeholder="Filter" /></th>
               <th>
@@ -305,6 +315,11 @@ onMounted(async () => {
                 </select>
               </th>
               <th>
+                <select v-model="filters.brickowl" class="column-filter">
+                  <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                </select>
+              </th>
+              <th>
                 <select v-model="filters.ebay" class="column-filter">
                   <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </select>
@@ -320,6 +335,7 @@ onMounted(async () => {
               <td><router-link :to="`/inventory/${item.id}`">{{ item.title }}</router-link></td>
               <td>${{ item.ebayPrice ?? item.price }}</td>
               <td>${{ item.bricklinkPrice ?? item.price }}</td>
+              <td>${{ item.brickowlPrice ?? item.price }}</td>
               <td>${{ item.shopifyPrice ?? item.price }}</td>
               <td>{{ item.cost != null ? `$${item.cost}` : "—" }}</td>
               <td>
@@ -348,6 +364,13 @@ onMounted(async () => {
               </td>
               <td>
                 <ChannelListingBadge
+                  platform="BRICKOWL"
+                  :status="item.brickowlStatus"
+                  :href="listingUrl(item, 'BRICKOWL')"
+                />
+              </td>
+              <td>
+                <ChannelListingBadge
                   platform="EBAY"
                   :status="item.ebayStatus"
                   :href="listingUrl(item, 'EBAY')"
@@ -359,7 +382,7 @@ onMounted(async () => {
               </td>
             </tr>
             <tr v-if="!items.length">
-              <td colspan="15" class="muted">{{ loading ? "Loading…" : filterCount || search.trim() ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
+              <td colspan="17" class="muted">{{ loading ? "Loading…" : filterCount || search.trim() ? "No items match those filters." : "No inventory yet. Add a sealed set to begin." }}</td>
             </tr>
           </tbody>
         </table>
@@ -377,6 +400,7 @@ onMounted(async () => {
           <div class="list-card-prices">
             <span><span class="muted">eBay</span>${{ item.ebayPrice ?? item.price }}</span>
             <span><span class="muted">BrickLink</span>${{ item.bricklinkPrice ?? item.price }}</span>
+            <span><span class="muted">Brick Owl</span>${{ item.brickowlPrice ?? item.price }}</span>
             <span><span class="muted">Shopify</span>${{ item.shopifyPrice ?? item.price }}</span>
           </div>
           <div class="list-card-row">
@@ -391,6 +415,12 @@ onMounted(async () => {
               platform="BRICKLINK"
               :status="item.bricklinkStatus"
               :href="listingUrl(item, 'BRICKLINK')"
+            />
+            <ChannelListingBadge
+              v-if="item.brickowlStatus"
+              platform="BRICKOWL"
+              :status="item.brickowlStatus"
+              :href="listingUrl(item, 'BRICKOWL')"
             />
             <ChannelListingBadge
               v-if="item.ebayStatus"

@@ -30,9 +30,11 @@ class ChannelFeeRatesTest {
     void usesDefaultPercentsWhenMissing() {
         when(settings.findById(ChannelFeeRates.BRICKLINK_PERCENT_KEY)).thenReturn(Optional.empty());
         when(settings.findById(ChannelFeeRates.SHOPIFY_PERCENT_KEY)).thenReturn(Optional.empty());
+        when(settings.findById(ChannelFeeRates.BRICKOWL_PERCENT_KEY)).thenReturn(Optional.empty());
 
         assertEquals(0, new BigDecimal("5.400").compareTo(rates.bricklinkPercent()));
         assertEquals(0, new BigDecimal("2.900").compareTo(rates.shopifyPercent()));
+        assertEquals(0, new BigDecimal("5.650").compareTo(rates.brickowlPercent()));
     }
 
     @Test
@@ -59,12 +61,23 @@ class ChannelFeeRatesTest {
     }
 
     @Test
+    void brickOwlFeeIsMerchandiseOnly() {
+        when(settings.findById(ChannelFeeRates.BRICKOWL_PERCENT_KEY)).thenReturn(Optional.empty());
+
+        assertEquals(
+                0,
+                new BigDecimal("46.33").compareTo(rates.feeFor(
+                        Platform.BRICKOWL, new BigDecimal("820.00"), 1, new BigDecimal("15.00")))
+        );
+    }
+
+    @Test
     void ebayHasNoConfiguredFee() {
         assertNull(rates.feeFor(Platform.EBAY, new BigDecimal("100"), 1, BigDecimal.ZERO));
     }
 
     @Test
     void rejectsNegativePercent() {
-        assertThrows(ApiException.class, () -> rates.save(new BigDecimal("-1"), new BigDecimal("2.9")));
+        assertThrows(ApiException.class, () -> rates.save(new BigDecimal("-1"), new BigDecimal("2.9"), new BigDecimal("2.65")));
     }
 }

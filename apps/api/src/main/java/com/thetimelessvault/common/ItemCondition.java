@@ -20,6 +20,17 @@ public enum ItemCondition {
         };
     }
 
+    public String brickOwlCondition() {
+        return switch (this) {
+            case NEW_SEALED -> "news";
+            case NEW_COMPLETE -> "newc";
+            case NEW_INCOMPLETE -> "newi";
+            case NEW_OTHER -> "new";
+            case USED_COMPLETE -> "usedc";
+            case USED_INCOMPLETE -> "usedi";
+        };
+    }
+
     public String ebayCondition() {
         return switch (this) {
             case NEW_SEALED, NEW_COMPLETE, NEW_INCOMPLETE -> "NEW";

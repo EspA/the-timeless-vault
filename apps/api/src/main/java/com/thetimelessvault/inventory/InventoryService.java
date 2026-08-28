@@ -124,6 +124,9 @@ public class InventoryService {
         if (request.shopifyPrice() != null) {
             item.setShopifyPrice(request.shopifyPrice());
         }
+        if (request.brickowlPrice() != null) {
+            item.setBrickowlPrice(request.brickowlPrice());
+        }
         item.applyStockAndQuantity(request.stockStatus(), request.quantity());
         if (request.cost() != null) {
             item.setCost(request.cost());
@@ -281,6 +284,9 @@ public class InventoryService {
         ChannelListing ebayListing = listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.EBAY)
                 .filter(listing -> listing.getStatus() == ListingStatus.PUBLISHED)
                 .orElse(null);
+        ChannelListing brickowlListing = listings.findByInventoryItemIdAndPlatform(item.getId(), Platform.BRICKOWL)
+                .filter(listing -> listing.getStatus() == ListingStatus.PUBLISHED)
+                .orElse(null);
         return new InventoryDtos.InventoryView(
                 item.getId(),
                 item.getSku(),
@@ -292,6 +298,7 @@ public class InventoryService {
                 item.priceFor(Platform.EBAY),
                 item.priceFor(Platform.BRICKLINK),
                 item.priceFor(Platform.SHOPIFY),
+                item.priceFor(Platform.BRICKOWL),
                 item.getQuantity(),
                 item.getStockStatus(),
                 item.getCost(),
@@ -309,9 +316,11 @@ public class InventoryService {
                 shopifyListing == null ? null : shopifyListing.getShopifyStatus(),
                 bricklinkListing == null ? null : bricklinkListing.getBricklinkStatus(),
                 ebayListing == null ? null : ebayListing.getEbayStatus(),
+                brickowlListing == null ? null : brickowlListing.getBrickowlStatus(),
                 shopifyListing == null ? null : shopifyListing.getLiveUrl(),
                 bricklinkListing == null ? null : bricklinkListing.getLiveUrl(),
                 ebayListing == null ? null : ebayListing.getLiveUrl(),
+                brickowlListing == null ? null : brickowlListing.getLiveUrl(),
                 photoViews,
                 item.getCreatedAt(),
                 item.getUpdatedAt()
@@ -339,6 +348,7 @@ public class InventoryService {
         item.setEbayPrice(request.ebayPrice());
         item.setBricklinkPrice(request.bricklinkPrice());
         item.setShopifyPrice(request.shopifyPrice());
+        item.setBrickowlPrice(request.brickowlPrice());
         item.setPrice(request.ebayPrice());
         item.applyStockAndQuantity(
                 request.stockStatus() == null ? StockStatus.IN_TRANSIT : request.stockStatus(),

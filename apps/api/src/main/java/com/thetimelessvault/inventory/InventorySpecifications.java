@@ -30,6 +30,7 @@ final class InventorySpecifications {
             String ebayPrice,
             String bricklinkPrice,
             String shopifyPrice,
+            String brickowlPrice,
             String cost,
             String stockStatus,
             String quantity,
@@ -37,6 +38,7 @@ final class InventorySpecifications {
             String shopify,
             String bricklink,
             String ebay,
+            String brickowl,
             String sort,
             String dir
     ) {
@@ -54,6 +56,7 @@ final class InventorySpecifications {
             Join<InventoryItem, ChannelListing> shopify = listingJoin(root, cb, Platform.SHOPIFY);
             Join<InventoryItem, ChannelListing> bricklink = listingJoin(root, cb, Platform.BRICKLINK);
             Join<InventoryItem, ChannelListing> ebay = listingJoin(root, cb, Platform.EBAY);
+            Join<InventoryItem, ChannelListing> brickowl = listingJoin(root, cb, Platform.BRICKOWL);
             List<Predicate> predicates = new ArrayList<>();
             Expression<String> setNumber = selectingItems
                     ? root.get("catalogItem").get("setNumber")
@@ -66,6 +69,7 @@ final class InventorySpecifications {
             predicates.add(contains(cb, root.get("ebayPrice"), query.ebayPrice()));
             predicates.add(contains(cb, root.get("bricklinkPrice"), query.bricklinkPrice()));
             predicates.add(contains(cb, root.get("shopifyPrice"), query.shopifyPrice()));
+            predicates.add(contains(cb, root.get("brickowlPrice"), query.brickowlPrice()));
             predicates.add(contains(cb, root.get("cost"), query.cost()));
             predicates.add(contains(cb, root.get("quantity"), query.quantity()));
             if (notBlank(query.stockStatus())) {
@@ -77,6 +81,7 @@ final class InventorySpecifications {
             predicates.add(listingStatus(cb, shopify, "shopifyStatus", query.shopify()));
             predicates.add(listingStatus(cb, bricklink, "bricklinkStatus", query.bricklink()));
             predicates.add(listingStatus(cb, ebay, "ebayStatus", query.ebay()));
+            predicates.add(listingStatus(cb, brickowl, "brickowlStatus", query.brickowl()));
             if (notBlank(query.q())) {
                 String needle = "%" + query.q().trim().toLowerCase(Locale.ROOT) + "%";
                 predicates.add(cb.or(
@@ -87,7 +92,7 @@ final class InventorySpecifications {
             }
             if (selectingItems && cq != null) {
                 boolean asc = query.dir() == null || !"desc".equalsIgnoreCase(query.dir());
-                Expression<?> order = orderBy(root, setNumber, shopify, bricklink, ebay, query.sort());
+                Expression<?> order = orderBy(root, setNumber, shopify, bricklink, ebay, brickowl, query.sort());
                 cq.orderBy(asc ? cb.asc(order) : cb.desc(order), cb.desc(root.get("createdAt")));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
@@ -100,6 +105,7 @@ final class InventorySpecifications {
             Join<InventoryItem, ChannelListing> shopify,
             Join<InventoryItem, ChannelListing> bricklink,
             Join<InventoryItem, ChannelListing> ebay,
+            Join<InventoryItem, ChannelListing> brickowl,
             String sort
     ) {
         return switch (sort == null ? "updated" : sort) {
@@ -109,6 +115,7 @@ final class InventorySpecifications {
             case "ebayPrice" -> root.get("ebayPrice");
             case "bricklinkPrice" -> root.get("bricklinkPrice");
             case "shopifyPrice" -> root.get("shopifyPrice");
+            case "brickowlPrice" -> root.get("brickowlPrice");
             case "cost" -> root.get("cost");
             case "stockStatus" -> root.get("stockStatus");
             case "quantity" -> root.get("quantity");
@@ -116,6 +123,7 @@ final class InventorySpecifications {
             case "shopify" -> shopify.get("shopifyStatus");
             case "bricklink" -> bricklink.get("bricklinkStatus");
             case "ebay" -> ebay.get("ebayStatus");
+            case "brickowl" -> brickowl.get("brickowlStatus");
             case "created" -> root.get("createdAt");
             default -> root.get("updatedAt");
         };

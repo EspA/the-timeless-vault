@@ -172,6 +172,7 @@ public class EbayListingImportService {
         item.setEbayPrice(price);
         item.setBricklinkPrice(price);
         item.setShopifyPrice(price);
+        item.setBrickowlPrice(price);
         item.setPrice(price);
         item.setItemType(ItemType.SET);
         item.setCondition(ItemCondition.fromEbay(listing.conditionId(), listing.conditionName()));

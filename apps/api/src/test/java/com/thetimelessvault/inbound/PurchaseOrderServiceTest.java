@@ -140,6 +140,7 @@ class PurchaseOrderServiceTest {
         assertEquals(ChannelPrices.ebay(new BigDecimal("100.00")), created.ebayPrice());
         assertEquals(ChannelPrices.bricklink(new BigDecimal("100.00")), created.bricklinkPrice());
         assertEquals(ChannelPrices.shopify(new BigDecimal("100.00")), created.shopifyPrice());
+        assertEquals(ChannelPrices.brickowl(new BigDecimal("100.00")), created.brickowlPrice());
         assertTrue(created.shortDescription().contains("Ask for more photos!"));
         assertTrue(created.shortDescription().contains("Box Grade"));
         assertFalse(created.shortDescription().startsWith("Set number:"));
@@ -189,6 +190,7 @@ class PurchaseOrderServiceTest {
         verify(inventory, times(4)).create(any());
         verify(publishService).deleteChannelListingIfPresent(previousItem, Platform.SHOPIFY);
         verify(publishService).deleteChannelListingIfPresent(previousItem, Platform.BRICKLINK);
+        verify(publishService).deleteChannelListingIfPresent(previousItem, Platform.BRICKOWL);
         verify(publishService).deleteChannelListingIfPresent(previousItem, Platform.EBAY);
         assertEquals("10236-1", keep.getSetNumber());
         assertEquals(2, keep.getQuantity());
@@ -289,6 +291,7 @@ class PurchaseOrderServiceTest {
         sequence.verify(publishService).deactivatePublishedListings(itemId);
         sequence.verify(publishService).deleteChannelListingIfPresent(itemId, Platform.SHOPIFY);
         sequence.verify(publishService).deleteChannelListingIfPresent(itemId, Platform.BRICKLINK);
+        sequence.verify(publishService).deleteChannelListingIfPresent(itemId, Platform.BRICKOWL);
         sequence.verify(publishService).deleteChannelListingIfPresent(itemId, Platform.EBAY);
         sequence.verify(inventory).delete(itemId);
         assertNull(createdItems.get(itemId));

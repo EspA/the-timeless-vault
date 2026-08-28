@@ -131,6 +131,55 @@ public final class ChannelOrderMapper {
         return orders;
     }
 
+    public static List<ChannelOrder> fromBrickOwlOrder(JsonNode order, JsonNode items) {
+        List<ChannelOrder> orders = new ArrayList<>();
+        if (order == null || order.isMissingNode() || isSkippedBrickOwl(order)) {
+            return orders;
+        }
+        String orderId = firstText(order, "order_id", "id");
+        Instant soldAt = unixInstant(firstText(order, "order_date", "order_time"));
+        if (soldAt == null) {
+            soldAt = parseInstant(firstText(order, "iso_order_time"));
+        }
+        String orderUrl = firstNonNull(
+                firstText(order, "url", "order_url"),
+                orderId == null ? null : "https://www.brickowl.com/order/" + orderId
+        );
+        BigDecimal shipping = brickOwlShipping(order);
+        OrderStatus status = brickOwlStatus(order);
+        Tracking shipment = brickOwlTracking(order);
+        if (shipment.tracking() != null && status == OrderStatus.OPEN) {
+            status = OrderStatus.SHIPPED;
+        }
+        boolean first = true;
+        for (JsonNode line : flattenBrickOwlItems(items)) {
+            String title = firstNonNull(firstText(line, "name", "title", "item_name"), firstText(line.path("ids"), "name"));
+            String sku = firstText(line, "external_id", "external_id_1", "external_lot_id");
+            String lotId = firstText(line, "lot_id", "id");
+            orders.add(new ChannelOrder(
+                    Platform.BRICKOWL,
+                    orderId,
+                    firstNonNull(lotId, firstText(line, "boid"), String.valueOf(orders.size())),
+                    sku,
+                    lotId,
+                    title,
+                    firstNonNull(brickOwlSetNumber(line), SetNumberParser.fromSku(sku), SetNumberParser.fromTitle(title)),
+                    Math.max(1, line.path("ordered_quantity").asInt(line.path("quantity").asInt(1))),
+                    decimal(line, "base_price", "price", "unit_price"),
+                    firstNonNull(firstText(order, "iso_currency", "currency"), "USD"),
+                    soldAt,
+                    orderUrl,
+                    first ? shipping : BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    status,
+                    shipment.tracking(),
+                    shipment.provider()
+            ));
+            first = false;
+        }
+        return orders;
+    }
+
     public static List<ChannelOrder> fromShopifyOrders(JsonNode connection, String shopHost) {
         List<ChannelOrder> orders = new ArrayList<>();
         JsonNode nodes = connection == null ? null : connection.path("nodes");
@@ -210,6 +259,56 @@ public final class ChannelOrderMapper {
             return OrderStatus.SHIPPED;
         }
         return OrderStatus.OPEN;
+    }
+
+    static OrderStatus brickOwlStatus(JsonNode order) {
+        int statusId = order.path("status_id").asInt(-1);
+        if (statusId < 0) {
+            String raw = firstText(order, "status_id");
+            if (raw != null) {
+                try {
+                    statusId = Integer.parseInt(raw);
+                } catch (NumberFormatException ignored) {
+                    statusId = -1;
+                }
+            }
+        }
+        return switch (statusId) {
+            case 5 -> OrderStatus.SHIPPED;
+            case 6 -> OrderStatus.COMPLETED;
+            case 8 -> OrderStatus.CANCELLED;
+            default -> OrderStatus.OPEN;
+        };
+    }
+
+    static boolean isSkippedBrickOwl(JsonNode order) {
+        int statusId = order.path("status_id").asInt(-1);
+        if (statusId < 0) {
+            String raw = firstText(order, "status_id");
+            if (raw != null) {
+                try {
+                    statusId = Integer.parseInt(raw);
+                } catch (NumberFormatException ignored) {
+                    statusId = -1;
+                }
+            }
+        }
+        return statusId == 0 || statusId == 1;
+    }
+
+    static Tracking brickOwlTracking(JsonNode order) {
+        String tracking = firstText(order, "tracking_id", "tracking", "tracking_no", "tracking_number");
+        JsonNode nested = order.path("shipping");
+        if (tracking == null) {
+            tracking = firstText(nested, "tracking_id", "tracking", "tracking_no");
+        }
+        String method = firstText(order, "shipping_method", "carrier");
+        if (method == null) {
+            method = firstText(nested, "method", "carrier");
+        }
+        ShippingCarrier carrier = ShippingCarrier.resolve(method, tracking);
+        String provider = carrier != null && carrier.trackable() ? carrier.name() : method;
+        return new Tracking(tracking, provider, false);
     }
 
     static OrderStatus brickLinkStatus(JsonNode order) {
@@ -395,6 +494,43 @@ public final class ChannelOrderMapper {
         return lines;
     }
 
+    static List<JsonNode> flattenBrickOwlItems(JsonNode items) {
+        List<JsonNode> lines = new ArrayList<>();
+        if (items == null || items.isMissingNode() || items.isNull()) {
+            return lines;
+        }
+        JsonNode list = items;
+        if (items.isObject()) {
+            if (items.has("items")) {
+                list = items.get("items");
+            } else if (items.has("order_items")) {
+                list = items.get("order_items");
+            }
+        }
+        if (list != null && list.isArray()) {
+            list.forEach(lines::add);
+        } else if (items.isObject() && (items.has("lot_id") || items.has("boid"))) {
+            lines.add(items);
+        }
+        return lines;
+    }
+
+    static String brickOwlSetNumber(JsonNode line) {
+        JsonNode ids = line.path("ids");
+        if (ids.isArray()) {
+            for (JsonNode id : ids) {
+                String type = firstText(id, "id_type", "type");
+                if (type != null && type.toLowerCase(Locale.ROOT).contains("set")) {
+                    String value = firstText(id, "id", "value");
+                    if (value != null) {
+                        return value;
+                    }
+                }
+            }
+        }
+        return firstText(line, "set_number", "set_no");
+    }
+
     private static boolean hasText(JsonNode node, String field) {
         return firstText(node, field) != null;
     }
@@ -443,6 +579,10 @@ public final class ChannelOrderMapper {
     }
 
     private static Instant parseInstant(String text) {
+        Instant unix = unixInstant(text);
+        if (unix != null) {
+            return unix;
+        }
         if (text == null || text.isBlank()) {
             return Instant.now();
         }
@@ -455,6 +595,29 @@ public final class ChannelOrderMapper {
                 return Instant.now();
             }
         }
+    }
+
+    private static Instant unixInstant(String text) {
+        if (text == null || text.isBlank() || !text.chars().allMatch(Character::isDigit)) {
+            return null;
+        }
+        try {
+            long value = Long.parseLong(text);
+            if (text.length() > 11) {
+                return Instant.ofEpochMilli(value);
+            }
+            return Instant.ofEpochSecond(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static BigDecimal brickOwlShipping(JsonNode order) {
+        BigDecimal shipping = decimal(order, "shipping_total", "shipping", "base_shipping");
+        if (shipping.signum() > 0) {
+            return shipping;
+        }
+        return decimal(order.path("shipping"), "total", "cost", "price");
     }
 
     private static BigDecimal money(JsonNode... nodes) {

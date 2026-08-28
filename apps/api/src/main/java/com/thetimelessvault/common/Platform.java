@@ -6,6 +6,7 @@ import java.util.Set;
 public enum Platform {
     SHOPIFY,
     BRICKLINK,
+    BRICKOWL,
     EBAY,
     LOCAL;
 
@@ -14,6 +15,6 @@ public enum Platform {
     }
 
     public static Set<Platform> listingChannels() {
-        return EnumSet.of(SHOPIFY, BRICKLINK, EBAY);
+        return EnumSet.of(SHOPIFY, BRICKLINK, BRICKOWL, EBAY);
     }
 }

@@ -55,6 +55,7 @@ public class InventoryController {
             @RequestParam(required = false) String ebayPrice,
             @RequestParam(required = false) String bricklinkPrice,
             @RequestParam(required = false) String shopifyPrice,
+            @RequestParam(required = false) String brickowlPrice,
             @RequestParam(required = false) String cost,
             @RequestParam(required = false) String stockStatus,
             @RequestParam(required = false) String quantity,
@@ -62,12 +63,13 @@ public class InventoryController {
             @RequestParam(required = false) String shopify,
             @RequestParam(required = false) String bricklink,
             @RequestParam(required = false) String ebay,
+            @RequestParam(required = false) String brickowl,
             @RequestParam(defaultValue = "updated") String sort,
             @RequestParam(defaultValue = "desc") String dir
     ) {
         var result = inventoryService.list(page, size, new InventorySpecifications.Query(
-                q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, cost,
-                stockStatus, quantity, condition, shopify, bricklink, ebay, sort, dir
+                q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, brickowlPrice, cost,
+                stockStatus, quantity, condition, shopify, bricklink, ebay, brickowl, sort, dir
         ));
         return new InventoryDtos.InventoryPage(
                 result.getContent().stream().map(inventoryService::toView).toList(),

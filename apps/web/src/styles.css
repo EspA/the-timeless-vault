@@ -302,8 +302,11 @@ button, .btn {
 
 .po-tracking a {
   flex: 0 0 auto;
-  font-size: 0.8rem;
   white-space: nowrap;
+}
+
+.po-tracking a {
+  font-size: 0.8rem;
 }
 
 .shopify-status {

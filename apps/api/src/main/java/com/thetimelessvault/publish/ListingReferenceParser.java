@@ -16,6 +16,7 @@ final class ListingReferenceParser {
 
     private static final Pattern EBAY_ITEM = Pattern.compile("(?:/itm/|item=|itemid=)(\\d{6,})", Pattern.CASE_INSENSITIVE);
     private static final Pattern BRICKLINK_INV = Pattern.compile("(?:invid=)(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BRICKOWL_LOT = Pattern.compile("(?:lot[_-]?id=|/lot[_-]?|/inventory/)(\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern SHOPIFY_GID = Pattern.compile("gid://shopify/Product/(\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern SHOPIFY_HANDLE = Pattern.compile("/products/([^/?#]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern DIGITS = Pattern.compile("^\\d{6,}$");
@@ -31,6 +32,7 @@ final class ListingReferenceParser {
         return switch (platform) {
             case EBAY -> ebay(value);
             case BRICKLINK -> brickLink(value);
+            case BRICKOWL -> brickOwl(value);
             case SHOPIFY -> shopify(value);
             case LOCAL -> throw ApiException.badRequest("Local listings cannot be linked");
         };
@@ -52,6 +54,15 @@ final class ListingReferenceParser {
             throw ApiException.badRequest("Could not read a BrickLink inventory id from that value");
         }
         return new ListingReference(inventoryId, null, BrickLinkPublisher.listingUrl(inventoryId));
+    }
+
+    private static ListingReference brickOwl(String value) {
+        Matcher matcher = BRICKOWL_LOT.matcher(value);
+        String lotId = matcher.find() ? matcher.group(1) : value.chars().allMatch(Character::isDigit) ? value : null;
+        if (lotId == null) {
+            throw ApiException.badRequest("Could not read a Brick Owl lot id from that value");
+        }
+        return new ListingReference(lotId, null, "https://www.brickowl.com/inventory/" + lotId);
     }
 
     private static ListingReference shopify(String value) {

@@ -91,6 +91,10 @@ app:
     token: ${BRICKLINK_TOKEN:}
     token-secret: ${BRICKLINK_TOKEN_SECRET:}
     base-url: https://api.bricklink.com/api/store/v1
+  brickowl:
+    api-key: ${BRICKOWL_API_KEY:}
+    base-url: ${BRICKOWL_BASE_URL:https://api.brickowl.com/v1}
+    user-agent: ${BRICKOWL_USER_AGENT:TheTimelessVault/1.0}
   ebay:
     client-id: ${EBAY_CLIENT_ID:}
     client-secret: ${EBAY_CLIENT_SECRET:}

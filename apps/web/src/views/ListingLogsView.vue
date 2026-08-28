@@ -190,6 +190,7 @@ onUnmounted(() => {
                   <option value="">All</option>
                   <option value="EBAY">eBay</option>
                   <option value="BRICKLINK">BrickLink</option>
+                  <option value="BRICKOWL">Brick Owl</option>
                   <option value="SHOPIFY">Shopify</option>
                 </select>
               </th>

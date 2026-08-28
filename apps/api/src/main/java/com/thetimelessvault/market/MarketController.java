@@ -115,8 +115,8 @@ public class MarketController {
         }
         try {
             Platform value = Platform.valueOf(platform.trim().toUpperCase());
-            if (value == Platform.SHOPIFY) {
-                throw ApiException.badRequest("Shopify is not a market scan platform.");
+            if (value == Platform.SHOPIFY || value == Platform.BRICKOWL) {
+                throw ApiException.badRequest("Shopify and Brick Owl are not market scan platforms.");
             }
             return value;
         } catch (IllegalArgumentException e) {

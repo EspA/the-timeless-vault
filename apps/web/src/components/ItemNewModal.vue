@@ -57,6 +57,7 @@ const form = reactive({
   shortDescription: brickLinkShortDescriptionFromHtml(defaultDescriptionHtml()),
   ebayPrice: "",
   bricklinkPrice: "",
+  brickowlPrice: "",
   shopifyPrice: "",
   quantity: 0,
   stockStatus: "IN_TRANSIT",
@@ -93,6 +94,7 @@ watch(
     const generated = channelPricesFromCost(cost);
     form.ebayPrice = generated.ebayPrice;
     form.bricklinkPrice = generated.bricklinkPrice;
+    form.brickowlPrice = generated.brickowlPrice;
     form.shopifyPrice = generated.shopifyPrice;
   }
 );
@@ -144,6 +146,7 @@ const save = async () => {
       shortDescription: form.shortDescription,
       ebayPrice: Number(form.ebayPrice),
       bricklinkPrice: Number(form.bricklinkPrice),
+      brickowlPrice: Number(form.brickowlPrice),
       shopifyPrice: Number(form.shopifyPrice),
       quantity: Number(form.quantity),
       stockStatus: form.stockStatus,
@@ -244,7 +247,7 @@ onUnmounted(() => {
           </div>
 
           <div class="card grid">
-            <div class="grid three">
+            <div class="grid four">
               <label>
                 <span class="channel-field-label"><ChannelLogo platform="EBAY" :height="16" /> price (default 45% margin)</span>
                 <input v-model="form.ebayPrice" type="number" step="0.01" required />
@@ -252,6 +255,10 @@ onUnmounted(() => {
               <label>
                 <span class="channel-field-label"><ChannelLogo platform="BRICKLINK" :height="16" /> price (default 40% margin)</span>
                 <input v-model="form.bricklinkPrice" type="number" step="0.01" required />
+              </label>
+              <label>
+                <span class="channel-field-label"><ChannelLogo platform="BRICKOWL" :height="16" /> price (default 40% margin)</span>
+                <input v-model="form.brickowlPrice" type="number" step="0.01" required />
               </label>
               <label>
                 <span class="channel-field-label"><ChannelLogo platform="SHOPIFY" :height="16" /> price (default 32% margin)</span>
