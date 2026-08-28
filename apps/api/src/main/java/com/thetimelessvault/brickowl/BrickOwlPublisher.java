@@ -28,7 +28,7 @@ public class BrickOwlPublisher implements ChannelPublisher {
     public PublishResult publish(InventoryItem item, List<String> photoUrls) {
         String boid = client.resolveSetBoid(item.getCatalogItem().getSetNumber());
         String lotId = client.createLot(item, boid);
-        client.setForSale(lotId, false);
+        client.setForSale(lotId, false, item);
         JsonNode lot = client.getLot(lotId);
         return PublishResult.brickowl(lotId, BrickOwlClient.lotUrl(lot, lotId, boid), "UNLISTED");
     }

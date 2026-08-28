@@ -6,6 +6,7 @@ type DayCounts = {
   day: string;
   ebay: number;
   bricklink: number;
+  brickowl: number;
   shopify: number;
   brickeconomy: number;
   total: number;
@@ -31,7 +32,7 @@ const formatDay = (value: string) => {
   });
 };
 
-const formatCount = (value: number) => value.toLocaleString();
+const formatCount = (value?: number) => (value ?? 0).toLocaleString();
 
 const todayLabel = computed(() => (snapshot.value ? formatDay(snapshot.value.today.day) : ""));
 
@@ -57,7 +58,7 @@ onMounted(async () => {
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Loading…</p>
     <template v-else-if="snapshot">
-      <div class="grid five stats">
+      <div class="grid six stats">
         <div class="card stat">
           <span class="stat-label">eBay</span>
           <span class="stat-value">{{ formatCount(snapshot.today.ebay) }}</span>
@@ -66,6 +67,11 @@ onMounted(async () => {
         <div class="card stat">
           <span class="stat-label">BrickLink</span>
           <span class="stat-value">{{ formatCount(snapshot.today.bricklink) }}</span>
+          <span class="muted">{{ todayLabel }}</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Brick Owl</span>
+          <span class="stat-value">{{ formatCount(snapshot.today.brickowl) }}</span>
           <span class="muted">{{ todayLabel }}</span>
         </div>
         <div class="card stat">
@@ -93,6 +99,7 @@ onMounted(async () => {
                 <th>Day</th>
                 <th>eBay</th>
                 <th>BrickLink</th>
+                <th>Brick Owl</th>
                 <th>Shopify</th>
                 <th>BrickEconomy</th>
                 <th>Total</th>
@@ -103,6 +110,7 @@ onMounted(async () => {
                 <td>{{ formatDay(row.day) }}</td>
                 <td>{{ formatCount(row.ebay) }}</td>
                 <td>{{ formatCount(row.bricklink) }}</td>
+                <td>{{ formatCount(row.brickowl) }}</td>
                 <td>{{ formatCount(row.shopify) }}</td>
                 <td>{{ formatCount(row.brickeconomy) }}</td>
                 <td>{{ formatCount(row.total) }}</td>

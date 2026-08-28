@@ -59,6 +59,7 @@ class ApiCallStatsServiceTest {
                 .thenReturn(List.of(
                         ApiCallDaily.of(today, ApiCallStatsService.EBAY, 2),
                         ApiCallDaily.of(today, ApiCallStatsService.BRICKLINK, 5),
+                        ApiCallDaily.of(today, ApiCallStatsService.BRICKOWL, 3),
                         ApiCallDaily.of(today, ApiCallStatsService.SHOPIFY, 1)
                 ));
 
@@ -68,9 +69,10 @@ class ApiCallStatsServiceTest {
         assertEquals(today, snapshot.today().day());
         assertEquals(2, snapshot.today().ebay());
         assertEquals(5, snapshot.today().bricklink());
+        assertEquals(3, snapshot.today().brickowl());
         assertEquals(1, snapshot.today().shopify());
         assertEquals(0, snapshot.today().brickeconomy());
-        assertEquals(8, snapshot.today().total());
+        assertEquals(11, snapshot.today().total());
         assertEquals(14, snapshot.recent().size());
         assertEquals(today, snapshot.recent().getFirst().day());
         assertEquals(today.minusDays(13), snapshot.recent().getLast().day());

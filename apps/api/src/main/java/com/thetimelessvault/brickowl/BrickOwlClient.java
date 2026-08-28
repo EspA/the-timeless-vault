@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.thetimelessvault.common.ApiException;
+import com.thetimelessvault.common.DescriptionHtml;
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.inventory.ChannelPrice;
@@ -31,7 +32,7 @@ import java.util.Map;
 @Component
 public class BrickOwlClient {
 
-    public static final String API_CALLS = "BRICKOWL";
+    public static final String API_CALLS = ApiCallStatsService.BRICKOWL;
     private static final Logger log = LoggerFactory.getLogger(BrickOwlClient.class);
     private static final int ORDER_PAGE_SIZE = 500;
     private static final int BULK_ORDER_CHUNK = 25;
@@ -122,6 +123,18 @@ public class BrickOwlClient {
     }
 
     public void updateLot(String lotId, InventoryItem item) {
+        post("/inventory/update", updateLotRequest(lotId, item));
+    }
+
+    public void setForSale(String lotId, boolean forSale) {
+        setForSale(lotId, forSale, null);
+    }
+
+    public void setForSale(String lotId, boolean forSale, InventoryItem item) {
+        post("/inventory/update", setForSaleRequest(lotId, forSale, item));
+    }
+
+    MultiValueMap<String, String> updateLotRequest(String lotId, InventoryItem item) {
         MultiValueMap<String, String> body = identifiedLot(lotId);
         body.add("absolute_quantity", String.valueOf(Math.max(item.getQuantity(), 0)));
         body.add("price", ChannelPrice.required(item, Platform.BRICKOWL));
@@ -129,13 +142,21 @@ public class BrickOwlClient {
         if (item.getSku() != null && !item.getSku().isBlank()) {
             body.add("update_external_id_1", item.getSku());
         }
-        post("/inventory/update", body);
+        addPublicNote(body, item);
+        return body;
     }
 
-    public void setForSale(String lotId, boolean forSale) {
+    MultiValueMap<String, String> setForSaleRequest(String lotId, boolean forSale, InventoryItem item) {
         MultiValueMap<String, String> body = identifiedLot(lotId);
         body.add("for_sale", forSale ? "1" : "0");
-        post("/inventory/update", body);
+        if (item != null) {
+            addPublicNote(body, item);
+        }
+        return body;
+    }
+
+    private static void addPublicNote(MultiValueMap<String, String> body, InventoryItem item) {
+        body.add("public_note", DescriptionHtml.forBrickLink(item == null ? null : item.getShortDescription()));
     }
 
     public void deleteLot(String lotId) {

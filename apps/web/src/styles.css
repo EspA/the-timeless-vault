@@ -785,6 +785,7 @@ textarea.short-description {
 .grid.three { grid-template-columns: repeat(3, 1fr); }
 .grid.four { grid-template-columns: repeat(4, 1fr); }
 .grid.five { grid-template-columns: repeat(5, 1fr); }
+.grid.six { grid-template-columns: repeat(6, 1fr); }
 
 .stat {
   display: flex;
@@ -2195,7 +2196,8 @@ td.negative {
   .grid.two,
   .grid.three,
   .grid.four,
-  .grid.five {
+  .grid.five,
+  .grid.six {
     grid-template-columns: 1fr;
   }
 
@@ -2208,7 +2210,8 @@ td.negative {
   }
 
   .grid.four.stats,
-  .grid.five.stats {
+  .grid.five.stats,
+  .grid.six.stats {
     grid-template-columns: 1fr 1fr;
   }
 

@@ -19,6 +19,7 @@ public class ApiCallStatsService {
 
     public static final String EBAY = "EBAY";
     public static final String BRICKLINK = "BRICKLINK";
+    public static final String BRICKOWL = "BRICKOWL";
     public static final String SHOPIFY = "SHOPIFY";
     public static final String BRICKECONOMY = "BRICKECONOMY";
     static final ZoneId ZONE = ZoneId.of("America/New_York");
@@ -50,12 +51,13 @@ public class ApiCallStatsService {
         LocalDate start = today.minusDays(13);
         Map<LocalDate, long[]> byDay = new LinkedHashMap<>();
         for (ApiCallDaily row : counts.findByDayGreaterThanEqualOrderByDayDescPlatformAsc(start)) {
-            long[] countsForDay = byDay.computeIfAbsent(row.getDay(), day -> new long[4]);
+            long[] countsForDay = byDay.computeIfAbsent(row.getDay(), day -> new long[5]);
             int index = switch (row.getPlatform()) {
                 case EBAY -> 0;
                 case BRICKLINK -> 1;
-                case SHOPIFY -> 2;
-                case BRICKECONOMY -> 3;
+                case BRICKOWL -> 2;
+                case SHOPIFY -> 3;
+                case BRICKECONOMY -> 4;
                 default -> -1;
             };
             if (index >= 0) {
@@ -76,9 +78,18 @@ public class ApiCallStatsService {
     private static DayCounts dayCounts(LocalDate day, long[] counts) {
         long ebay = counts == null ? 0 : counts[0];
         long bricklink = counts == null ? 0 : counts[1];
-        long shopify = counts == null ? 0 : counts[2];
-        long brickeconomy = counts == null ? 0 : counts[3];
-        return new DayCounts(day, ebay, bricklink, shopify, brickeconomy, ebay + bricklink + shopify + brickeconomy);
+        long brickowl = counts == null ? 0 : counts[2];
+        long shopify = counts == null ? 0 : counts[3];
+        long brickeconomy = counts == null ? 0 : counts[4];
+        return new DayCounts(
+                day,
+                ebay,
+                bricklink,
+                brickowl,
+                shopify,
+                brickeconomy,
+                ebay + bricklink + brickowl + shopify + brickeconomy
+        );
     }
 
     public record Snapshot(String timeZone, DayCounts today, List<DayCounts> recent) {
@@ -88,6 +99,7 @@ public class ApiCallStatsService {
             LocalDate day,
             long ebay,
             long bricklink,
+            long brickowl,
             long shopify,
             long brickeconomy,
             long total
