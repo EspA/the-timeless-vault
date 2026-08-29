@@ -36,9 +36,9 @@ class SetWatchScanIntervalTest {
     }
 
     @Test
-    void defaultsToFiveMinutesAndSixHours() {
+    void defaultsToSixHours() {
         SetWatch watch = new SetWatch();
-        assertEquals(5, watch.getEbayScanIntervalMinutes());
+        assertEquals(360, watch.getEbayScanIntervalMinutes());
         assertEquals(360, watch.getBricklinkScanIntervalMinutes());
     }
 

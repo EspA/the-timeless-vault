@@ -83,7 +83,7 @@ public class SetWatch {
     private int ebayFeedbackMin = 1;
 
     @Column(name = "ebay_scan_interval_minutes", nullable = false)
-    private int ebayScanIntervalMinutes = 5;
+    private int ebayScanIntervalMinutes = 360;
 
     @Column(name = "bricklink_scan_interval_minutes", nullable = false)
     private int bricklinkScanIntervalMinutes = 360;

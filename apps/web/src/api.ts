@@ -731,7 +731,7 @@ export type SetWatch = {
   updatedAt: string;
 };
 
-export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 5;
+export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 360;
 export const DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES = 360;
 
 export type Supplier = {
