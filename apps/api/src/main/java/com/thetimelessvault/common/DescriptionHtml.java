@@ -81,7 +81,7 @@ public final class DescriptionHtml {
         String boxGrade = null;
         for (Element paragraph : doc.select("p")) {
             String text = paragraph.text().replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
-            if (condition == null && text.regionMatches(true, 0, "condition:", 0, "condition:".length())) {
+            if (condition == null && isConditionParagraph(text)) {
                 condition = text;
             } else if (boxGrade == null && text.regionMatches(true, 0, "box grade:", 0, "box grade:".length())) {
                 boxGrade = text;
@@ -93,5 +93,11 @@ public final class DescriptionHtml {
         String remainder = condition.replaceFirst("(?i)^condition:\\s*new sealed in box\\s*", "").trim();
         String text = (remainder + " " + boxGrade + " Ask for more photos!").replaceAll("\\s+", " ").trim();
         return text.length() <= 255 ? text : text.substring(0, 255);
+    }
+
+    private static boolean isConditionParagraph(String text) {
+        return text.regionMatches(true, 0, "condition:", 0, "condition:".length())
+                || text.regionMatches(true, 0, "used 100% complete:", 0, "used 100% complete:".length())
+                || text.regionMatches(true, 0, "used missing parts:", 0, "used missing parts:".length());
     }
 }

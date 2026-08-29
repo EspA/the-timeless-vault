@@ -488,15 +488,119 @@ const htmlParagraphPlainTexts = (html: string) =>
 
 const BRICKLINK_PHOTO_ASK = "Ask for more photos!";
 
+export const BOX_GRADES = [
+  { score: 10, band: "Collector Grade", description: "Gift-ready or investment-grade. Sharp corners, original seal tension, the box is in mint condition." },
+  { score: 9, band: "Collector Grade", description: "Gift-ready or investment-grade. Sharp corners, original seal tension, and minimal to no shelf wear." },
+  { score: 8, band: "Excellent", description: "Minor shelf wear, small corner blunting, or a clean price sticker. Perfect for display." },
+  { score: 7, band: "Very good", description: "Minor shelf wear, small corner blunting, or a clean price sticker. Perfect for display." },
+  { score: 6, band: "Good", description: "Noticeable creasing, small punctures, or minor \"shelf-push\" (dents)." },
+  { score: 5, band: "Fair", description: "Noticeable creasing, small punctures, or minor \"shelf-push\" (dents)." },
+  { score: 4, band: "Poor/Damaged", description: "Significant crushing, heavy tape, or structural tears. Recommended for builders who don't keep the box." },
+] as const;
+
+export const DEFAULT_BOX_GRADE = 10;
+
+export type ListingCopyOptions = {
+  condition?: string;
+  boxGrade?: number;
+};
+
+const isConditionParagraph = (plain: string) =>
+  /^condition:/i.test(plain)
+  || /^used 100% complete:/i.test(plain)
+  || /^used missing parts:/i.test(plain);
+
+const isBoxGradeParagraph = (plain: string) => /^box grade:/i.test(plain);
+
+export const boxGradeFromScore = (score: number) =>
+  BOX_GRADES.find((grade) => grade.score === score) ?? BOX_GRADES[0];
+
+export const boxGradeOptionLabel = (grade: (typeof BOX_GRADES)[number]) =>
+  `${grade.score}/10 (${grade.band})`;
+
+export const conditionParagraphHtml = (condition: string) => {
+  switch (condition) {
+    case "NEW_COMPLETE":
+      return `<p><strong>Condition:</strong><span> </span><b>New Open Box (NOB)<span> </span></b>-<span> </span>All bags sealed with instructions.</p>`;
+    case "NEW_INCOMPLETE":
+      return `<p><strong>Condition:</strong><span> </span><b>New Open Box (NOB)<span> </span></b>-<span> </span>Some bags or instructions missing</p>`;
+    case "NEW_OTHER":
+      return `<p><strong>Condition:</strong><span> </span>new other</p>`;
+    case "USED_COMPLETE":
+      return `<p><strong>Used 100% Complete:</strong> Previously built. Verified against official part lists to include all bricks, minifigures, and instructions.</p>`;
+    case "USED_INCOMPLETE":
+      return `<p><strong>Used Missing Parts:</strong> Previously built. Known missing pieces will be listed in the item description.</p>`;
+    default:
+      return `<p><strong>Condition:</strong><span> </span><b>New Sealed In Box (NISB)<span> </span></b>-<span> </span>Factory seals intact. Never opened.</p>`;
+  }
+};
+
+export const boxGradeParagraphHtml = (score: number) => {
+  const grade = boxGradeFromScore(score);
+  return `<p><strong>Box Grade:</strong> ${grade.score}/10 (${grade.band}): ${grade.description}</p>`;
+};
+
+const replaceOrInsertParagraph = (
+  html: string,
+  match: (plain: string) => boolean,
+  line: string,
+  after: (plain: string) => boolean
+) => {
+  let replaced = false;
+  const next = mapParagraphs(html, (paragraph, plain) => {
+    if (replaced || !match(plain)) {
+      return paragraph;
+    }
+    replaced = true;
+    return line;
+  });
+  if (replaced) {
+    return next;
+  }
+  let inserted = false;
+  const afterMatch = mapParagraphs(html, (paragraph, plain) => {
+    if (inserted || !after(plain)) {
+      return paragraph;
+    }
+    inserted = true;
+    return `${paragraph}${line}`;
+  });
+  return inserted ? afterMatch : `${html}${line}`;
+};
+
+export const applyConditionToDescription = (html: string, condition: string) =>
+  replaceOrInsertParagraph(
+    html || "",
+    isConditionParagraph,
+    conditionParagraphHtml(condition),
+    (plain) => /^set number:/i.test(plain)
+  );
+
+export const applyBoxGradeToDescription = (html: string, score: number) =>
+  replaceOrInsertParagraph(html || "", isBoxGradeParagraph, boxGradeParagraphHtml(score), isConditionParagraph);
+
+export const inferBoxGradeFromHtml = (html: string) => {
+  const boxGrade = htmlParagraphPlainTexts(html || "").find(isBoxGradeParagraph);
+  if (!boxGrade) {
+    return DEFAULT_BOX_GRADE;
+  }
+  const match = boxGrade.match(/box grade:\s*(\d+)/i);
+  if (!match) {
+    return DEFAULT_BOX_GRADE;
+  }
+  const score = Number(match[1]);
+  return BOX_GRADES.some((grade) => grade.score === score) ? score : DEFAULT_BOX_GRADE;
+};
+
 export const brickLinkShortDescriptionFromHtml = (html: string) => {
   const paragraphs = htmlParagraphPlainTexts(html || "");
-  const condition = paragraphs.find((text) => /^condition:/i.test(text));
-  const boxGrade = paragraphs.find((text) => /^box grade:/i.test(text));
+  const condition = paragraphs.find(isConditionParagraph);
+  const boxGrade = paragraphs.find(isBoxGradeParagraph);
   if (!condition || !boxGrade) {
     return "";
   }
-  const nisb = condition.replace(/^condition:\s*new sealed in box\s*/i, "").trim();
-  const text = `${nisb} ${boxGrade} ${BRICKLINK_PHOTO_ASK}`.replace(/\s+/g, " ").trim();
+  const remainder = condition.replace(/^condition:\s*new sealed in box\s*/i, "").trim();
+  const text = `${remainder} ${boxGrade} ${BRICKLINK_PHOTO_ASK}`.replace(/\s+/g, " ").trim();
   return text.length <= 255 ? text : text.slice(0, 255);
 };
 
@@ -561,12 +665,14 @@ export const minimumOfferFromEbayPrice = (ebayPrice: string | number | null | un
   return (Math.round(cents * 0.9) / 100).toFixed(2);
 };
 
-export const defaultDescriptionHtml = (catalog?: Partial<Catalog> | null) => {
+export const defaultDescriptionHtml = (catalog?: Partial<Catalog> | null, options?: ListingCopyOptions) => {
   const facts = catalogFacts(catalog);
+  const condition = options?.condition ?? "NEW_SEALED";
+  const boxGrade = options?.boxGrade ?? DEFAULT_BOX_GRADE;
   return [
     `<p><strong>Set number:</strong> <span>${facts.setNumber}</span></p>`,
-    `<p><strong>Condition:</strong><span> </span><b>New Sealed In Box (NISB)<span> </span></b>-<span> </span>Factory seals intact. Never opened.</p>`,
-    `<p><strong>Box Grade:<span> 10<b> (Collector Grade):</b></span></strong> Gift-ready or investment-grade. Sharp corners, original seal tension, and minimal to no shelf wear.</p>`,
+    conditionParagraphHtml(condition),
+    boxGradeParagraphHtml(boxGrade),
     `<p><strong>Released: </strong>${facts.released}</p>`,
     `<p><strong>Retired:</strong> ${facts.retired}</p>`,
     `<p><strong>Pieces: </strong>${facts.pieces}</p>`,
@@ -576,9 +682,9 @@ export const defaultDescriptionHtml = (catalog?: Partial<Catalog> | null) => {
   ].join("");
 };
 
-export const applyCatalogToDescription = (html: string, catalog: Catalog) => {
+export const applyCatalogToDescription = (html: string, catalog: Catalog, options?: ListingCopyOptions) => {
   if (!html || !/Set number:/i.test(html)) {
-    return defaultDescriptionHtml(catalog);
+    return defaultDescriptionHtml(catalog, options);
   }
   const facts = catalogFacts(catalog);
   let next = html;
@@ -763,13 +869,16 @@ export const SCAN_INTERVALS = [
 ];
 
 export const CONDITIONS = [
-  "NEW_SEALED",
-  "NEW_COMPLETE",
-  "NEW_INCOMPLETE",
-  "NEW_OTHER",
-  "USED_COMPLETE",
-  "USED_INCOMPLETE",
-];
+  { value: "NEW_SEALED", label: "New Sealed" },
+  { value: "NEW_COMPLETE", label: "New Complete" },
+  { value: "NEW_INCOMPLETE", label: "New Incomplete" },
+  { value: "NEW_OTHER", label: "New Other" },
+  { value: "USED_COMPLETE", label: "Used Complete" },
+  { value: "USED_INCOMPLETE", label: "Used Incomplete" },
+] as const;
+
+export const conditionLabel = (condition?: string) =>
+  CONDITIONS.find((option) => option.value === condition)?.label ?? condition ?? "—";
 
 export const STOCK_STATUSES = [
   { value: "IN_TRANSIT", label: "In transit", shortLabel: "Transit" },

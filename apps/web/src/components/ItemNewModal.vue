@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { api, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, quantityForStockStatus, type Catalog, type InventoryItem } from "../api";
+import { api, applyBoxGradeToDescription, applyConditionToDescription, BOX_GRADES, boxGradeOptionLabel, brickLinkShortDescriptionFromHtml, channelPricesFromCost, CONDITIONS, DEFAULT_BOX_GRADE, defaultDescriptionHtml, defaultListingTitle, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, quantityForStockStatus, type Catalog, type InventoryItem } from "../api";
 import RichTextEditor from "./RichTextEditor.vue";
 import ShopifyCollectionsField from "./ShopifyCollectionsField.vue";
 import EbayStoreCategoryField from "./EbayStoreCategoryField.vue";
@@ -64,6 +64,7 @@ const form = reactive({
   cost: "",
   itemType: "SET",
   condition: "NEW_SEALED",
+  boxGrade: DEFAULT_BOX_GRADE,
   shopifyCollectionIds: [] as string[],
   ebayStoreCategory: "Other",
   minimumOffer: "",
@@ -76,6 +77,20 @@ const form = reactive({
 });
 
 let lastGeneratedShortDescription = form.shortDescription;
+
+watch(
+  () => form.condition,
+  (condition) => {
+    form.description = applyConditionToDescription(form.description, condition);
+  }
+);
+
+watch(
+  () => form.boxGrade,
+  (boxGrade) => {
+    form.description = applyBoxGradeToDescription(form.description, boxGrade);
+  }
+);
 
 watch(
   () => form.description,
@@ -119,7 +134,10 @@ const lookup = async (refresh = false) => {
     catalog.value = await api.get<Catalog>(`/api/catalog/lookup?setNumber=${encodeURIComponent(setNumber.value)}&refresh=${refresh}`);
     setNumber.value = catalog.value.setNumber;
     form.title = defaultListingTitle(catalog.value);
-    form.description = defaultDescriptionHtml(catalog.value);
+    form.description = defaultDescriptionHtml(catalog.value, {
+      condition: form.condition,
+      boxGrade: form.boxGrade,
+    });
     editorKey.value += 1;
     form.ebayStoreCategory = catalog.value.suggestedEbayStoreCategory;
     const pkg = catalog.value.bricklinkPackage?.shipping;
@@ -237,10 +255,24 @@ onUnmounted(() => {
               <input v-model="form.title" required :maxlength="LISTING_TITLE_MAX" />
               <span class="muted">{{ form.title.length }}/{{ LISTING_TITLE_MAX }}</span>
             </label>
+            <div class="grid two">
+              <label>Condition
+                <select v-model="form.condition">
+                  <option v-for="c in CONDITIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
+                </select>
+              </label>
+              <label>Box Grade
+                <select v-model.number="form.boxGrade">
+                  <option v-for="grade in BOX_GRADES" :key="grade.score" :value="grade.score">
+                    {{ boxGradeOptionLabel(grade) }}
+                  </option>
+                </select>
+              </label>
+            </div>
             <label>Description
               <RichTextEditor :key="editorKey" v-model="form.description" />
             </label>
-            <label>Short description (BrickLink)
+            <label>Short description (BrickLink, Brick Owl)
               <textarea class="short-description" v-model="form.shortDescription" maxlength="255" rows="2" />
               <span class="muted">{{ form.shortDescription.length }}/255</span>
             </label>
@@ -273,12 +305,7 @@ onUnmounted(() => {
               <label>Quantity <input v-model="form.quantity" type="number" min="0" /></label>
               <label>eBay Minimum offer (default 90% eBay price) <input v-model="form.minimumOffer" type="number" step="0.01" /></label>
             </div>
-            <div class="grid four">
-              <label>Condition
-                <select v-model="form.condition">
-                  <option v-for="c in CONDITIONS" :key="c" :value="c">{{ c }}</option>
-                </select>
-              </label>
+            <div class="grid three">
               <label>Shopify Product Type
                 <select v-model="form.itemType">
                   <option>SET</option>

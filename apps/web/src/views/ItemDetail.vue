@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, ApiError, applyCatalogToDescription, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, isListingDumpShortDescription, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, BRICKOWL_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
+import { api, ApiError, applyBoxGradeToDescription, applyCatalogToDescription, applyConditionToDescription, BOX_GRADES, boxGradeOptionLabel, brickLinkShortDescriptionFromHtml, CONDITIONS, defaultListingTitle, inferBoxGradeFromHtml, isListingDumpShortDescription, LISTING_TITLE_MAX, minimumOfferFromEbayPrice, nextVisibilityStatus, numericChannelPricesFromCost, visibilityActionLabel, visibilityStatusLabel, type Catalog, type ChannelListing, type EbayCatalogPreview, type InventoryItem, type Photo, type PublishJob, BRICKLINK_DELETE_CONFIRM, BRICKOWL_DELETE_CONFIRM, EBAY_DELETE_CONFIRM, SHOPIFY_DELETE_CONFIRM } from "../api";
 import { askAlert, askConfirm, confirmStockStatusChange } from "../confirm";
 import RichTextEditor from "../components/RichTextEditor.vue";
 import ShopifyCollectionsField from "../components/ShopifyCollectionsField.vue";
@@ -90,6 +90,14 @@ onMounted(async () => {
 onBeforeUnmount(() => clearTimeout(savedTimer));
 
 let lastGeneratedShortDescription = "";
+
+watch(
+  () => item.value?.condition,
+  (condition, previous) => {
+    if (!item.value || previous === undefined || !condition) return;
+    item.value.description = applyConditionToDescription(item.value.description || "", condition);
+  }
+);
 
 watch(
   () => item.value?.description,
@@ -740,6 +748,14 @@ const deleteEbayListing = async (listing: ChannelListing) => {
   });
 };
 
+const selectedBoxGrade = computed({
+  get: () => inferBoxGradeFromHtml(item.value?.description || ""),
+  set: (score: number) => {
+    if (!item.value) return;
+    item.value.description = applyBoxGradeToDescription(item.value.description || "", score);
+  },
+});
+
 const applyCatalogRefresh = (catalog: Catalog) => {
   if (!item.value) return;
   const previousGenerated = brickLinkShortDescriptionFromHtml(item.value.description || "");
@@ -747,7 +763,10 @@ const applyCatalogRefresh = (catalog: Catalog) => {
   if (item.value.condition === "NEW_SEALED") {
     item.value.title = defaultListingTitle(catalog);
   }
-  item.value.description = applyCatalogToDescription(item.value.description || "", catalog);
+  item.value.description = applyCatalogToDescription(item.value.description || "", catalog, {
+    condition: item.value.condition,
+    boxGrade: inferBoxGradeFromHtml(item.value.description || ""),
+  });
   editorKey.value += 1;
   const generatedShort = brickLinkShortDescriptionFromHtml(item.value.description || "");
   if (!item.value.shortDescription
@@ -844,10 +863,24 @@ const remove = async () => {
         <input v-model="item.title" :maxlength="LISTING_TITLE_MAX" />
         <span class="muted">{{ (item.title || "").length }}/{{ LISTING_TITLE_MAX }}</span>
       </label>
+      <div class="grid two">
+        <label>Condition
+          <select v-model="item.condition">
+            <option v-for="c in CONDITIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
+        </label>
+        <label>Box Grade
+          <select v-model.number="selectedBoxGrade">
+            <option v-for="grade in BOX_GRADES" :key="grade.score" :value="grade.score">
+              {{ boxGradeOptionLabel(grade) }}
+            </option>
+          </select>
+        </label>
+      </div>
       <label>Description
         <RichTextEditor :key="editorKey" v-model="item.description" />
       </label>
-      <label>Short description (BrickLink)
+      <label>Short description (BrickLink, Brick Owl)
         <textarea class="short-description" v-model="item.shortDescription" maxlength="255" rows="2" />
         <span class="muted">{{ (item.shortDescription || "").length }}/255</span>
       </label>
@@ -893,12 +926,7 @@ const remove = async () => {
         <label>Quantity <input v-model.number="item.quantity" type="number" min="0" /></label>
         <label>eBay Minimum offer (default 90% eBay price) <input v-model.number="item.minimumOffer" type="number" step="0.01" /></label>
       </div>
-      <div class="grid four">
-        <label>Condition
-          <select v-model="item.condition">
-            <option v-for="c in CONDITIONS" :key="c" :value="c">{{ c }}</option>
-          </select>
-        </label>
+      <div class="grid three">
         <label>Shopify Product Type
           <select v-model="item.itemType">
             <option>SET</option>

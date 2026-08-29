@@ -75,7 +75,8 @@ class DescriptionHtmlTest {
 
         assertTrue(shortDescription.startsWith("(NISB)"));
         assertTrue(shortDescription.contains("Factory seals intact. Never opened."));
-        assertTrue(shortDescription.contains("Box Grade: 10 (Collector Grade):"));
+        assertTrue(shortDescription.contains("Box Grade: 10/10 (Collector Grade):"));
+        assertTrue(shortDescription.contains("the box is in mint condition"));
         assertTrue(shortDescription.endsWith("Ask for more photos!"));
         assertFalse(shortDescription.contains("Set number"));
         assertFalse(shortDescription.contains("Released"));
