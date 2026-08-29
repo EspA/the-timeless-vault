@@ -39,14 +39,28 @@ const whenLabel = (value?: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
+const lines = computed(() => order.value?.lines ?? []);
+
 const title = computed(() => {
   if (!order.value) return "Order";
+  if (lines.value.length > 1) {
+    return `${lines.value.length} items`;
+  }
   return order.value.itemTitle || order.value.sku || order.value.externalOrderId || "Order";
 });
 
 const subtitle = computed(() => {
   if (!order.value) return "";
+  if (lines.value.length > 1) {
+    return order.value.externalOrderId || "";
+  }
   return [order.value.sku, order.value.setNumber].filter(Boolean).join(" · ");
+});
+
+const merchandiseTotal = computed(() => {
+  if (!order.value) return 0;
+  if (order.value.merchandiseTotal != null) return order.value.merchandiseTotal;
+  return lines.value.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0);
 });
 
 const apply = (loaded: Order) => {
@@ -185,28 +199,71 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
           <label>When
             <input :value="whenLabel(order.soldAt)" disabled />
           </label>
-          <label>Quantity
-            <input :value="order.quantity" disabled />
-          </label>
-          <label>Price
-            <input :value="money(order.unitPrice, order.currency)" disabled />
-          </label>
-        </div>
-        <div class="grid three">
           <label>Shipping
             <input :value="money(order.shippingCost ?? 0, order.currency)" disabled />
           </label>
           <label>Fee
             <input :value="money(order.platformFee ?? 0, order.currency)" disabled />
           </label>
-          <label>Inventory item
-            <p v-if="order.inventoryItemId" style="margin:0.45rem 0 0">
-              <router-link :to="`/inventory/${order.inventoryItemId}`">
-                {{ order.sku || "Open item" }}
-              </router-link>
+        </div>
+      </div>
+
+      <div class="card grid">
+        <div class="page-head" style="margin:0">
+          <h2 style="margin:0;font-size:1.05rem">Lines</h2>
+          <p class="muted" style="margin:0">Total {{ money(merchandiseTotal, order.currency) }}</p>
+        </div>
+        <div class="table-scroll desktop-only">
+          <table class="po-lines">
+            <colgroup>
+              <col class="po-col-set" />
+              <col class="po-col-title" />
+              <col class="po-col-qty" />
+              <col class="po-col-unit" />
+              <col class="po-col-sku" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Set</th>
+                <th>Title</th>
+                <th>Qty</th>
+                <th>Unit price</th>
+                <th>SKU</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in lines" :key="line.id">
+                <td>{{ line.setNumber || "—" }}</td>
+                <td>{{ line.itemTitle || "—" }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ money(line.unitPrice, order.currency) }}</td>
+                <td>
+                  <router-link v-if="line.inventoryItemId && line.sku" :to="`/inventory/${line.inventoryItemId}`">
+                    {{ line.sku }}
+                  </router-link>
+                  <span v-else>{{ line.sku || "—" }}</span>
+                  <span v-if="line.inventoryCreated" class="badge" style="margin-left:0.4rem">Added</span>
+                </td>
+              </tr>
+              <tr v-if="!lines.length">
+                <td colspan="5" class="muted">No lines on this order.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="list-cards mobile-only">
+          <article v-for="line in lines" :key="line.id" class="list-card grid">
+            <h3 style="margin:0;font-size:1rem">{{ line.itemTitle || line.sku || "Line" }}</h3>
+            <p class="muted" style="margin:0">
+              {{ [line.setNumber, `Qty ${line.quantity}`, money(line.unitPrice, order.currency)].filter(Boolean).join(" · ") }}
             </p>
-            <input v-else value="—" disabled />
-          </label>
+            <p v-if="line.sku" class="muted" style="margin:0">
+              SKU
+              <router-link v-if="line.inventoryItemId" :to="`/inventory/${line.inventoryItemId}`">{{ line.sku }}</router-link>
+              <span v-else>{{ line.sku }}</span>
+              <span v-if="line.inventoryCreated" class="badge" style="margin-left:0.4rem">Added</span>
+            </p>
+          </article>
         </div>
       </div>
 

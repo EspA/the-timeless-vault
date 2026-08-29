@@ -30,6 +30,32 @@ public class OrderController {
         this.sync = sync;
     }
 
+    public record OrderLineView(
+            UUID id,
+            UUID inventoryItemId,
+            String sku,
+            String setNumber,
+            String itemTitle,
+            int quantity,
+            BigDecimal unitPrice,
+            BigDecimal lineTotal,
+            boolean inventoryCreated
+    ) {
+        static OrderLineView from(OrderLine line) {
+            return new OrderLineView(
+                    line.getId(),
+                    line.getInventoryItemId(),
+                    line.getSku(),
+                    line.getSetNumber(),
+                    line.getItemTitle(),
+                    line.getQuantity(),
+                    line.getUnitPrice(),
+                    line.lineTotal(),
+                    line.isInventoryCreated()
+            );
+        }
+    }
+
     public record OrderView(
             UUID id,
             UUID inventoryItemId,
@@ -40,6 +66,7 @@ public class OrderController {
             String externalOrderId,
             int quantity,
             BigDecimal unitPrice,
+            BigDecimal merchandiseTotal,
             BigDecimal shippingCost,
             BigDecimal platformFee,
             String currency,
@@ -48,19 +75,23 @@ public class OrderController {
             boolean inventoryCreated,
             OrderStatus status,
             String trackingNumber,
-            String shippingProvider
+            String shippingProvider,
+            List<OrderLineView> lines
     ) {
         static OrderView from(Order order) {
+            List<OrderLineView> lines = order.getLines().stream().map(OrderLineView::from).toList();
+            OrderLine primary = order.primaryLine();
             return new OrderView(
                     order.getId(),
-                    order.getInventoryItemId(),
-                    order.getSku(),
-                    order.getSetNumber(),
-                    order.getItemTitle(),
+                    primary == null ? null : primary.getInventoryItemId(),
+                    primary == null ? null : primary.getSku(),
+                    primary == null ? null : primary.getSetNumber(),
+                    primary == null ? null : primary.getItemTitle(),
                     order.getPlatform(),
                     order.getExternalOrderId(),
-                    order.getQuantity(),
-                    order.getUnitPrice(),
+                    order.totalQuantity(),
+                    primary == null ? BigDecimal.ZERO : primary.getUnitPrice(),
+                    order.merchandiseTotal(),
                     order.getShippingCost(),
                     order.getPlatformFee(),
                     order.getCurrency(),
@@ -69,7 +100,8 @@ public class OrderController {
                     order.isInventoryCreated(),
                     order.getStatus(),
                     order.getTrackingNumber(),
-                    order.getShippingProvider()
+                    order.getShippingProvider(),
+                    lines
             );
         }
     }

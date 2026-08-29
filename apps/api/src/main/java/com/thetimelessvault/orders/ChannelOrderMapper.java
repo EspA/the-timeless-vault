@@ -5,6 +5,7 @@ import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.inbound.ShippingCarrier;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public final class ChannelOrderMapper {
                 }
                 String sku = firstText(line, "sku");
                 String title = firstText(line, "title");
+                int quantity = Math.max(1, line.path("quantity").asInt(1));
                 orders.add(new ChannelOrder(
                         Platform.EBAY,
                         orderId,
@@ -65,8 +67,8 @@ public final class ChannelOrderMapper {
                         listingId,
                         title,
                         SetNumberParser.firstNonBlank(SetNumberParser.fromSku(sku), SetNumberParser.fromTitle(title)),
-                        line.path("quantity").asInt(1),
-                        money(line.path("lineItemCost"), line.path("total")),
+                        quantity,
+                        ebayUnitPrice(line, quantity),
                         currency(line.path("lineItemCost"), line.path("total")),
                         soldAt,
                         orderUrl,
@@ -618,6 +620,14 @@ public final class ChannelOrderMapper {
             return shipping;
         }
         return decimal(order.path("shipping"), "total", "cost", "price");
+    }
+
+    private static BigDecimal ebayUnitPrice(JsonNode line, int quantity) {
+        BigDecimal lineCost = money(line.path("lineItemCost"), line.path("total"));
+        if (quantity <= 1) {
+            return lineCost;
+        }
+        return lineCost.divide(BigDecimal.valueOf(quantity), 2, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal money(JsonNode... nodes) {

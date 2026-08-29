@@ -230,7 +230,7 @@ class BuyingOpportunityServiceRecordNewListingTest {
                 "SALE:EBAY:12-345:li-1"
         );
         opportunity.setUrl("https://www.ebay.com/sh/ord/details?orderid=12-345");
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(sale));
 
         assertEquals("/orders/" + sale.getId(), service.displayUrl(opportunity));

@@ -13,6 +13,7 @@ import com.thetimelessvault.publish.ChannelListing;
 import com.thetimelessvault.inbound.PurchaseOrder;
 import com.thetimelessvault.inbound.PurchaseOrderLine;
 import com.thetimelessvault.orders.Order;
+import com.thetimelessvault.orders.OrderLine;
 import com.thetimelessvault.orders.OrderRepository;
 import com.thetimelessvault.settings.NotificationMailer;
 import com.thetimelessvault.storage.ObjectStorage;
@@ -181,13 +182,19 @@ public class BuyingOpportunityService {
         if (order == null || item == null) {
             return;
         }
-        String dedupe = "SALE:" + order.getPlatform() + ":" + order.getExternalOrderId() + ":" + order.getExternalLineId();
+        OrderLine line = order.lineFor(item);
+        String lineId = line == null ? order.getExternalLineId() : line.getExternalLineId();
+        String dedupe = "SALE:" + order.getPlatform() + ":" + order.getExternalOrderId() + ":" + lineId;
         if (opportunities.findByDedupeKey(dedupe).isPresent()) {
             return;
         }
         CatalogItem catalog = item.getCatalogItem();
-        String setNumber = catalog == null ? order.getSetNumber() : catalog.getSetNumber();
-        String setName = catalog == null ? order.getItemTitle() : catalog.getName();
+        String setNumber = catalog == null
+                ? (line == null ? order.getSetNumber() : line.getSetNumber())
+                : catalog.getSetNumber();
+        String setName = catalog == null
+                ? (line == null ? order.getItemTitle() : line.getItemTitle())
+                : catalog.getName();
         String heading = ((setNumber == null ? "" : setNumber) + " " + (setName == null ? "" : setName)).trim();
         String channel = order.getPlatform() == null
                 ? "channel"
@@ -204,13 +211,16 @@ public class BuyingOpportunityService {
         } else if (item.getId() != null) {
             opportunity.setUrl("/inventory/" + item.getId());
         }
-        String qty = order.getQuantity() <= 0 ? "1" : String.valueOf(order.getQuantity());
-        opportunity.setBody(qty + " × " + NotificationEmailRenderer.money(order.getUnitPrice())
-                + (order.getSku() == null || order.getSku().isBlank() ? "" : " · " + order.getSku())
+        int quantity = line == null ? order.getQuantity() : line.getQuantity();
+        BigDecimal unitPrice = line == null ? order.getUnitPrice() : line.getUnitPrice();
+        String sku = line == null ? order.getSku() : line.getSku();
+        String qty = quantity <= 0 ? "1" : String.valueOf(quantity);
+        opportunity.setBody(qty + " × " + NotificationEmailRenderer.money(unitPrice)
+                + (sku == null || sku.isBlank() ? "" : " · " + sku)
                 + (order.getExternalOrderId() == null || order.getExternalOrderId().isBlank()
                 ? "" : " · order " + order.getExternalOrderId()));
         opportunities.save(opportunity);
-        email(opportunity, order.getUnitPrice(), null, inventoryPhoto(item), item, order.getSoldAt(), null, null);
+        email(opportunity, unitPrice, null, inventoryPhoto(item), item, order.getSoldAt(), null, null);
     }
 
     @Transactional
@@ -223,9 +233,12 @@ public class BuyingOpportunityService {
             return;
         }
         CatalogItem catalog = item == null ? null : item.getCatalogItem();
+        int lineCount = order.getLines() == null ? 0 : order.getLines().size();
         String setNumber = catalog == null ? order.getSetNumber() : catalog.getSetNumber();
         String setName = catalog == null ? order.getItemTitle() : catalog.getName();
-        String heading = ((setNumber == null ? "" : setNumber) + " " + (setName == null ? "" : setName)).trim();
+        String heading = lineCount > 1
+                ? lineCount + " items"
+                : ((setNumber == null ? "" : setNumber) + " " + (setName == null ? "" : setName)).trim();
         String channel = order.getPlatform() == null
                 ? "channel"
                 : NotificationEmailRenderer.platformLabel(order.getPlatform().name());
@@ -239,8 +252,12 @@ public class BuyingOpportunityService {
         opportunity.setUrl("/orders/" + order.getId());
         String qty = order.getQuantity() <= 0 ? "1" : String.valueOf(order.getQuantity());
         StringBuilder body = new StringBuilder();
-        body.append(qty).append(" × ").append(NotificationEmailRenderer.money(order.getUnitPrice()));
-        if (order.getSku() != null && !order.getSku().isBlank()) {
+        if (lineCount > 1) {
+            body.append(lineCount).append(" lines · ").append(NotificationEmailRenderer.money(order.merchandiseTotal()));
+        } else {
+            body.append(qty).append(" × ").append(NotificationEmailRenderer.money(order.getUnitPrice()));
+        }
+        if (order.getSku() != null && !order.getSku().isBlank() && lineCount <= 1) {
             body.append(" · ").append(order.getSku());
         }
         if (order.getExternalOrderId() != null && !order.getExternalOrderId().isBlank()) {
@@ -526,7 +543,7 @@ public class BuyingOpportunityService {
         }
         try {
             Platform platform = Platform.valueOf(parts[1]);
-            return orders.findByPlatformAndExternalOrderIdAndExternalLineId(platform, parts[2], parts[3])
+            return orders.findByPlatformAndExternalOrderId(platform, parts[2])
                     .map(order -> "/orders/" + order.getId())
                     .orElse(null);
         } catch (IllegalArgumentException e) {

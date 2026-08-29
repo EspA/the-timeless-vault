@@ -166,6 +166,18 @@ export type ChannelListing = {
 
 export type OrderStatus = "OPEN" | "SHIPPED" | "COMPLETED" | "CANCELLED";
 
+export type OrderLine = {
+  id: string;
+  inventoryItemId?: string;
+  sku?: string;
+  setNumber?: string;
+  itemTitle?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  inventoryCreated: boolean;
+};
+
 export type Order = {
   id: string;
   inventoryItemId?: string;
@@ -176,6 +188,7 @@ export type Order = {
   externalOrderId: string;
   quantity: number;
   unitPrice: number;
+  merchandiseTotal?: number;
   shippingCost?: number;
   platformFee?: number;
   currency: string;
@@ -185,6 +198,7 @@ export type Order = {
   status: OrderStatus;
   trackingNumber?: string;
   shippingProvider?: string;
+  lines?: OrderLine[];
 };
 
 export type OrdersPage = {

@@ -75,6 +75,58 @@ class ChannelOrderMapperTest {
     }
 
     @Test
+    void mapsEbayOrdersWithMultipleLineItemsAndUnitPrice() throws Exception {
+        var root = mapper.readTree("""
+                {
+                  "orders": [
+                    {
+                      "orderId": "12-multi",
+                      "creationDate": "2026-08-20T12:00:00.000Z",
+                      "orderPaymentStatus": "PAID",
+                      "orderFulfillmentStatus": "NOT_STARTED",
+                      "cancelStatus": { "cancelState": "NONE_REQUESTED" },
+                      "lineItems": [
+                        {
+                          "lineItemId": "li-1",
+                          "sku": "TTV-75192-1-AAAA",
+                          "legacyItemId": "333",
+                          "title": "LEGO 75192 Millennium Falcon",
+                          "quantity": 1,
+                          "lineItemCost": { "value": "899.99", "currency": "USD" }
+                        },
+                        {
+                          "lineItemId": "li-2",
+                          "sku": "TTV-10236-1-BBBB",
+                          "legacyItemId": "444",
+                          "title": "LEGO 10236 Eiffel Tower",
+                          "quantity": 2,
+                          "lineItemCost": { "value": "100.00", "currency": "USD" }
+                        }
+                      ],
+                      "pricingSummary": { "deliveryCost": { "value": "12.50", "currency": "USD" } },
+                      "totalMarketplaceFee": { "value": "35.99", "currency": "USD" }
+                    }
+                  ]
+                }
+                """);
+
+        List<ChannelOrder> orders = ChannelOrderMapper.fromEbayOrders(root);
+
+        assertEquals(2, orders.size());
+        assertEquals("12-multi", orders.get(0).orderId());
+        assertEquals("12-multi", orders.get(1).orderId());
+        assertEquals("li-1", orders.get(0).lineId());
+        assertEquals("li-2", orders.get(1).lineId());
+        assertEquals(new BigDecimal("899.99"), orders.get(0).unitPrice());
+        assertEquals(2, orders.get(1).quantity());
+        assertEquals(new BigDecimal("50.00"), orders.get(1).unitPrice());
+        assertEquals(new BigDecimal("12.50"), orders.get(0).shippingCost());
+        assertEquals(new BigDecimal("35.99"), orders.get(0).platformFee());
+        assertEquals(BigDecimal.ZERO, orders.get(1).shippingCost());
+        assertEquals(BigDecimal.ZERO, orders.get(1).platformFee());
+    }
+
+    @Test
     void mapsFulfilledEbayOrderToShipped() throws Exception {
         var root = mapper.readTree("""
                 {
@@ -156,6 +208,44 @@ class ChannelOrderMapperTest {
         assertEquals(new BigDecimal("15.00"), mapped.shippingCost());
         assertEquals(BigDecimal.ZERO, mapped.platformFee());
         assertEquals(OrderStatus.OPEN, mapped.status());
+    }
+
+    @Test
+    void mapsBrickLinkOrdersWithMultipleItems() throws Exception {
+        var order = mapper.readTree("""
+                { "order_id": 88, "date_ordered": "2026-08-19T15:00:00.000Z", "status": "PAID",
+                  "cost": { "shipping": "15.00", "subtotal": "870.00" } }
+                """);
+        var items = mapper.readTree("""
+                [[
+                  {
+                    "inventory_id": 555,
+                    "quantity": 1,
+                    "remarks": "TTV-75192-1-AAAA",
+                    "unit_price": "820.00",
+                    "currency_code": "USD",
+                    "item": { "no": "75192-1", "name": "Millennium Falcon" }
+                  },
+                  {
+                    "inventory_id": 556,
+                    "quantity": 1,
+                    "remarks": "TTV-10236-1-BBBB",
+                    "unit_price": "50.00",
+                    "currency_code": "USD",
+                    "item": { "no": "10236-1", "name": "Eiffel Tower" }
+                  }
+                ]]
+                """);
+
+        List<ChannelOrder> orders = ChannelOrderMapper.fromBrickLinkOrder(order, items);
+
+        assertEquals(2, orders.size());
+        assertEquals("88", orders.get(0).orderId());
+        assertEquals("88", orders.get(1).orderId());
+        assertEquals("TTV-75192-1-AAAA", orders.get(0).sku());
+        assertEquals("TTV-10236-1-BBBB", orders.get(1).sku());
+        assertEquals(new BigDecimal("15.00"), orders.get(0).shippingCost());
+        assertEquals(BigDecimal.ZERO, orders.get(1).shippingCost());
     }
 
     @Test
@@ -262,6 +352,55 @@ class ChannelOrderMapperTest {
         assertEquals(OrderStatus.COMPLETED, orders.get(2).status());
         assertEquals("1Z123", orders.get(2).trackingNumber());
         assertEquals("UPS", orders.get(2).shippingProvider());
+    }
+
+    @Test
+    void mapsShopifyOrdersWithMultipleLineItems() throws Exception {
+        var connection = mapper.readTree("""
+                {
+                  "nodes": [
+                    {
+                      "id": "gid://shopify/Order/1001",
+                      "name": "#1001",
+                      "processedAt": "2026-08-18T10:00:00Z",
+                      "cancelledAt": null,
+                      "displayFinancialStatus": "PAID",
+                      "displayFulfillmentStatus": "UNFULFILLED",
+                      "totalShippingPriceSet": { "shopMoney": { "amount": "8.00", "currencyCode": "USD" } },
+                      "lineItems": {
+                        "nodes": [
+                          {
+                            "id": "gid://shopify/LineItem/9",
+                            "sku": "TTV-75192-1-AAAA",
+                            "title": "LEGO 75192 Millennium Falcon",
+                            "quantity": 1,
+                            "originalUnitPriceSet": { "shopMoney": { "amount": "910.00", "currencyCode": "USD" } },
+                            "product": { "id": "gid://shopify/Product/77" }
+                          },
+                          {
+                            "id": "gid://shopify/LineItem/10",
+                            "sku": "TTV-10236-1-BBBB",
+                            "title": "LEGO 10236 Eiffel Tower",
+                            "quantity": 1,
+                            "originalUnitPriceSet": { "shopMoney": { "amount": "50.00", "currencyCode": "USD" } },
+                            "product": { "id": "gid://shopify/Product/78" }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        List<ChannelOrder> orders = ChannelOrderMapper.fromShopifyOrders(connection, "thetimelessvault.myshopify.com");
+
+        assertEquals(2, orders.size());
+        assertEquals("gid://shopify/Order/1001", orders.get(0).orderId());
+        assertEquals("gid://shopify/Order/1001", orders.get(1).orderId());
+        assertEquals("gid://shopify/LineItem/9", orders.get(0).lineId());
+        assertEquals("gid://shopify/LineItem/10", orders.get(1).lineId());
+        assertEquals(new BigDecimal("8.00"), orders.get(0).shippingCost());
+        assertEquals(BigDecimal.ZERO, orders.get(1).shippingCost());
     }
 
     @Test

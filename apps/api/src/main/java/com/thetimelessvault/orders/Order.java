@@ -2,15 +2,21 @@ package com.thetimelessvault.orders;
 
 import com.thetimelessvault.common.Platform;
 import com.thetimelessvault.inventory.InventoryItem;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -20,32 +26,12 @@ public class Order {
     @Id
     private UUID id;
 
-    @Column(name = "inventory_item_id")
-    private UUID inventoryItemId;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Platform platform;
 
     @Column(name = "external_order_id", nullable = false)
     private String externalOrderId;
-
-    @Column(name = "external_line_id", nullable = false)
-    private String externalLineId;
-
-    private String sku;
-
-    @Column(name = "set_number")
-    private String setNumber;
-
-    @Column(name = "item_title")
-    private String itemTitle;
-
-    @Column(nullable = false)
-    private int quantity;
-
-    @Column(name = "unit_price", nullable = false)
-    private BigDecimal unitPrice;
 
     @Column(name = "shipping_cost", nullable = false)
     private BigDecimal shippingCost = BigDecimal.ZERO;
@@ -61,9 +47,6 @@ public class Order {
 
     @Column(name = "order_url")
     private String orderUrl;
-
-    @Column(name = "inventory_created", nullable = false)
-    private boolean inventoryCreated;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -85,26 +68,26 @@ public class Order {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("createdAt ASC")
+    private List<OrderLine> lines = new ArrayList<>();
+
     public static Order create(InventoryItem item, ChannelOrder incoming, boolean inventoryCreated) {
+        Order order = header(incoming);
+        order.addLine(OrderLine.create(item, incoming, inventoryCreated));
+        return order;
+    }
+
+    static Order header(ChannelOrder incoming) {
         Order order = new Order();
         order.id = UUID.randomUUID();
-        order.inventoryItemId = item == null ? null : item.getId();
         order.platform = incoming.platform();
         order.externalOrderId = incoming.orderId();
-        order.externalLineId = incoming.identityLineId();
-        order.sku = item == null || item.getSku() == null ? incoming.sku() : item.getSku();
-        order.setNumber = item == null || item.getCatalogItem() == null
-                ? incoming.setNumber()
-                : item.getCatalogItem().getSetNumber();
-        order.itemTitle = item == null || item.getTitle() == null ? incoming.title() : item.getTitle();
-        order.quantity = incoming.quantity();
-        order.unitPrice = incoming.unitPrice();
         order.shippingCost = incoming.shippingCost();
         order.platformFee = incoming.platformFee();
         order.currency = incoming.currency();
         order.soldAt = incoming.soldAt();
         order.orderUrl = incoming.orderUrl();
-        order.inventoryCreated = inventoryCreated;
         order.status = incoming.status() == null ? OrderStatus.OPEN : incoming.status();
         order.statusSource = OrderStatusSource.CHANNEL;
         order.trackingNumber = incoming.trackingNumber();
@@ -115,12 +98,59 @@ public class Order {
         return order;
     }
 
+    public void addLine(OrderLine line) {
+        line.setOrder(this);
+        lines.add(line);
+    }
+
+    public OrderLine findLine(String externalLineId) {
+        String identity = externalLineId == null || externalLineId.isBlank() ? "0" : externalLineId;
+        return lines.stream()
+                .filter(line -> identity.equals(line.getExternalLineId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public boolean hasLine(String externalLineId) {
+        return findLine(externalLineId) != null;
+    }
+
+    public OrderLine primaryLine() {
+        return lines.isEmpty() ? null : lines.getFirst();
+    }
+
+    public OrderLine lineFor(InventoryItem item) {
+        if (item != null && item.getId() != null) {
+            for (OrderLine line : lines) {
+                if (item.getId().equals(line.getInventoryItemId())) {
+                    return line;
+                }
+            }
+        }
+        return primaryLine();
+    }
+
+    public int totalQuantity() {
+        return lines.stream().mapToInt(OrderLine::getQuantity).sum();
+    }
+
+    public BigDecimal merchandiseTotal() {
+        return lines.stream()
+                .map(OrderLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     public OrderStatus applyChannelUpdate(ChannelOrder incoming) {
         OrderStatus previous = status;
         if (incoming == null) {
             return previous;
         }
-        this.shippingCost = incoming.shippingCost();
+        if (incoming.shippingCost() != null && incoming.shippingCost().signum() > 0) {
+            this.shippingCost = incoming.shippingCost();
+        }
+        if (incoming.platformFee() != null && incoming.platformFee().signum() > 0) {
+            this.platformFee = incoming.platformFee();
+        }
         if (incoming.trackingNumber() != null) {
             this.trackingNumber = incoming.trackingNumber();
         }
@@ -189,12 +219,17 @@ public class Order {
         this.statusSource = OrderStatusSource.MIGRATION;
     }
 
+    public void setPlatformFee(BigDecimal platformFee) {
+        this.platformFee = platformFee == null ? BigDecimal.ZERO : platformFee;
+    }
+
     public UUID getId() {
         return id;
     }
 
     public UUID getInventoryItemId() {
-        return inventoryItemId;
+        OrderLine line = primaryLine();
+        return line == null ? null : line.getInventoryItemId();
     }
 
     public Platform getPlatform() {
@@ -206,27 +241,32 @@ public class Order {
     }
 
     public String getExternalLineId() {
-        return externalLineId;
+        OrderLine line = primaryLine();
+        return line == null ? null : line.getExternalLineId();
     }
 
     public String getSku() {
-        return sku;
+        OrderLine line = primaryLine();
+        return line == null ? null : line.getSku();
     }
 
     public String getSetNumber() {
-        return setNumber;
+        OrderLine line = primaryLine();
+        return line == null ? null : line.getSetNumber();
     }
 
     public String getItemTitle() {
-        return itemTitle;
+        OrderLine line = primaryLine();
+        return line == null ? null : line.getItemTitle();
     }
 
     public int getQuantity() {
-        return quantity;
+        return totalQuantity();
     }
 
     public BigDecimal getUnitPrice() {
-        return unitPrice;
+        OrderLine line = primaryLine();
+        return line == null ? BigDecimal.ZERO : line.getUnitPrice();
     }
 
     public BigDecimal getShippingCost() {
@@ -250,7 +290,7 @@ public class Order {
     }
 
     public boolean isInventoryCreated() {
-        return inventoryCreated;
+        return lines.stream().anyMatch(OrderLine::isInventoryCreated);
     }
 
     public OrderStatus getStatus() {
@@ -275,5 +315,9 @@ public class Order {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public List<OrderLine> getLines() {
+        return lines;
     }
 }

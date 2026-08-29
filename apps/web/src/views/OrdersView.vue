@@ -50,10 +50,19 @@ const whenLabel = (value: string) => {
 };
 
 const itemLabel = (row: Order) => {
-  const set = [row.setNumber, row.itemTitle].filter(Boolean).join(" ");
-  if (row.sku && set) return `${row.sku} · ${set}`;
-  return row.sku || set || "—";
+  const first = row.lines?.[0];
+  const sku = first?.sku ?? row.sku;
+  const set = [first?.setNumber ?? row.setNumber, first?.itemTitle ?? row.itemTitle].filter(Boolean).join(" ");
+  const extra = (row.lines?.length ?? 0) > 1 ? ` +${row.lines!.length - 1} more` : "";
+  if (sku && set) return `${sku} · ${set}${extra}`;
+  return `${sku || set || "—"}${extra}`;
 };
+
+const lineHaystack = (row: Order) =>
+  (row.lines ?? []).map((line) => [line.sku, line.setNumber, line.itemTitle].filter(Boolean).join(" ")).join(" ");
+
+const priceAmount = (row: Order) =>
+  row.merchandiseTotal != null ? row.merchandiseTotal : row.unitPrice;
 
 const orderLabel = (row: Order) => row.externalOrderId || "—";
 
@@ -67,9 +76,9 @@ const visible = computed(() =>
   items.value.filter((row) =>
     contains(whenLabel(row.soldAt), filters.value.when)
     && (!filters.value.platform || row.platform === filters.value.platform)
-    && contains(itemLabel(row), filters.value.item)
+    && (contains(itemLabel(row), filters.value.item) || contains(lineHaystack(row), filters.value.item))
     && contains(row.quantity, filters.value.qty)
-    && contains(money(row.unitPrice, row.currency), filters.value.price)
+    && contains(money(priceAmount(row), row.currency), filters.value.price)
     && contains(money(row.shippingCost ?? 0, row.currency), filters.value.shipping)
     && contains(money(row.platformFee ?? 0, row.currency), filters.value.fee)
     && contains(orderLabel(row), filters.value.order)
@@ -321,7 +330,7 @@ onUnmounted(() => {
                 />
               </td>
               <td>{{ row.quantity }}</td>
-              <td>{{ money(row.unitPrice, row.currency) }}</td>
+              <td>{{ money(priceAmount(row), row.currency) }}</td>
               <td>{{ money(row.shippingCost ?? 0, row.currency) }}</td>
               <td>{{ money(row.platformFee ?? 0, row.currency) }}</td>
               <td>
@@ -360,7 +369,7 @@ onUnmounted(() => {
             <router-link :to="`/orders/${row.id}`">{{ itemLabel(row) }}</router-link>
           </h3>
           <div class="list-card-meta muted">
-            Qty {{ row.quantity }} · {{ money(row.unitPrice, row.currency) }}
+            Qty {{ row.quantity }} · {{ money(priceAmount(row), row.currency) }}
             · Ship {{ money(row.shippingCost ?? 0, row.currency) }}
             · Fee {{ money(row.platformFee ?? 0, row.currency) }}
           </div>

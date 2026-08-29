@@ -58,14 +58,14 @@ class OrderServiceTest {
         catalog.setName("Millennium Falcon");
         existing = InventoryItem.create(catalog, "TTV-75192-1-AAAA");
         existing.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
-        lenient().when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(any(), any(), any()))
+        lenient().when(orders.findByPlatformAndExternalOrderId(any(), any()))
                 .thenReturn(Optional.empty());
     }
 
     @Test
     void matchesExistingSkuAndMarksItemSold() {
         ChannelOrder incoming = order("TTV-75192-1-AAAA", null, OrderStatus.OPEN);
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -89,7 +89,7 @@ class OrderServiceTest {
     @Test
     void firstCancelledImportDoesNotMarkItemSold() {
         ChannelOrder incoming = order("TTV-75192-1-AAAA", null, OrderStatus.CANCELLED);
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -109,7 +109,7 @@ class OrderServiceTest {
     void laterCancelledImportRestoresStock() {
         existing.applyStockAndQuantity(StockStatus.SOLD, 0);
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
@@ -127,7 +127,7 @@ class OrderServiceTest {
     @Test
     void duplicateSyncMovesStatusForwardAndKeepsTracking() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -145,7 +145,7 @@ class OrderServiceTest {
     void laterChannelSyncKeepsProviderWhenChannelOmitsIt() {
         Order existingOrder = Order.create(
                 existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED, "9400111", "USPS"), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -156,7 +156,7 @@ class OrderServiceTest {
     @Test
     void channelDeliveredStatusCreatesNotification() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
@@ -185,7 +185,7 @@ class OrderServiceTest {
     void alreadyDeliveredSyncDoesNotNotifyAgain() {
         Order existingOrder = Order.create(
                 existing, order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS"), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -211,7 +211,7 @@ class OrderServiceTest {
     void migratedCompletedTakesChannelOpenStatus() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
         existingOrder.markMigrated(OrderStatus.COMPLETED);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -224,7 +224,7 @@ class OrderServiceTest {
     void migratedCompletedTakesChannelShippedAndTracking() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
         existingOrder.markMigrated(OrderStatus.COMPLETED);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -238,7 +238,7 @@ class OrderServiceTest {
     void syncDoesNotMoveStatusBackward() {
         Order existingOrder = Order.create(
                 existing, order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS"), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -269,7 +269,7 @@ class OrderServiceTest {
         ChannelListing listing = ChannelListing.create(existing, Platform.EBAY);
         listing.markPublished("offer-1", "https://www.ebay.com/itm/333", new BigDecimal("899.99"));
         ChannelOrder incoming = order(null, "333", OrderStatus.OPEN);
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(false);
         when(listings.findByPlatformAndExternalId(Platform.EBAY, "333")).thenReturn(Optional.empty());
         when(listings.findByPlatformAndLiveUrl(eq(Platform.EBAY), eq("https://www.ebay.com/itm/333")))
@@ -289,7 +289,7 @@ class OrderServiceTest {
     @Test
     void createsSoldItemWhenMissingFromStock() {
         ChannelOrder incoming = order("TTV-75192-1-ZZZZ", null, OrderStatus.OPEN);
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-ZZZZ")).thenReturn(Optional.empty());
         when(catalogService.lookupOrStub("75192-1", incoming.title())).thenReturn(catalog);
@@ -310,9 +310,48 @@ class OrderServiceTest {
     }
 
     @Test
+    void importsSecondChannelLineOntoExistingOrder() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
+        InventoryItem second = InventoryItem.create(CatalogItem.create("10236-1"), "TTV-10236-1-BBBB");
+        second.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+                .thenReturn(Optional.of(existingOrder));
+        when(items.findWithCatalogBySkuIgnoreCase("TTV-10236-1-BBBB")).thenReturn(Optional.of(second));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ChannelOrder secondLine = new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-2",
+                "TTV-10236-1-BBBB",
+                null,
+                "Eiffel Tower",
+                "10236-1",
+                1,
+                new BigDecimal("50.00"),
+                "USD",
+                Instant.parse("2026-08-20T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
+        );
+
+        assertTrue(service.importOrder(secondLine));
+        assertEquals(2, existingOrder.getLines().size());
+        assertEquals("li-2", existingOrder.getLines().get(1).getExternalLineId());
+        assertEquals(StockStatus.SOLD, second.getStockStatus());
+        verify(publishService).deactivatePublishedListingsAfterSale(second.getId(), Platform.EBAY);
+        verify(opportunities).recordNewSale(existingOrder, second);
+    }
+
+    @Test
     void skipsDuplicateChannelOrderLines() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -324,7 +363,7 @@ class OrderServiceTest {
 
     @Test
     void addManualCreatesOrderAndMatchesExistingSku() {
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.BRICKLINK, "BL-99", "manual"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.BRICKLINK, "BL-99"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -361,7 +400,7 @@ class OrderServiceTest {
 
     @Test
     void addManualAcceptsLocalChannel() {
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.LOCAL, "walk-in", "manual"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.LOCAL, "walk-in"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -393,7 +432,7 @@ class OrderServiceTest {
 
     @Test
     void addManualDefaultsToLocalAndStoresOptionalFulfillment() {
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(eq(Platform.LOCAL), any(), eq("manual")))
+        when(orders.existsByPlatformAndExternalOrderId(eq(Platform.LOCAL), any()))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -428,7 +467,7 @@ class OrderServiceTest {
 
     @Test
     void addManualDefaultsShippingProviderToUpsWhenOmitted() {
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(eq(Platform.LOCAL), any(), eq("manual")))
+        when(orders.existsByPlatformAndExternalOrderId(eq(Platform.LOCAL), any()))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -472,8 +511,7 @@ class OrderServiceTest {
         ChannelOrder incoming = order("TTV-75192-1-AAAA", null, OrderStatus.OPEN);
         Order existingOrder = Order.create(existing, incoming, false);
         when(orders.findById(existingOrder.getId())).thenReturn(Optional.of(existingOrder));
-        when(ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(
-                Platform.EBAY, "12-345", "li-1")).thenReturn(false);
+        when(ignores.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345")).thenReturn(false);
 
         service.delete(existingOrder.getId());
 
@@ -483,8 +521,7 @@ class OrderServiceTest {
 
     @Test
     void importOrderSkipsIgnoredChannelOrders() {
-        when(ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(
-                Platform.EBAY, "12-345", "li-1")).thenReturn(true);
+        when(ignores.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345")).thenReturn(true);
 
         assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.OPEN)));
         verify(orders, never()).save(any());
@@ -532,7 +569,7 @@ class OrderServiceTest {
                 Instant.parse("2026-08-20T12:00:00Z"), null, BigDecimal.ZERO, BigDecimal.ZERO,
                 OrderStatus.OPEN, null, "Request for Invoice");
         Order existingOrder = Order.create(existing, previous, false);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.BRICKLINK, "88", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.BRICKLINK, "88"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -554,7 +591,7 @@ class OrderServiceTest {
                 OrderStatus.OPEN, null, "Request for Invoice");
         Order existingOrder = Order.create(existing, previous, false);
         existingOrder.markMigrated(OrderStatus.OPEN);
-        when(orders.findByPlatformAndExternalOrderIdAndExternalLineId(Platform.BRICKLINK, "88", "li-1"))
+        when(orders.findByPlatformAndExternalOrderId(Platform.BRICKLINK, "88"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -571,7 +608,7 @@ class OrderServiceTest {
     @Test
     void firstCancelledWithoutInventoryLeavesItemNull() {
         ChannelOrder incoming = order("TTV-UNKNOWN", null, OrderStatus.CANCELLED);
-        when(orders.existsByPlatformAndExternalOrderIdAndExternalLineId(Platform.EBAY, "12-345", "li-1"))
+        when(orders.existsByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
                 .thenReturn(false);
         when(items.findWithCatalogBySkuIgnoreCase("TTV-UNKNOWN")).thenReturn(Optional.empty());
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

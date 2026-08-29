@@ -70,12 +70,14 @@ public class OrderService {
         this.feeRates = feeRates;
     }
 
+    @Transactional(readOnly = true)
     public Page<Order> list(int page, int size) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
         return orders.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
     }
 
+    @Transactional(readOnly = true)
     public Order get(UUID id) {
         return orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
     }
@@ -91,17 +93,20 @@ public class OrderService {
         if (incoming == null || incoming.orderId() == null) {
             return false;
         }
-        if (ignored(incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
+        if (ignored(incoming.platform(), incoming.orderId())) {
             return false;
         }
-        Optional<Order> existing = orders.findByPlatformAndExternalOrderIdAndExternalLineId(
-                incoming.platform(), incoming.orderId(), incoming.identityLineId());
+        Optional<Order> existing = orders.findByPlatformAndExternalOrderId(incoming.platform(), incoming.orderId());
         if (existing.isPresent()) {
             Order order = existing.get();
             OrderStatus previous = order.applyChannelUpdate(incoming);
+            boolean added = attachLine(order, incoming);
+            if (added) {
+                refreshCalculatedFee(order);
+            }
             orders.save(order);
             afterStatusChange(order, previous);
-            return false;
+            return added;
         }
         try {
             add(incoming);
@@ -171,7 +176,7 @@ public class OrderService {
     @Transactional
     public void delete(UUID id) {
         Order order = orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
-        ignore(order.getPlatform(), order.getExternalOrderId(), order.getExternalLineId());
+        ignore(order.getPlatform(), order.getExternalOrderId());
         orders.delete(order);
     }
 
@@ -180,30 +185,25 @@ public class OrderService {
         if (incoming == null || incoming.orderId() == null) {
             throw ApiException.badRequest("Order is required");
         }
-        if (orders.existsByPlatformAndExternalOrderIdAndExternalLineId(
-                incoming.platform(), incoming.orderId(), incoming.identityLineId())) {
+        Optional<Order> existing = orders.findByPlatformAndExternalOrderId(incoming.platform(), incoming.orderId());
+        if (existing.isPresent()) {
+            Order order = existing.get();
+            if (order.hasLine(incoming.identityLineId())) {
+                throw ApiException.conflict("An order for that channel already exists");
+            }
+            attachLine(order, incoming);
+            refreshCalculatedFee(order);
+            return orders.save(order);
+        }
+        if (orders.existsByPlatformAndExternalOrderId(incoming.platform(), incoming.orderId())) {
             throw ApiException.conflict("An order for that channel already exists");
         }
-        clearIgnore(incoming.platform(), incoming.orderId(), incoming.identityLineId());
-        boolean cancelled = incoming.status() == OrderStatus.CANCELLED;
-        InventoryItem item = resolveItem(incoming);
-        boolean created = false;
-        if (item == null && !cancelled) {
-            CreatedItem createdItem = createSoldItem(incoming);
-            item = createdItem.item();
-            created = createdItem.created();
-        }
-        ChannelOrder recorded = withRecordedFee(incoming);
+        clearIgnore(incoming.platform(), incoming.orderId());
         try {
-            Order saved = orders.save(Order.create(item, recorded, created));
-            if (!cancelled && !created && item != null) {
-                deactivateListings(item, incoming.platform());
-                markSold(item);
-            }
-            if (!cancelled) {
-                opportunities.recordNewSale(saved, item);
-            }
-            return saved;
+            Order order = Order.header(incoming);
+            attachLine(order, incoming);
+            refreshCalculatedFee(order);
+            return orders.save(order);
         } catch (DataIntegrityViolationException e) {
             throw ApiException.conflict("An order for that channel already exists");
         }
@@ -235,6 +235,42 @@ public class OrderService {
     ) {
     }
 
+    private boolean attachLine(Order order, ChannelOrder incoming) {
+        if (order.hasLine(incoming.identityLineId())) {
+            return false;
+        }
+        boolean cancelled = incoming.status() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.CANCELLED;
+        InventoryItem item = resolveItem(incoming);
+        boolean created = false;
+        if (item == null && !cancelled) {
+            CreatedItem createdItem = createSoldItem(incoming);
+            item = createdItem.item();
+            created = createdItem.created();
+        }
+        OrderLine line = OrderLine.create(item, incoming, created);
+        order.addLine(line);
+        if (!cancelled && !created && item != null) {
+            deactivateListings(item, incoming.platform());
+            markSold(item);
+        }
+        if (!cancelled) {
+            opportunities.recordNewSale(order, item);
+        }
+        return true;
+    }
+
+    private void refreshCalculatedFee(Order order) {
+        if (order.getPlatformFee() != null && order.getPlatformFee().signum() > 0
+                && feeRates.feeFor(order.getPlatform(), order.merchandiseTotal(), 1, order.getShippingCost()) == null) {
+            return;
+        }
+        BigDecimal fee = feeRates.feeFor(
+                order.getPlatform(), order.merchandiseTotal(), 1, order.getShippingCost());
+        if (fee != null) {
+            order.setPlatformFee(fee);
+        }
+    }
+
     private void afterStatusChange(Order order, OrderStatus previous) {
         if (order == null) {
             return;
@@ -243,49 +279,60 @@ public class OrderService {
         if (previous == current) {
             return;
         }
-        InventoryItem item = loadItem(order);
-        applyInventoryTransition(order, previous, current, item);
+        applyInventoryTransition(order, previous, current);
         if (current == OrderStatus.COMPLETED) {
-            opportunities.recordOrderDelivered(order, item);
+            opportunities.recordOrderDelivered(order, firstLinkedItem(order));
         }
     }
 
-    private InventoryItem loadItem(Order order) {
-        if (order.getInventoryItemId() == null) {
+    private InventoryItem firstLinkedItem(Order order) {
+        for (OrderLine line : order.getLines()) {
+            InventoryItem item = loadItem(line);
+            if (item != null) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private InventoryItem loadItem(OrderLine line) {
+        if (line == null || line.getInventoryItemId() == null) {
             return null;
         }
-        return items.findById(order.getInventoryItemId()).orElse(null);
+        return items.findById(line.getInventoryItemId()).orElse(null);
     }
 
-    private void applyInventoryTransition(Order order, OrderStatus from, OrderStatus to, InventoryItem item) {
-        if (item == null) {
+    private void applyInventoryTransition(Order order, OrderStatus from, OrderStatus to) {
+        for (OrderLine line : order.getLines()) {
+            InventoryItem item = loadItem(line);
+            if (item == null) {
+                continue;
+            }
+            if (to == OrderStatus.CANCELLED && from != OrderStatus.CANCELLED) {
+                item.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
+                items.save(item);
+                continue;
+            }
+            if (from == OrderStatus.CANCELLED && to != OrderStatus.CANCELLED) {
+                deactivateListings(item, order.getPlatform());
+                markSold(item);
+            }
+        }
+    }
+
+    private void ignore(Platform platform, String orderId) {
+        if (ignored(platform, orderId)) {
             return;
         }
-        if (to == OrderStatus.CANCELLED && from != OrderStatus.CANCELLED) {
-            item.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
-            items.save(item);
-            return;
-        }
-        if (from == OrderStatus.CANCELLED && to != OrderStatus.CANCELLED) {
-            deactivateListings(item, order.getPlatform());
-            markSold(item);
-        }
+        ignores.save(OrderIgnore.of(platform, orderId, "*"));
     }
 
-    private void ignore(Platform platform, String orderId, String lineId) {
-        if (ignored(platform, orderId, lineId)) {
-            return;
-        }
-        ignores.save(OrderIgnore.of(platform, orderId, lineId));
+    private void clearIgnore(Platform platform, String orderId) {
+        ignores.findByPlatformAndExternalOrderId(platform, orderId).forEach(ignores::delete);
     }
 
-    private void clearIgnore(Platform platform, String orderId, String lineId) {
-        ignores.findByPlatformAndExternalOrderIdAndExternalLineId(platform, orderId, lineId)
-                .ifPresent(ignores::delete);
-    }
-
-    private boolean ignored(Platform platform, String orderId, String lineId) {
-        return ignores.existsByPlatformAndExternalOrderIdAndExternalLineId(platform, orderId, lineId);
+    private boolean ignored(Platform platform, String orderId) {
+        return ignores.existsByPlatformAndExternalOrderId(platform, orderId);
     }
 
     InventoryItem resolveItem(ChannelOrder incoming) {
@@ -350,12 +397,6 @@ public class OrderService {
     }
 
     record CreatedItem(InventoryItem item, boolean created) {
-    }
-
-    private ChannelOrder withRecordedFee(ChannelOrder incoming) {
-        BigDecimal fee = feeRates.feeFor(
-                incoming.platform(), incoming.unitPrice(), incoming.quantity(), incoming.shippingCost());
-        return fee == null ? incoming : incoming.withPlatformFee(fee);
     }
 
     private void deactivateListings(InventoryItem item, Platform soldOn) {
