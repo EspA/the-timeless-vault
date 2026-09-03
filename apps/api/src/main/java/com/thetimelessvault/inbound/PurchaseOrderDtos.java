@@ -53,6 +53,12 @@ public class PurchaseOrderDtos {
     ) {
     }
 
+    public record TrackingView(UUID id, String trackingNumber, ShippingCarrier carrier) {
+        static TrackingView from(PurchaseOrderTracking tracking) {
+            return new TrackingView(tracking.getId(), tracking.getTrackingNumber(), tracking.getCarrier());
+        }
+    }
+
     public record PurchaseOrderView(
             UUID id,
             String number,
@@ -63,6 +69,7 @@ public class PurchaseOrderDtos {
             LocalDate expectedArrival,
             String trackingNumber,
             ShippingCarrier carrier,
+            List<TrackingView> trackings,
             String note,
             List<LineView> lines,
             Instant createdAt,

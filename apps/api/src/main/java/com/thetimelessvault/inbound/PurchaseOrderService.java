@@ -206,8 +206,7 @@ public class PurchaseOrderService {
             throw ApiException.badRequest("Cancelled purchase orders cannot be changed");
         }
         order.setExpectedArrival(request.expectedArrival());
-        order.setTrackingNumber(blankToNull(request.trackingNumber()));
-        order.setCarrier(request.carrier());
+        applyTrackings(order, request.trackingNumber(), request.carrier(), request.trackings());
         order.touch();
         return orders.save(order);
     }
@@ -255,6 +254,7 @@ public class PurchaseOrderService {
                 order.getExpectedArrival(),
                 order.getTrackingNumber(),
                 order.getCarrier(),
+                order.getTrackings().stream().map(PurchaseOrderDtos.TrackingView::from).toList(),
                 order.getNote(),
                 lines,
                 order.getCreatedAt(),
@@ -473,9 +473,21 @@ public class PurchaseOrderService {
 
     private static void applyHeader(PurchaseOrder order, UpsertRequest request) {
         order.setExpectedArrival(request.expectedArrival());
-        order.setTrackingNumber(blankToNull(request.trackingNumber()));
-        order.setCarrier(request.carrier());
+        applyTrackings(order, request.trackingNumber(), request.carrier(), request.trackings());
         order.setNote(blankToNull(request.note()));
+    }
+
+    private static void applyTrackings(
+            PurchaseOrder order,
+            String trackingNumber,
+            ShippingCarrier carrier,
+            List<PurchaseOrder.TrackingDraft> trackings
+    ) {
+        if (trackings != null) {
+            order.replaceTrackings(trackings);
+            return;
+        }
+        order.replaceTracking(blankToNull(trackingNumber), carrier);
     }
 
     private static void requireOpen(PurchaseOrder order) {
@@ -517,14 +529,16 @@ public class PurchaseOrderService {
             String trackingNumber,
             ShippingCarrier carrier,
             String note,
-            List<LineRequest> lines
+            List<LineRequest> lines,
+            List<PurchaseOrder.TrackingDraft> trackings
     ) {
     }
 
     public record HeaderRequest(
             LocalDate expectedArrival,
             String trackingNumber,
-            ShippingCarrier carrier
+            ShippingCarrier carrier,
+            List<PurchaseOrder.TrackingDraft> trackings
     ) {
     }
 

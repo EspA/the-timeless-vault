@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,21 +34,43 @@ public class PurchaseOrderDeliverySyncService {
         if (!order.isOpen()) {
             throw ApiException.badRequest("Only In transit or Delivered purchase orders can be synced");
         }
-        String trackingNumber = order.getTrackingNumber();
-        if (trackingNumber == null || trackingNumber.isBlank()) {
+        List<PurchaseOrderTracking> packages = order.getTrackings();
+        if (packages.isEmpty()) {
             throw ApiException.badRequest("Add a tracking number before syncing");
         }
-        ShippingCarrier carrier = order.getCarrier();
-        if (carrier == null) {
-            carrier = ShippingCarrier.fromTrackingNumber(trackingNumber);
+        LocalDate latestEta = null;
+        boolean anyTrackable = false;
+        boolean allTrackableDelivered = true;
+        for (PurchaseOrderTracking shipment : packages) {
+            ShippingCarrier carrier = resolveCarrier(shipment);
+            if (carrier == null || !carrier.trackable()) {
+                continue;
+            }
+            anyTrackable = true;
+            try {
+                CarrierTrackingClient.Snapshot snapshot = tracking.trackRequired(carrier, shipment.getTrackingNumber());
+                if (snapshot.expectedArrival() != null
+                        && (latestEta == null || snapshot.expectedArrival().isAfter(latestEta))) {
+                    latestEta = snapshot.expectedArrival();
+                }
+                if (snapshot.delivered()) {
+                    shipment.markDelivered();
+                } else {
+                    allTrackableDelivered = false;
+                }
+            } catch (IllegalStateException e) {
+                throw ApiException.unavailable(e.getMessage());
+            }
         }
-        if (carrier == null || !carrier.trackable()) {
+        if (!anyTrackable) {
             throw ApiException.badRequest("Choose UPS, USPS, or FedEx to sync tracking");
         }
-        try {
-            applySnapshot(order, tracking.trackRequired(carrier, trackingNumber));
-        } catch (IllegalStateException e) {
-            throw ApiException.unavailable(e.getMessage());
+        orders.save(order);
+        if (latestEta != null) {
+            purchaseOrders.applyExpectedArrival(order.getId(), latestEta);
+        }
+        if (allTrackableDelivered) {
+            purchaseOrders.markDelivered(order.getId());
         }
         return purchaseOrders.view(id);
     }
@@ -58,36 +81,61 @@ public class PurchaseOrderDeliverySyncService {
         );
         int delivered = 0;
         for (PurchaseOrder order : inbound) {
-            if (order.getTrackingNumber() == null || order.getTrackingNumber().isBlank()) {
+            List<PurchaseOrderTracking> packages = order.getTrackings();
+            if (packages.isEmpty()) {
                 continue;
             }
-            ShippingCarrier carrier = order.getCarrier();
-            if (carrier == null) {
-                carrier = ShippingCarrier.fromTrackingNumber(order.getTrackingNumber());
-            }
-            if (carrier == null || !carrier.trackable()) {
-                continue;
-            }
-            try {
-                CarrierTrackingClient.Snapshot snapshot = tracking.track(carrier, order.getTrackingNumber());
-                applySnapshot(order, snapshot);
-                if (snapshot.delivered()) {
-                    delivered += 1;
-                    log.info("Marked {} delivered from {} tracking {}", order.displayNumber(), carrier, order.getTrackingNumber());
+            boolean anyTrackable = false;
+            boolean allTrackableDelivered = true;
+            LocalDate latestEta = null;
+            for (PurchaseOrderTracking shipment : packages) {
+                ShippingCarrier carrier = resolveCarrier(shipment);
+                if (carrier == null || !carrier.trackable()) {
+                    continue;
                 }
-            } catch (RuntimeException e) {
-                log.warn("Could not update {} from tracking {}: {}", order.displayNumber(), order.getTrackingNumber(), e.getMessage());
+                anyTrackable = true;
+                if (shipment.getDeliveredAt() != null) {
+                    continue;
+                }
+                try {
+                    CarrierTrackingClient.Snapshot snapshot = tracking.track(carrier, shipment.getTrackingNumber());
+                    if (snapshot.expectedArrival() != null
+                            && (latestEta == null || snapshot.expectedArrival().isAfter(latestEta))) {
+                        latestEta = snapshot.expectedArrival();
+                    }
+                    if (snapshot.delivered()) {
+                        shipment.markDelivered();
+                    } else {
+                        allTrackableDelivered = false;
+                    }
+                } catch (RuntimeException e) {
+                    allTrackableDelivered = false;
+                    log.warn(
+                            "Could not update {} from tracking {}: {}",
+                            order.displayNumber(),
+                            shipment.getTrackingNumber(),
+                            e.getMessage()
+                    );
+                }
             }
+            orders.save(order);
+            if (latestEta != null) {
+                purchaseOrders.applyExpectedArrival(order.getId(), latestEta);
+            }
+            if (!anyTrackable || !allTrackableDelivered) {
+                continue;
+            }
+            purchaseOrders.markDelivered(order.getId());
+            delivered += 1;
+            log.info("Marked {} delivered from {} package(s)", order.displayNumber(), packages.size());
         }
         return delivered;
     }
 
-    private void applySnapshot(PurchaseOrder order, CarrierTrackingClient.Snapshot snapshot) {
-        if (snapshot.expectedArrival() != null) {
-            purchaseOrders.applyExpectedArrival(order.getId(), snapshot.expectedArrival());
+    private static ShippingCarrier resolveCarrier(PurchaseOrderTracking shipment) {
+        if (shipment.getCarrier() != null) {
+            return shipment.getCarrier();
         }
-        if (snapshot.delivered()) {
-            purchaseOrders.markDelivered(order.getId());
-        }
+        return ShippingCarrier.fromTrackingNumber(shipment.getTrackingNumber());
     }
 }

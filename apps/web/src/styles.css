@@ -289,6 +289,28 @@ button, .btn {
   font-weight: 700;
 }
 
+.tracking-entries {
+  display: grid;
+  gap: 0.55rem;
+}
+.tracking-entry {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: start;
+}
+.tracking-entry-number {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.tracking-entry-number a {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.po-tracking-field {
+  grid-column: 1 / -1;
+}
 .po-tracking {
   display: flex;
   align-items: center;
@@ -2416,6 +2438,13 @@ td.negative {
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
     margin: 0 0 0.85rem;
+  }
+
+  .tracking-entry {
+    grid-template-columns: 1fr auto;
+  }
+  .tracking-entry select {
+    grid-column: 1 / -1;
   }
 
   input,

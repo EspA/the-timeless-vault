@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { api, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, type PurchaseOrder, type PurchaseOrderPage } from "../api";
+import { api, extraTrackingCount, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, trackingEntries, type PurchaseOrder, type PurchaseOrderPage } from "../api";
 import { askConfirm } from "../confirm";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
 import TrackingNumber from "../components/TrackingNumber.vue";
@@ -120,8 +120,8 @@ const visible = computed(() =>
     && (!filters.value.status || row.status === filters.value.status)
     && contains(money(row.totalValue), filters.value.total)
     && contains(dayLabel(row.expectedArrival), filters.value.arrival)
-    && (!filters.value.carrier || row.carrier === filters.value.carrier)
-    && contains(row.trackingNumber, filters.value.tracking)
+    && (!filters.value.carrier || trackingEntries(row).some((tracking) => tracking.carrier === filters.value.carrier) || row.carrier === filters.value.carrier)
+    && (!filters.value.tracking.trim() || trackingEntries(row).some((tracking) => contains(tracking.trackingNumber, filters.value.tracking)))
   )
 );
 
@@ -248,6 +248,7 @@ onMounted(() => {
               <td>{{ carrierLabel(row.carrier) }}</td>
               <td>
                 <TrackingNumber :tracking="row.trackingNumber" :provider="row.carrier" />
+                <span v-if="extraTrackingCount(row)" class="muted"> +{{ extraTrackingCount(row) }}</span>
               </td>
               <td>{{ whenLabel(row.createdAt) }}</td>
             </tr>
@@ -274,6 +275,7 @@ onMounted(() => {
           <p class="muted" style="margin:0">
             Tracking
             <TrackingNumber :tracking="row.trackingNumber" :provider="row.carrier" />
+            <span v-if="extraTrackingCount(row)"> +{{ extraTrackingCount(row) }}</span>
           </p>
         </article>
         <p v-if="!visible.length" class="muted">{{ loading ? "Loading…" : "No purchase orders yet." }}</p>

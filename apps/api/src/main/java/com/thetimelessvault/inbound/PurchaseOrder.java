@@ -12,12 +12,17 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -54,6 +59,11 @@ public class PurchaseOrder {
     @OrderBy("createdAt ASC")
     private List<PurchaseOrderLine> lines = new ArrayList<>();
 
+    @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, createdAt ASC")
+    @Fetch(FetchMode.SUBSELECT)
+    private List<PurchaseOrderTracking> trackings = new ArrayList<>();
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -78,6 +88,65 @@ public class PurchaseOrder {
     public void addLine(PurchaseOrderLine line) {
         line.setPurchaseOrder(this);
         lines.add(line);
+    }
+
+    public record TrackingDraft(String trackingNumber, ShippingCarrier carrier) {
+    }
+
+    public void replaceTrackings(List<TrackingDraft> shipments) {
+        Map<String, TrackingDraft> unique = new LinkedHashMap<>();
+        if (shipments != null) {
+            for (TrackingDraft shipment : shipments) {
+                if (shipment == null || shipment.trackingNumber() == null || shipment.trackingNumber().isBlank()) {
+                    continue;
+                }
+                unique.putIfAbsent(shipment.trackingNumber().trim().toUpperCase(Locale.ROOT), shipment);
+            }
+        }
+        Map<String, PurchaseOrderTracking> existingByKey = new LinkedHashMap<>();
+        for (PurchaseOrderTracking existing : trackings) {
+            if (existing.getTrackingNumber() != null) {
+                existingByKey.putIfAbsent(existing.getTrackingNumber().trim().toUpperCase(Locale.ROOT), existing);
+            }
+        }
+        trackings.removeIf(existing -> existing.getTrackingNumber() == null
+                || !unique.containsKey(existing.getTrackingNumber().trim().toUpperCase(Locale.ROOT)));
+        int index = 0;
+        for (TrackingDraft shipment : unique.values()) {
+            String number = shipment.trackingNumber().trim();
+            String key = number.toUpperCase(Locale.ROOT);
+            PurchaseOrderTracking row = existingByKey.get(key);
+            if (row == null) {
+                trackings.add(PurchaseOrderTracking.create(this, number, shipment.carrier(), index));
+            } else {
+                row.setCarrier(ShippingCarrier.resolve(
+                        shipment.carrier() == null ? null : shipment.carrier().name(),
+                        number
+                ));
+                row.setSortOrder(index);
+            }
+            index++;
+        }
+        syncPrimaryTracking();
+    }
+
+    public void replaceTracking(String number, ShippingCarrier nextCarrier) {
+        if (number == null || number.isBlank()) {
+            replaceTrackings(List.of());
+            return;
+        }
+        replaceTrackings(List.of(new TrackingDraft(number, nextCarrier)));
+    }
+
+    private void syncPrimaryTracking() {
+        if (trackings.isEmpty()) {
+            this.trackingNumber = null;
+            this.carrier = null;
+            return;
+        }
+        PurchaseOrderTracking first = trackings.getFirst();
+        this.trackingNumber = first.getTrackingNumber();
+        this.carrier = first.getCarrier();
     }
 
     public BigDecimal totalValue() {
@@ -131,7 +200,7 @@ public class PurchaseOrder {
     }
 
     public void setTrackingNumber(String trackingNumber) {
-        this.trackingNumber = trackingNumber;
+        replaceTracking(trackingNumber, carrier);
     }
 
     public ShippingCarrier getCarrier() {
@@ -139,7 +208,15 @@ public class PurchaseOrder {
     }
 
     public void setCarrier(ShippingCarrier carrier) {
-        this.carrier = carrier;
+        if (trackings.isEmpty()) {
+            this.carrier = carrier;
+            if (trackingNumber != null && !trackingNumber.isBlank()) {
+                replaceTracking(trackingNumber, carrier);
+            }
+            return;
+        }
+        trackings.getFirst().setCarrier(carrier);
+        syncPrimaryTracking();
     }
 
     public String getNote() {
@@ -152,6 +229,10 @@ public class PurchaseOrder {
 
     public List<PurchaseOrderLine> getLines() {
         return lines;
+    }
+
+    public List<PurchaseOrderTracking> getTrackings() {
+        return trackings;
     }
 
     public Instant getCreatedAt() {

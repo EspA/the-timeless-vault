@@ -4,22 +4,21 @@ import { useRoute, useRouter } from "vue-router";
 import {
   api,
   canonicalizeShippingProvider,
-  isUpsTracking,
   ORDER_STATUSES,
   shippingProviderSelectOptions,
+  trackingEntries,
   type Order,
   type OrderStatus,
 } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
-import TrackingNumber from "../components/TrackingNumber.vue";
+import TrackingEntries, { type TrackingDraft } from "../components/TrackingEntries.vue";
 import { askConfirm } from "../confirm";
 
 const route = useRoute();
 const router = useRouter();
 const order = ref<Order | null>(null);
-const trackingNumber = ref("");
-const shippingProvider = ref("");
+const trackings = ref<TrackingDraft[]>([{ trackingNumber: "", carrier: "UPS" }]);
 const error = ref("");
 const loading = ref(false);
 const saving = ref(false);
@@ -65,18 +64,25 @@ const merchandiseTotal = computed(() => {
 
 const apply = (loaded: Order) => {
   order.value = loaded;
-  trackingNumber.value = loaded.trackingNumber || "";
-  const provider = loaded.shippingProvider || "";
-  shippingProvider.value = canonicalizeShippingProvider(provider) || provider || "UPS";
+  const entries = trackingEntries(loaded).map((row) => ({
+    trackingNumber: row.trackingNumber,
+    carrier: canonicalizeShippingProvider(row.carrier) || row.carrier || "UPS",
+  }));
+  trackings.value = entries.length ? entries : [{ trackingNumber: "", carrier: "UPS" }];
 };
 
-const providerOptions = computed(() => shippingProviderSelectOptions(shippingProvider.value));
-
-watch(trackingNumber, (value) => {
-  if (!shippingProvider.value.trim() && isUpsTracking(value, shippingProvider.value)) {
-    shippingProvider.value = "UPS";
-  }
+const providerOptions = computed(() => {
+  const current = trackings.value.map((row) => row.carrier).find(Boolean) || order.value?.shippingProvider || "";
+  return shippingProviderSelectOptions(current);
 });
+
+const trackingPayload = () =>
+  trackings.value
+    .filter((row) => row.trackingNumber.trim())
+    .map((row) => ({
+      trackingNumber: row.trackingNumber.trim(),
+      shippingProvider: row.carrier.trim() || null,
+    }));
 
 const load = async () => {
   loading.value = true;
@@ -91,12 +97,14 @@ const load = async () => {
   }
 };
 
-const persist = async (patch: { status?: OrderStatus; trackingNumber?: string; shippingProvider?: string }) => {
+const persist = async (patch: { status?: OrderStatus }) => {
   if (!order.value) return;
+  const shipments = trackingPayload();
   const updated = await api.put<Order>(`/api/orders/${order.value.id}`, {
     status: patch.status ?? order.value.status,
-    trackingNumber: patch.trackingNumber ?? trackingNumber.value,
-    shippingProvider: patch.shippingProvider ?? shippingProvider.value,
+    trackingNumber: shipments[0]?.trackingNumber ?? "",
+    shippingProvider: shipments[0]?.shippingProvider ?? "",
+    trackings: shipments,
   });
   apply(updated);
 };
@@ -120,10 +128,7 @@ const save = async () => {
   justSaved.value = false;
   saving.value = true;
   try {
-    await persist({
-      trackingNumber: trackingNumber.value,
-      shippingProvider: shippingProvider.value,
-    });
+    await persist({});
     justSaved.value = true;
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => {
@@ -268,26 +273,9 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
       </div>
 
       <div class="card grid">
-        <div class="grid two">
-          <label>Tracking
-            <input v-model="trackingNumber" placeholder="Tracking number" />
-            <TrackingNumber
-              v-if="trackingNumber.trim()"
-              :tracking="trackingNumber"
-              :provider="shippingProvider"
-            />
-          </label>
-          <label>Shipping provider
-            <select v-model="shippingProvider">
-              <option value="">None</option>
-              <option
-                v-for="row in providerOptions"
-                :key="row.value"
-                :value="row.value"
-              >{{ row.label }}</option>
-            </select>
-          </label>
-        </div>
+        <label>Tracking
+          <TrackingEntries v-model="trackings" :carriers="providerOptions" default-carrier="UPS" />
+        </label>
         <div class="save-row">
           <button
             class="btn secondary"

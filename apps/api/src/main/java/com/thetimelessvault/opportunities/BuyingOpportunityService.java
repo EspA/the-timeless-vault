@@ -342,12 +342,29 @@ public class BuyingOpportunityService {
         if (order == null) {
             return null;
         }
+        if (order.getTrackings() != null && !order.getTrackings().isEmpty()) {
+            return order.getTrackings().stream()
+                    .map(tracking -> trackingDetail(tracking.getTrackingNumber(), tracking.getCarrier()))
+                    .filter(detail -> detail != null && !detail.isBlank())
+                    .reduce((left, right) -> left + "; " + right)
+                    .orElse(null);
+        }
         return trackingDetail(order.getTrackingNumber(), order.getShippingProvider());
     }
 
     static String trackingDetail(PurchaseOrder order) {
         if (order == null) {
             return null;
+        }
+        if (order.getTrackings() != null && !order.getTrackings().isEmpty()) {
+            return order.getTrackings().stream()
+                    .map(tracking -> trackingDetail(
+                            tracking.getTrackingNumber(),
+                            tracking.getCarrier() == null ? null : NotificationEmailRenderer.platformLabel(tracking.getCarrier().name())
+                    ))
+                    .filter(detail -> detail != null && !detail.isBlank())
+                    .reduce((left, right) -> left + "; " + right)
+                    .orElse(null);
         }
         String carrier = order.getCarrier() == null ? null : NotificationEmailRenderer.platformLabel(order.getCarrier().name());
         return trackingDetail(order.getTrackingNumber(), carrier);

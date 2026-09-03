@@ -201,7 +201,7 @@ class OrderServiceTest {
         when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
 
         Order updated = service.update(existingOrder.getId(), new OrderService.UpdateOrderRequest(
-                OrderStatus.COMPLETED, null, null));
+                OrderStatus.COMPLETED, null, null, null));
 
         assertEquals(OrderStatus.COMPLETED, updated.getStatus());
         verify(opportunities).recordOrderDelivered(existingOrder, existing);
@@ -257,7 +257,7 @@ class OrderServiceTest {
         when(items.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         Order updated = service.update(existingOrder.getId(), new OrderService.UpdateOrderRequest(
-                OrderStatus.CANCELLED, null, null));
+                OrderStatus.CANCELLED, null, null, null));
 
         assertEquals(OrderStatus.CANCELLED, updated.getStatus());
         assertEquals(StockStatus.IN_STOCK, existing.getStockStatus());
