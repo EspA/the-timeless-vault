@@ -203,6 +203,9 @@ public final class InventoryDtos {
     public record PhotoView(UUID id, String url, String filename, int sortOrder, boolean primaryForBricklink) {
     }
 
+    public record ReorderPhotosRequest(List<UUID> photoIds) {
+    }
+
     public record InventoryView(
             UUID id,
             String sku,

@@ -24,6 +24,7 @@ const uploadTotal = ref(0);
 const uploadName = ref("");
 const editorKey = ref(0);
 const pendingPhotos = ref<{ file: File; url: string }[]>([]);
+const draggingPhotoUrl = ref<string | null>(null);
 
 const uploadTitle = computed(() => {
   if (!uploadTotal.value) return "Saving item";
@@ -49,6 +50,38 @@ const addPhotos = (files: File[]) => {
 const removePhoto = (index: number) => {
   URL.revokeObjectURL(pendingPhotos.value[index].url);
   pendingPhotos.value.splice(index, 1);
+};
+
+const movePendingPhoto = (index: number, delta: number) => {
+  const nextIndex = index + delta;
+  if (nextIndex < 0 || nextIndex >= pendingPhotos.value.length) return;
+  const photos = [...pendingPhotos.value];
+  const [moved] = photos.splice(index, 1);
+  photos.splice(nextIndex, 0, moved);
+  pendingPhotos.value = photos;
+};
+
+const onPendingPhotoDragStart = (url: string, event: DragEvent) => {
+  draggingPhotoUrl.value = url;
+  event.dataTransfer?.setData("text/plain", url);
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+};
+
+const onPendingPhotoDrop = (targetUrl: string) => {
+  if (!draggingPhotoUrl.value || draggingPhotoUrl.value === targetUrl) {
+    draggingPhotoUrl.value = null;
+    return;
+  }
+  const photos = [...pendingPhotos.value];
+  const from = photos.findIndex((photo) => photo.url === draggingPhotoUrl.value);
+  const to = photos.findIndex((photo) => photo.url === targetUrl);
+  draggingPhotoUrl.value = null;
+  if (from < 0 || to < 0) return;
+  const [moved] = photos.splice(from, 1);
+  photos.splice(to, 0, moved);
+  pendingPhotos.value = photos;
 };
 
 const form = reactive({
@@ -339,23 +372,52 @@ onUnmounted(() => {
 
           <div class="card grid">
             <h3>Photos</h3>
-            <p class="muted">Take square photos with this device or choose from the library. The first one is used as the BrickLink photo.</p>
+            <p class="muted">Take square photos with this device or choose from the library. Drag or use the arrows to change listing order. The first one is used as the BrickLink photo.</p>
             <PhotoCapture :disabled="saving" @files="addPhotos" />
             <div v-if="pendingPhotos.length" class="photos" style="margin-top:0.75rem">
-              <div v-for="(photo, index) in pendingPhotos" :key="photo.url" class="photo-tile">
+              <div
+                v-for="(photo, index) in pendingPhotos"
+                :key="photo.url"
+                class="photo-tile"
+                :class="{ 'is-dragging': draggingPhotoUrl === photo.url }"
+                :draggable="pendingPhotos.length > 1"
+                @dragstart="onPendingPhotoDragStart(photo.url, $event)"
+                @dragover.prevent
+                @drop.prevent="onPendingPhotoDrop(photo.url)"
+                @dragend="draggingPhotoUrl = null"
+              >
                 <img
                   :src="photo.url"
                   :alt="photo.file.name"
                   :class="{ primary: index === 0 }"
+                  draggable="false"
                 />
                 <button
                   class="photo-delete"
                   type="button"
                   title="Remove photo"
-                  @click="removePhoto(index)"
+                  @click.stop="removePhoto(index)"
                 >
                   ×
                 </button>
+                <div v-if="pendingPhotos.length > 1" class="photo-reorder">
+                  <button
+                    type="button"
+                    title="Move photo left"
+                    :disabled="index === 0"
+                    @click.stop="movePendingPhoto(index, -1)"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    title="Move photo right"
+                    :disabled="index === pendingPhotos.length - 1"
+                    @click.stop="movePendingPhoto(index, 1)"
+                  >
+                    ›
+                  </button>
+                </div>
               </div>
             </div>
             <p v-if="pendingPhotos.length" class="muted">The first photo is used as the BrickLink photo. Use × to remove one.</p>

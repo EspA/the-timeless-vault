@@ -28,9 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -256,6 +259,35 @@ public class InventoryService {
             throw ApiException.notFound("Photo not found");
         }
         photos.saveAll(existing);
+    }
+
+    @Transactional
+    public List<Photo> reorderPhotos(UUID itemId, List<UUID> photoIds) {
+        get(itemId);
+        if (photoIds == null || photoIds.isEmpty()) {
+            throw ApiException.badRequest("Photo order is required");
+        }
+        if (photoIds.stream().distinct().count() != photoIds.size()) {
+            throw ApiException.badRequest("Photo order must include each photo exactly once");
+        }
+        List<Photo> existing = photos.findByInventoryItemIdOrderBySortOrderAscCreatedAtAsc(itemId);
+        if (existing.size() != photoIds.size()) {
+            throw ApiException.badRequest("Photo order must include each photo exactly once");
+        }
+        Map<UUID, Photo> byId = new HashMap<>();
+        for (Photo photo : existing) {
+            byId.put(photo.getId(), photo);
+        }
+        List<Photo> ordered = new ArrayList<>(photoIds.size());
+        for (int i = 0; i < photoIds.size(); i++) {
+            Photo photo = byId.get(photoIds.get(i));
+            if (photo == null) {
+                throw ApiException.badRequest("Photo order includes a photo that is not on this item");
+            }
+            photo.setSortOrder(i);
+            ordered.add(photo);
+        }
+        return photos.saveAll(ordered);
     }
 
     public List<Photo> photosFor(UUID itemId) {
