@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -127,6 +128,22 @@ public class InventoryController {
     @PutMapping("/inventory/{id}/photos/{photoId}/primary")
     public void markPrimary(@PathVariable UUID id, @PathVariable UUID photoId) {
         inventoryService.markPrimary(id, photoId);
+    }
+
+    @PutMapping("/inventory/{id}/photos/order")
+    public List<InventoryDtos.PhotoView> reorderPhotos(
+            @PathVariable UUID id,
+            @RequestBody InventoryDtos.ReorderPhotosRequest request
+    ) {
+        return inventoryService.reorderPhotos(id, request.photoIds()).stream()
+                .map(photo -> new InventoryDtos.PhotoView(
+                        photo.getId(),
+                        storage.publicUrl(photo.getStorageKey()),
+                        photo.getOriginalFilename(),
+                        photo.getSortOrder(),
+                        photo.isPrimaryForBricklink()
+                ))
+                .toList();
     }
 
     @GetMapping("/photos/file/{*key}")

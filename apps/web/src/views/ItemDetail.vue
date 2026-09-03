@@ -45,6 +45,9 @@ const uploadIndex = ref(0);
 const uploadTotal = ref(0);
 const uploadName = ref("");
 const photoCapture = ref<{ openCamera: () => Promise<void> } | null>(null);
+const reorderingPhotos = ref(false);
+const draggingPhotoId = ref<string | null>(null);
+const dragOccurred = ref(false);
 
 const uploadTitle = computed(() => uploadTotal.value === 1 ? "Uploading photo" : "Uploading photos");
 const uploadMessage = computed(() => {
@@ -254,8 +257,72 @@ const upload = async (files: File[]) => {
 
 const makePrimary = async (photoId: string) => {
   if (!item.value) return;
+  if (dragOccurred.value) {
+    dragOccurred.value = false;
+    return;
+  }
   await api.put(`/api/inventory/${item.value.id}/photos/${photoId}/primary`);
   await load();
+};
+
+const persistPhotoOrder = async (photos: Photo[]) => {
+  if (!item.value) return;
+  const previous = item.value.photos;
+  item.value = { ...item.value, photos };
+  error.value = "";
+  reorderingPhotos.value = true;
+  try {
+    const updated = await api.put<Photo[]>(`/api/inventory/${item.value.id}/photos/order`, {
+      photoIds: photos.map((photo) => photo.id),
+    });
+    item.value = { ...item.value, photos: updated };
+  } catch (e) {
+    item.value = { ...item.value, photos: previous };
+    error.value = e instanceof Error ? e.message : "Could not reorder photos";
+  } finally {
+    reorderingPhotos.value = false;
+  }
+};
+
+const movePhoto = async (index: number, delta: number) => {
+  if (!item.value || reorderingPhotos.value) return;
+  const nextIndex = index + delta;
+  if (nextIndex < 0 || nextIndex >= item.value.photos.length) return;
+  const photos = [...item.value.photos];
+  const [moved] = photos.splice(index, 1);
+  photos.splice(nextIndex, 0, moved);
+  await persistPhotoOrder(photos);
+};
+
+const onPhotoDragStart = (photoId: string, event: DragEvent) => {
+  draggingPhotoId.value = photoId;
+  dragOccurred.value = true;
+  event.dataTransfer?.setData("text/plain", photoId);
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+};
+
+const onPhotoDragEnd = () => {
+  draggingPhotoId.value = null;
+  window.setTimeout(() => {
+    dragOccurred.value = false;
+  }, 0);
+};
+
+const onPhotoDrop = async (targetId: string) => {
+  if (!item.value || !draggingPhotoId.value || draggingPhotoId.value === targetId) {
+    draggingPhotoId.value = null;
+    return;
+  }
+  const photos = [...item.value.photos];
+  const from = photos.findIndex((photo) => photo.id === draggingPhotoId.value);
+  const to = photos.findIndex((photo) => photo.id === targetId);
+  draggingPhotoId.value = null;
+  if (from < 0 || to < 0) return;
+  const [moved] = photos.splice(from, 1);
+  photos.splice(to, 0, moved);
+  await persistPhotoOrder(photos);
 };
 
 const removePhoto = async (photo: Photo) => {
@@ -960,13 +1027,25 @@ const remove = async () => {
 
     <div class="card grid">
       <h3>Photos</h3>
+      <p class="muted">Drag or use the arrows to change listing order. Click a photo to mark it as the BrickLink photo.</p>
       <PhotoCapture ref="photoCapture" :disabled="uploading" @files="upload" />
       <div class="photos">
-        <div v-for="photo in item.photos" :key="photo.id" class="photo-tile">
+        <div
+          v-for="(photo, index) in item.photos"
+          :key="photo.id"
+          class="photo-tile"
+          :class="{ 'is-dragging': draggingPhotoId === photo.id }"
+          :draggable="item.photos.length > 1 && !reorderingPhotos"
+          @dragstart="onPhotoDragStart(photo.id, $event)"
+          @dragover.prevent
+          @drop.prevent="onPhotoDrop(photo.id)"
+          @dragend="onPhotoDragEnd"
+        >
           <img
             :src="photo.url"
             :alt="photo.filename || 'Listing photo'"
             :class="{ primary: photo.primaryForBricklink }"
+            draggable="false"
             @click="makePrimary(photo.id)"
           />
           <button
@@ -977,6 +1056,24 @@ const remove = async () => {
           >
             ×
           </button>
+          <div v-if="item.photos.length > 1" class="photo-reorder">
+            <button
+              type="button"
+              title="Move photo left"
+              :disabled="reorderingPhotos || index === 0"
+              @click.stop="movePhoto(index, -1)"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              title="Move photo right"
+              :disabled="reorderingPhotos || index === item.photos.length - 1"
+              @click.stop="movePhoto(index, 1)"
+            >
+              ›
+            </button>
+          </div>
         </div>
       </div>
     </div>
