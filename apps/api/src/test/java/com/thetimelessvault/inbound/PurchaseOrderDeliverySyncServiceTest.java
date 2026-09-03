@@ -140,6 +140,7 @@ class PurchaseOrderDeliverySyncServiceTest {
                 expectedArrival,
                 order.getTrackingNumber(),
                 order.getCarrier(),
+                List.of(),
                 null,
                 List.of(),
                 now,

@@ -71,6 +71,24 @@ class OrderDeliverySyncServiceTest {
     }
 
     @Test
+    void waitsUntilEveryTrackablePackageIsDelivered() {
+        Order order = shipped("UPS", "1ZAAA");
+        order.replaceTrackings(List.of(
+                ShipmentTracking.of("1ZAAA", "UPS"),
+                ShipmentTracking.of("9400111", "USPS")
+        ));
+        when(orders.findByStatusInAndTrackingNumberIsNotNull(List.of(OrderStatus.OPEN, OrderStatus.SHIPPED)))
+                .thenReturn(List.of(order));
+        when(tracking.track(ShippingCarrier.UPS, "1ZAAA"))
+                .thenReturn(new CarrierTrackingClient.Snapshot(true, null));
+        when(tracking.track(ShippingCarrier.USPS, "9400111"))
+                .thenReturn(new CarrierTrackingClient.Snapshot(false, null));
+
+        assertEquals(0, service.syncDeliveredShipments());
+        verify(orderService, never()).markDeliveredFromCarrier(org.mockito.ArgumentMatchers.any(UUID.class));
+    }
+
+    @Test
     void skipsCarriersWithoutATrackingApi() {
         Order order = shipped("DHL", "123456");
         when(orders.findByStatusInAndTrackingNumberIsNotNull(List.of(OrderStatus.OPEN, OrderStatus.SHIPPED)))

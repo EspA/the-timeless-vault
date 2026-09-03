@@ -178,6 +178,13 @@ export type OrderLine = {
   inventoryCreated: boolean;
 };
 
+export type ShipmentTracking = {
+  id?: string;
+  trackingNumber: string;
+  shippingProvider?: string | null;
+  carrier?: string | null;
+};
+
 export type Order = {
   id: string;
   inventoryItemId?: string;
@@ -198,8 +205,35 @@ export type Order = {
   status: OrderStatus;
   trackingNumber?: string;
   shippingProvider?: string;
+  trackings?: ShipmentTracking[];
   lines?: OrderLine[];
 };
+
+export const shipmentCarrier = (row?: ShipmentTracking | null) =>
+  row?.carrier || row?.shippingProvider || "";
+
+export const trackingEntries = (row?: {
+  trackings?: ShipmentTracking[];
+  trackingNumber?: string;
+  shippingProvider?: string;
+  carrier?: string | null;
+} | null) => {
+  if (row?.trackings?.length) {
+    return row.trackings
+      .filter((tracking) => tracking.trackingNumber?.trim())
+      .map((tracking) => ({
+        trackingNumber: tracking.trackingNumber,
+        carrier: shipmentCarrier(tracking),
+      }));
+  }
+  if (row?.trackingNumber?.trim()) {
+    return [{ trackingNumber: row.trackingNumber.trim(), carrier: row.shippingProvider || row.carrier || "" }];
+  }
+  return [];
+};
+
+export const extraTrackingCount = (row?: { trackings?: ShipmentTracking[]; trackingNumber?: string } | null) =>
+  Math.max(0, (row?.trackings?.length || (row?.trackingNumber ? 1 : 0)) - 1);
 
 export type OrdersPage = {
   items: Order[];
@@ -789,6 +823,7 @@ export type PurchaseOrder = {
   expectedArrival?: string;
   trackingNumber?: string;
   carrier?: ShippingCarrier | null;
+  trackings?: ShipmentTracking[];
   note?: string;
   lines: PurchaseOrderLine[];
   createdAt: string;

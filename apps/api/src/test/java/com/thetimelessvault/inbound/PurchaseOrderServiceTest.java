@@ -316,7 +316,8 @@ class PurchaseOrderServiceTest {
         service.updateHeader(order.getId(), new PurchaseOrderService.HeaderRequest(
                 LocalDate.parse("2026-09-01"),
                 "1Z999",
-                ShippingCarrier.UPS
+                ShippingCarrier.UPS,
+                null
         ));
 
         assertEquals(LocalDate.parse("2026-09-01"), order.getExpectedArrival());
@@ -333,7 +334,8 @@ class PurchaseOrderServiceTest {
         service.updateHeader(order.getId(), new PurchaseOrderService.HeaderRequest(
                 LocalDate.parse("2026-09-02"),
                 "9400",
-                ShippingCarrier.USPS
+                ShippingCarrier.USPS,
+                null
         ));
 
         assertEquals("9400", order.getTrackingNumber());
@@ -347,13 +349,13 @@ class PurchaseOrderServiceTest {
 
         ApiException error = assertThrows(ApiException.class, () -> service.updateHeader(
                 order.getId(),
-                new PurchaseOrderService.HeaderRequest(null, "1Z999", ShippingCarrier.UPS)
+                new PurchaseOrderService.HeaderRequest(null, "1Z999", ShippingCarrier.UPS, null)
         ));
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatus());
     }
 
     private PurchaseOrderService.UpsertRequest request(PurchaseOrderService.LineRequest... lines) {
-        return new PurchaseOrderService.UpsertRequest(supplier.getId(), null, null, null, null, List.of(lines));
+        return new PurchaseOrderService.UpsertRequest(supplier.getId(), null, null, null, null, List.of(lines), null);
     }
 
     private static PurchaseOrderService.LineRequest line(UUID id, String set, String title, int qty, String value) {

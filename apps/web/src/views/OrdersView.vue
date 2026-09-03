@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, ORDER_STATUSES, type Order, type OrderStatus, type OrdersPage } from "../api";
+import { api, extraTrackingCount, ORDER_STATUSES, trackingEntries, type Order, type OrderStatus, type OrdersPage } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import OrderNewModal from "../components/OrderNewModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
@@ -83,7 +83,7 @@ const visible = computed(() =>
     && contains(money(row.platformFee ?? 0, row.currency), filters.value.fee)
     && contains(orderLabel(row), filters.value.order)
     && (!filters.value.status || row.status === filters.value.status)
-    && contains(row.trackingNumber, filters.value.tracking)
+    && (!filters.value.tracking.trim() || trackingEntries(row).some((tracking) => contains(tracking.trackingNumber, filters.value.tracking)))
     && contains(row.shippingProvider, filters.value.provider)
   )
 );
@@ -335,6 +335,7 @@ onUnmounted(() => {
               <td>{{ money(row.platformFee ?? 0, row.currency) }}</td>
               <td>
                 <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
+                <span v-if="extraTrackingCount(row)" class="muted"> +{{ extraTrackingCount(row) }}</span>
               </td>
               <td>{{ row.shippingProvider || "—" }}</td>
               <td>
@@ -391,6 +392,7 @@ onUnmounted(() => {
           <p class="muted" style="margin:0">
             Tracking
             <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
+            <span v-if="extraTrackingCount(row)"> +{{ extraTrackingCount(row) }}</span>
             · {{ row.shippingProvider || "—" }}
           </p>
           <div class="list-card-actions">

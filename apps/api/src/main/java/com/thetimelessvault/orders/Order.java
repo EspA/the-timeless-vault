@@ -12,11 +12,16 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -72,6 +77,11 @@ public class Order {
     @OrderBy("createdAt ASC")
     private List<OrderLine> lines = new ArrayList<>();
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("sortOrder ASC, createdAt ASC")
+    @Fetch(FetchMode.SUBSELECT)
+    private List<OrderTracking> trackings = new ArrayList<>();
+
     public static Order create(InventoryItem item, ChannelOrder incoming, boolean inventoryCreated) {
         Order order = header(incoming);
         order.addLine(OrderLine.create(item, incoming, inventoryCreated));
@@ -90,8 +100,7 @@ public class Order {
         order.orderUrl = incoming.orderUrl();
         order.status = incoming.status() == null ? OrderStatus.OPEN : incoming.status();
         order.statusSource = OrderStatusSource.CHANNEL;
-        order.trackingNumber = incoming.trackingNumber();
-        order.shippingProvider = ShippingProviders.inferOrDefault(order.trackingNumber, incoming.shippingProvider());
+        order.mergeTracking(incoming.trackingNumber(), incoming.shippingProvider());
         Instant now = Instant.now();
         order.statusUpdatedAt = now;
         order.createdAt = now;
@@ -101,6 +110,71 @@ public class Order {
     public void addLine(OrderLine line) {
         line.setOrder(this);
         lines.add(line);
+    }
+
+    public void replaceTrackings(List<ShipmentTracking> shipments) {
+        Map<String, ShipmentTracking> unique = new LinkedHashMap<>();
+        if (shipments != null) {
+            for (ShipmentTracking shipment : shipments) {
+                if (shipment == null || shipment.trackingNumber() == null || shipment.trackingNumber().isBlank()) {
+                    continue;
+                }
+                unique.putIfAbsent(shipment.trackingNumber().trim().toUpperCase(Locale.ROOT), shipment);
+            }
+        }
+        Map<String, OrderTracking> existingByKey = new LinkedHashMap<>();
+        for (OrderTracking existing : trackings) {
+            if (existing.getTrackingNumber() != null) {
+                existingByKey.putIfAbsent(existing.getTrackingNumber().trim().toUpperCase(Locale.ROOT), existing);
+            }
+        }
+        trackings.removeIf(existing -> existing.getTrackingNumber() == null
+                || !unique.containsKey(existing.getTrackingNumber().trim().toUpperCase(Locale.ROOT)));
+        int index = 0;
+        for (ShipmentTracking shipment : unique.values()) {
+            ShipmentTracking normalized = ShipmentTracking.of(shipment.trackingNumber(), shipment.shippingProvider());
+            String key = normalized.trackingNumber().toUpperCase(Locale.ROOT);
+            OrderTracking row = existingByKey.get(key);
+            if (row == null) {
+                trackings.add(OrderTracking.create(this, normalized.trackingNumber(), normalized.shippingProvider(), index));
+            } else {
+                row.setCarrier(normalized.shippingProvider());
+                row.setSortOrder(index);
+            }
+            index++;
+        }
+        syncPrimaryTracking();
+    }
+
+    public void mergeTracking(String number, String provider) {
+        ShipmentTracking incoming = ShipmentTracking.of(number, provider);
+        if (incoming == null) {
+            syncPrimaryTracking();
+            return;
+        }
+        String key = incoming.trackingNumber().toUpperCase(Locale.ROOT);
+        for (OrderTracking existing : trackings) {
+            if (existing.getTrackingNumber() != null && key.equals(existing.getTrackingNumber().toUpperCase(Locale.ROOT))) {
+                if (incoming.shippingProvider() != null) {
+                    existing.setCarrier(incoming.shippingProvider());
+                }
+                syncPrimaryTracking();
+                return;
+            }
+        }
+        trackings.add(OrderTracking.create(this, incoming.trackingNumber(), incoming.shippingProvider(), trackings.size()));
+        syncPrimaryTracking();
+    }
+
+    private void syncPrimaryTracking() {
+        if (trackings.isEmpty()) {
+            this.trackingNumber = null;
+            this.shippingProvider = ShippingProviders.DEFAULT;
+            return;
+        }
+        OrderTracking first = trackings.getFirst();
+        this.trackingNumber = first.getTrackingNumber();
+        this.shippingProvider = ShippingProviders.defaulted(first.getCarrier());
     }
 
     public OrderLine findLine(String externalLineId) {
@@ -152,16 +226,17 @@ public class Order {
             this.platformFee = incoming.platformFee();
         }
         if (incoming.trackingNumber() != null) {
-            this.trackingNumber = incoming.trackingNumber();
-        }
-        if (incoming.platform() == Platform.BRICKLINK) {
-            this.shippingProvider = ShippingProviders.infer(this.trackingNumber, incoming.shippingProvider());
-        } else if (incoming.shippingProvider() != null) {
-            this.shippingProvider = incoming.shippingProvider();
+            if (incoming.platform() == Platform.BRICKLINK) {
+                mergeTracking(incoming.trackingNumber(), incoming.shippingProvider());
+            } else {
+                mergeTracking(
+                        incoming.trackingNumber(),
+                        incoming.shippingProvider() != null ? incoming.shippingProvider() : shippingProvider
+                );
+            }
         } else {
-            this.shippingProvider = ShippingProviders.infer(this.trackingNumber, this.shippingProvider);
+            this.shippingProvider = ShippingProviders.defaulted(this.shippingProvider);
         }
-        this.shippingProvider = ShippingProviders.defaulted(this.shippingProvider);
         if (shouldApplyIncomingStatus(incoming.status())) {
             this.status = incoming.status();
             this.statusUpdatedAt = Instant.now();
@@ -186,16 +261,25 @@ public class Order {
     }
 
     public OrderStatus applyManual(OrderStatus nextStatus, String tracking, String provider) {
+        return applyManual(nextStatus, tracking, provider, null);
+    }
+
+    public OrderStatus applyManual(
+            OrderStatus nextStatus,
+            String tracking,
+            String provider,
+            List<ShipmentTracking> shipments
+    ) {
         OrderStatus previous = status;
-        if (tracking != null) {
-            String trimmed = tracking.trim();
-            this.trackingNumber = trimmed.isEmpty() ? null : trimmed;
+        if (shipments != null) {
+            replaceTrackings(shipments);
+        } else if (tracking != null || provider != null) {
+            String number = tracking != null ? tracking : trackingNumber;
+            String ship = provider != null ? provider : shippingProvider;
+            replaceTrackings(number == null || number.isBlank()
+                    ? List.of()
+                    : List.of(ShipmentTracking.of(number, ship)));
         }
-        if (provider != null) {
-            String trimmed = provider.trim();
-            this.shippingProvider = trimmed.isEmpty() ? null : trimmed;
-        }
-        this.shippingProvider = ShippingProviders.inferOrDefault(this.trackingNumber, this.shippingProvider);
         if (nextStatus != null && nextStatus != status) {
             this.status = nextStatus;
             this.statusSource = OrderStatusSource.MANUAL;
@@ -319,5 +403,9 @@ public class Order {
 
     public List<OrderLine> getLines() {
         return lines;
+    }
+
+    public List<OrderTracking> getTrackings() {
+        return trackings;
     }
 }

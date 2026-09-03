@@ -126,7 +126,8 @@ public class QuoteService {
                 request.trackingNumber(),
                 request.carrier(),
                 request.note(),
-                poLines
+                poLines,
+                null
         ));
         quote.markConverted(created);
         return toView(quotes.save(quote), medians);

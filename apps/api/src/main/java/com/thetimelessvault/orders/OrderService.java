@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -74,12 +75,14 @@ public class OrderService {
     public Page<Order> list(int page, int size) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
-        return orders.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
+        Page<Order> result = orders.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
+        result.getContent().forEach(OrderService::loadTrackings);
+        return result;
     }
 
     @Transactional(readOnly = true)
     public Order get(UUID id) {
-        return orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found"));
+        return loadTrackings(orders.findById(id).orElseThrow(() -> ApiException.notFound("Order not found")));
     }
 
     public Optional<Instant> lastSyncedAt() {
@@ -158,10 +161,15 @@ public class OrderService {
         if (request == null) {
             return order;
         }
-        OrderStatus previous = order.applyManual(request.status(), request.trackingNumber(), request.shippingProvider());
+        OrderStatus previous = order.applyManual(
+                request.status(),
+                request.trackingNumber(),
+                request.shippingProvider(),
+                request.trackings()
+        );
         orders.save(order);
         afterStatusChange(order, previous);
-        return order;
+        return loadTrackings(order);
     }
 
     @Transactional
@@ -193,7 +201,7 @@ public class OrderService {
             }
             attachLine(order, incoming);
             refreshCalculatedFee(order);
-            return orders.save(order);
+            return loadTrackings(orders.save(order));
         }
         if (orders.existsByPlatformAndExternalOrderId(incoming.platform(), incoming.orderId())) {
             throw ApiException.conflict("An order for that channel already exists");
@@ -203,10 +211,15 @@ public class OrderService {
             Order order = Order.header(incoming);
             attachLine(order, incoming);
             refreshCalculatedFee(order);
-            return orders.save(order);
+            return loadTrackings(orders.save(order));
         } catch (DataIntegrityViolationException e) {
             throw ApiException.conflict("An order for that channel already exists");
         }
+    }
+
+    private static Order loadTrackings(Order order) {
+        order.getTrackings().size();
+        return order;
     }
 
     public record ManualOrderRequest(
@@ -231,7 +244,8 @@ public class OrderService {
     public record UpdateOrderRequest(
             OrderStatus status,
             String trackingNumber,
-            String shippingProvider
+            String shippingProvider,
+            List<ShipmentTracking> trackings
     ) {
     }
 

@@ -76,10 +76,12 @@ public class OrderController {
             OrderStatus status,
             String trackingNumber,
             String shippingProvider,
+            List<TrackingView> trackings,
             List<OrderLineView> lines
     ) {
         static OrderView from(Order order) {
             List<OrderLineView> lines = order.getLines().stream().map(OrderLineView::from).toList();
+            List<TrackingView> trackings = order.getTrackings().stream().map(TrackingView::from).toList();
             OrderLine primary = order.primaryLine();
             return new OrderView(
                     order.getId(),
@@ -101,8 +103,15 @@ public class OrderController {
                     order.getStatus(),
                     order.getTrackingNumber(),
                     order.getShippingProvider(),
+                    trackings,
                     lines
             );
+        }
+    }
+
+    public record TrackingView(UUID id, String trackingNumber, String shippingProvider) {
+        static TrackingView from(OrderTracking tracking) {
+            return new TrackingView(tracking.getId(), tracking.getTrackingNumber(), tracking.getCarrier());
         }
     }
 

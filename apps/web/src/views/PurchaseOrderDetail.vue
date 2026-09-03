@@ -7,6 +7,7 @@ import {
   LISTING_TITLE_MAX,
   PURCHASE_ORDER_STATUSES,
   SHIPPING_CARRIERS,
+  trackingEntries,
   type Catalog,
   type PurchaseOrder,
   type PurchaseOrderLine,
@@ -16,7 +17,7 @@ import {
 import { askConfirm } from "../confirm";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
 import SupplierModal from "../components/SupplierModal.vue";
-import TrackingNumber from "../components/TrackingNumber.vue";
+import TrackingEntries, { type TrackingDraft } from "../components/TrackingEntries.vue";
 
 type DraftLine = {
   key: string;
@@ -38,8 +39,7 @@ const order = ref<PurchaseOrder | null>(null);
 const supplierList = ref<Supplier[]>([]);
 const supplierId = ref("");
 const expectedArrival = ref("");
-const trackingNumber = ref("");
-const carrier = ref<ShippingCarrier | "">("");
+const trackings = ref<TrackingDraft[]>([{ trackingNumber: "", carrier: "" }]);
 const note = ref("");
 let lineSeq = 0;
 const emptyLine = (): DraftLine => {
@@ -99,8 +99,8 @@ const apply = (loaded: PurchaseOrder) => {
   order.value = loaded;
   supplierId.value = loaded.supplierId;
   expectedArrival.value = loaded.expectedArrival || "";
-  trackingNumber.value = loaded.trackingNumber || "";
-  carrier.value = loaded.carrier || "";
+  const entries = trackingEntries(loaded);
+  trackings.value = entries.length ? entries : [{ trackingNumber: "", carrier: "" }];
   note.value = loaded.note || "";
   lines.value = loaded.lines.length ? loaded.lines.map(fromServerLine) : [emptyLine()];
 };
@@ -162,8 +162,14 @@ const removeLine = (key: string) => {
 const payload = () => ({
   supplierId: supplierId.value,
   expectedArrival: expectedArrival.value || null,
-  trackingNumber: trackingNumber.value.trim() || null,
-  carrier: carrier.value || null,
+  trackingNumber: trackings.value.find((row) => row.trackingNumber.trim())?.trackingNumber.trim() || null,
+  carrier: (trackings.value.find((row) => row.trackingNumber.trim())?.carrier || null) as ShippingCarrier | null,
+  trackings: trackings.value
+    .filter((row) => row.trackingNumber.trim())
+    .map((row) => ({
+      trackingNumber: row.trackingNumber.trim(),
+      carrier: (row.carrier || null) as ShippingCarrier | null,
+    })),
   note: note.value.trim() || null,
   lines: lines.value.map((line) => ({
     ...(line.id ? { id: line.id } : {}),
@@ -319,22 +325,12 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
           <label>Expected arrival
             <input v-model="expectedArrival" type="date" :disabled="readOnly" />
           </label>
-          <label>Carrier
-            <select v-model="carrier" :disabled="readOnly">
-              <option value="">None</option>
-              <option v-for="row in SHIPPING_CARRIERS" :key="row.value" :value="row.value">{{ row.label }}</option>
-            </select>
-          </label>
-          <label>Tracking
-            <div class="po-tracking">
-              <input
-                v-model="trackingNumber"
-                class="order-field"
-                :disabled="readOnly"
-                placeholder="Tracking number"
-              />
-              <TrackingNumber v-if="trackingNumber" :tracking="trackingNumber" :provider="carrier" />
-            </div>
+          <label class="po-tracking-field">Tracking
+            <TrackingEntries
+              v-model="trackings"
+              :carriers="SHIPPING_CARRIERS"
+              :disabled="readOnly"
+            />
           </label>
         </div>
         <details class="po-note">
