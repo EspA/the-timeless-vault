@@ -159,14 +159,21 @@ const FLOWS: Record<FlowId, FlowDef> = {
         title: "Price guard",
         subtitle: "PRICE_HIGH / LOW",
         detail:
-          "Compares your live eBay or BrickLink listing price to the scanned market average. Fires PRICE HIGH when you are above the high threshold, PRICE LOW when you are below the low threshold. Repricing stays manual.",
+          "Compares your live eBay or BrickLink listing price to the scanned market median. The first time a listing is out of range it notifies once and adds a Listing adjustment row. Dismiss hides the row until the next calendar day if the price is still out of range. A correct price fix resolves it.",
       },
       {
         id: "alerts",
         title: "Alerts + email",
         subtitle: "Inbox in the app",
         detail:
-          "Alerts appear on the Alerts screen with an unread badge. Buying opportunities and price-guard events are emailed to the address in Settings (Mailpit locally, SMTP in production).",
+          "Alerts appear on Notifications with an unread badge. Buying opportunities and the first PRICE HIGH / PRICE LOW for a listing are emailed to the address in Settings. Ongoing price work lives on Listing adjustment.",
+      },
+      {
+        id: "listing-adjustment",
+        title: "Listing adjustment",
+        subtitle: "Queue to reprice",
+        detail:
+          "Active PRICE HIGH / PRICE LOW rows stay on this Market Watch page until dismissed or the listing price is back within the threshold.",
       },
     ],
     edges: [
@@ -179,6 +186,7 @@ const FLOWS: Record<FlowId, FlowDef> = {
       { from: "snapshot", to: "guard" },
       { from: "new-lot", to: "alerts" },
       { from: "guard", to: "alerts" },
+      { from: "guard", to: "listing-adjustment" },
     ],
   },
   sales: {
@@ -348,13 +356,18 @@ const FEATURES: Array<{
   },
   {
     area: "Watch",
+    screen: "Listing adjustment",
+    what: "Active PRICE HIGH / PRICE LOW queue with dismiss and inventory links.",
+  },
+  {
+    area: "Watch",
     screen: "Scan logs",
     what: "Each automatic or manual scan run.",
   },
   {
     area: "Watch",
-    screen: "Alerts",
-    what: "New-lot opportunities and PRICE HIGH / PRICE LOW, with email.",
+    screen: "Notifications",
+    what: "New-lot opportunities and the first PRICE HIGH / PRICE LOW, with email.",
   },
   {
     area: "Settings",

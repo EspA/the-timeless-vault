@@ -6,6 +6,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.thetimelessvault.alerts.ListingAdjustmentService;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
@@ -20,6 +21,7 @@ import static org.mockito.Mockito.when;
 class MarketScanServicePurgeTest {
 
     @Mock ScanLogRepository scanLogs;
+    @Mock ListingAdjustmentService listingAdjustments;
     @Mock ObjectProvider<MarketScanService> self;
     @InjectMocks MarketScanService service;
 

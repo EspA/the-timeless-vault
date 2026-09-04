@@ -2,6 +2,7 @@ package com.thetimelessvault.market;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thetimelessvault.opportunities.BuyingOpportunityService;
+import com.thetimelessvault.alerts.ListingAdjustmentService;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
 import com.thetimelessvault.catalog.CatalogItem;
@@ -46,6 +47,7 @@ class MarketScanServiceDueWatchesTest {
     @Mock MarketListingRepository marketListings;
     @Mock ChannelListingRepository channelListings;
     @Mock PriceGuardRepository priceGuards;
+    @Mock ListingAdjustmentService listingAdjustments;
     @Mock EbayClient ebayClient;
     @Mock BrickLinkClient brickLinkClient;
     @Mock BuyingOpportunityService opportunities;

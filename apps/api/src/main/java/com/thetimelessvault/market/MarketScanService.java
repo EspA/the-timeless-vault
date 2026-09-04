@@ -1,6 +1,7 @@
 package com.thetimelessvault.market;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.thetimelessvault.alerts.ListingAdjustmentService;
 import com.thetimelessvault.alerts.PriceGuard;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
@@ -52,6 +53,7 @@ public class MarketScanService {
     private final MarketListingRepository marketListings;
     private final ChannelListingRepository channelListings;
     private final PriceGuardRepository priceGuards;
+    private final ListingAdjustmentService listingAdjustments;
     private final EbayClient ebayClient;
     private final BrickLinkClient brickLinkClient;
     private final BuyingOpportunityService opportunities;
@@ -67,6 +69,7 @@ public class MarketScanService {
             MarketListingRepository marketListings,
             ChannelListingRepository channelListings,
             PriceGuardRepository priceGuards,
+            ListingAdjustmentService listingAdjustments,
             EbayClient ebayClient,
             BrickLinkClient brickLinkClient,
             BuyingOpportunityService opportunities,
@@ -81,6 +84,7 @@ public class MarketScanService {
         this.marketListings = marketListings;
         this.channelListings = channelListings;
         this.priceGuards = priceGuards;
+        this.listingAdjustments = listingAdjustments;
         this.ebayClient = ebayClient;
         this.brickLinkClient = brickLinkClient;
         this.opportunities = opportunities;
@@ -392,6 +396,7 @@ public class MarketScanService {
         for (PriceGuard guard : priceGuards.findEnabledWithListing()) {
             ChannelListing listing = guard.getChannelListing();
             if (listing.getStatus() != ListingStatus.PUBLISHED || listing.getLastPublishedPrice() == null) {
+                listingAdjustments.resolveInRange(listing);
                 continue;
             }
             String condition = listing.getPlatform() == Platform.BRICKLINK ? "N" : "NEW";
@@ -406,11 +411,13 @@ public class MarketScanService {
                 BigDecimal high = market.multiply(BigDecimal.ONE.add(highPercent.movePointLeft(2)));
                 BigDecimal low = market.multiply(BigDecimal.ONE.subtract(lowPercent.movePointLeft(2)));
                 if (yours.compareTo(high) > 0) {
-                    opportunities.recordPriceGuard(
+                    listingAdjustments.recordOutOfRange(
                             listing, BuyingOpportunity.TYPE_PRICE_HIGH, yours, market, highPercent, lowPercent, snapshot.getScannedAt());
                 } else if (yours.compareTo(low) < 0) {
-                    opportunities.recordPriceGuard(
+                    listingAdjustments.recordOutOfRange(
                             listing, BuyingOpportunity.TYPE_PRICE_LOW, yours, market, highPercent, lowPercent, snapshot.getScannedAt());
+                } else {
+                    listingAdjustments.resolveInRange(listing);
                 }
             });
         }

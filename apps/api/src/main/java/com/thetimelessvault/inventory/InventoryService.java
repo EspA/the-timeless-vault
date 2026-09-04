@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -167,6 +168,30 @@ public class InventoryService {
         }
         if (request.notes() != null) {
             item.setNotes(request.notes());
+        }
+        item.touch();
+        return items.save(item);
+    }
+
+    @Transactional
+    public InventoryItem updateChannelPrice(UUID id, Platform platform, BigDecimal price) {
+        if (price == null || price.compareTo(new BigDecimal("0.01")) < 0) {
+            throw ApiException.badRequest("Price must be at least 0.01");
+        }
+        if (platform == null || !platform.isListingChannel()) {
+            throw ApiException.badRequest("Choose a sales channel to update");
+        }
+        InventoryItem item = get(id);
+        switch (platform) {
+            case EBAY -> {
+                item.setEbayPrice(price);
+                item.setPrice(price);
+                item.setMinimumOffer(ChannelPrices.minimumOffer(price));
+            }
+            case BRICKLINK -> item.setBricklinkPrice(price);
+            case BRICKOWL -> item.setBrickowlPrice(price);
+            case SHOPIFY -> item.setShopifyPrice(price);
+            case LOCAL -> throw ApiException.badRequest("Choose a sales channel to update");
         }
         item.touch();
         return items.save(item);

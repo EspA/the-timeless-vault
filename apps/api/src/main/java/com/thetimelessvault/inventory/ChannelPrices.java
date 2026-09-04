@@ -1,5 +1,7 @@
 package com.thetimelessvault.inventory;
 
+import com.thetimelessvault.common.Platform;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -27,6 +29,19 @@ public final class ChannelPrices {
 
     public static BigDecimal shopify(BigDecimal cost) {
         return markedUp(cost, SHOPIFY);
+    }
+
+    public static BigDecimal forPlatform(Platform platform, BigDecimal cost) {
+        if (platform == null) {
+            return markedUp(cost, BigDecimal.ONE);
+        }
+        return switch (platform) {
+            case EBAY -> ebay(cost);
+            case BRICKLINK -> bricklink(cost);
+            case BRICKOWL -> brickowl(cost);
+            case SHOPIFY -> shopify(cost);
+            case LOCAL -> markedUp(cost, BigDecimal.ONE);
+        };
     }
 
     public static BigDecimal minimumOffer(BigDecimal ebayPrice) {

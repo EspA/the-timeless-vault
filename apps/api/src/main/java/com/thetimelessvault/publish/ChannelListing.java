@@ -179,6 +179,16 @@ public class ChannelListing {
         return brickowlStatus;
     }
 
+    public String visibilityStatus() {
+        return switch (platform) {
+            case EBAY -> ebayStatus;
+            case BRICKLINK -> bricklinkStatus;
+            case SHOPIFY -> shopifyStatus;
+            case BRICKOWL -> brickowlStatus;
+            case LOCAL -> null;
+        };
+    }
+
     public void setBrickowlStatus(String brickowlStatus) {
         this.brickowlStatus = brickowlStatus;
         this.updatedAt = Instant.now();

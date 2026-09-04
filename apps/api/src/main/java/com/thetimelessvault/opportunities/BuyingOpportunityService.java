@@ -154,7 +154,7 @@ public class BuyingOpportunityService {
             BigDecimal lowPercent,
             Instant scannedAt
     ) {
-        String dedupe = type + ":" + listing.getId() + ":" + market.stripTrailingZeros().toPlainString();
+        String dedupe = type + ":" + listing.getId() + ":" + UUID.randomUUID();
         if (opportunities.findByDedupeKey(dedupe).isPresent()) {
             return;
         }
@@ -418,7 +418,7 @@ public class BuyingOpportunityService {
         email(opportunity, null, null, null, null, Instant.now(), null, reason);
     }
 
-    static String catalogHeading(CatalogItem catalog) {
+    public static String catalogHeading(CatalogItem catalog) {
         if (catalog == null) {
             return "";
         }
@@ -427,7 +427,7 @@ public class BuyingOpportunityService {
         return (setNumber + " " + name).trim();
     }
 
-    static String listingUrl(ChannelListing listing) {
+    public static String listingUrl(ChannelListing listing) {
         String liveUrl = listing.getLiveUrl();
         if (usableHttpUrl(liveUrl) && !brokenBrickLinkStoreUrl(liveUrl)) {
             return liveUrl;

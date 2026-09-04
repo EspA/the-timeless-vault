@@ -144,6 +144,7 @@ onUnmounted(() => {
           <p class="nav-label">Market Watch</p>
           <router-link to="/watches">Items watch</router-link>
           <router-link to="/market">Market Monitoring</router-link>
+          <router-link to="/listing-adjustments">Listing adjustment</router-link>
           <router-link to="/scan-logs">Scan logs</router-link>
         </div>
         <div class="nav-group">

@@ -164,6 +164,21 @@ export type ChannelListing = {
   lastError?: string;
 };
 
+export type ListingAdjustment = {
+  id: string;
+  when: string;
+  type: "PRICE_HIGH" | "PRICE_LOW" | string;
+  platform?: string;
+  listingUrl?: string;
+  listingStatus?: string;
+  inventoryItemId?: string;
+  inventoryLabel?: string;
+  cost?: number | null;
+  currentListingPrice?: number | null;
+  marketPrice?: number | null;
+  recommendedPrice?: number | null;
+};
+
 export type OrderStatus = "OPEN" | "SHIPPED" | "COMPLETED" | "CANCELLED";
 
 export type OrderLine = {

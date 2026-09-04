@@ -37,6 +37,7 @@ flowchart LR
   snapshot --> guard[Price HIGH / LOW]
   newLot --> alerts[Alerts + email]
   guard --> alerts
+  guard --> adjust[Listing adjustment]
 ```
 
 ## Sales
