@@ -5,6 +5,7 @@ import com.thetimelessvault.shipping.CarrierTrackingClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,6 +30,7 @@ public class PurchaseOrderDeliverySyncService {
         this.tracking = tracking;
     }
 
+    @Transactional
     public PurchaseOrderDtos.PurchaseOrderView syncView(UUID id) {
         PurchaseOrder order = purchaseOrders.get(id);
         if (!order.isOpen()) {
@@ -75,6 +77,7 @@ public class PurchaseOrderDeliverySyncService {
         return purchaseOrders.view(id);
     }
 
+    @Transactional
     public int syncDeliveredShipments() {
         List<PurchaseOrder> inbound = orders.findByStatusInAndTrackingNumberIsNotNull(
                 List.of(PurchaseOrderStatus.IN_TRANSIT, PurchaseOrderStatus.DELIVERED)

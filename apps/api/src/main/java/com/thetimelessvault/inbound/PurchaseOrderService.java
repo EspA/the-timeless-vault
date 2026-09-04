@@ -76,12 +76,19 @@ public class PurchaseOrderService {
     public Page<PurchaseOrder> list(int page, int size) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
-        return orders.findAll(PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt")));
+        Page<PurchaseOrder> result = orders.findAll(PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt")));
+        result.getContent().forEach(PurchaseOrderService::loadTrackings);
+        return result;
     }
 
     @Transactional(readOnly = true)
     public PurchaseOrder get(UUID id) {
-        return orders.findWithDetailsById(id).orElseThrow(() -> ApiException.notFound("Purchase order not found"));
+        return loadTrackings(orders.findWithDetailsById(id).orElseThrow(() -> ApiException.notFound("Purchase order not found")));
+    }
+
+    private static PurchaseOrder loadTrackings(PurchaseOrder order) {
+        order.getTrackings().size();
+        return order;
     }
 
     @Transactional
