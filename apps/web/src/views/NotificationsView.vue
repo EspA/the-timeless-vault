@@ -111,6 +111,8 @@ const linkLabel = (alert: NotificationEvent) => {
   return "Open listing";
 };
 
+const opensInNewTab = (alert: NotificationEvent) => linkLabel(alert) === "Open market";
+
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
 
 const rangeLabel = computed(() => {
@@ -292,7 +294,13 @@ const readAll = async () => {
               <td>
                 <strong>{{ alert.title }}</strong>
                 <div class="muted">{{ alert.body }}</div>
-                <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact notify-open" :to="alert.url">{{ linkLabel(alert) }}</router-link>
+                <router-link
+                  v-if="alert.url && listingHref(alert.url)"
+                  class="btn secondary compact notify-open"
+                  :to="alert.url"
+                  :target="opensInNewTab(alert) ? '_blank' : undefined"
+                  :rel="opensInNewTab(alert) ? 'noopener noreferrer' : undefined"
+                >{{ linkLabel(alert) }}</router-link>
                 <a v-else-if="alert.url" class="btn secondary compact notify-open" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
               </td>
               <td>
@@ -331,7 +339,13 @@ const readAll = async () => {
           <h3>{{ alert.title }}</h3>
           <p v-if="alert.body" class="muted" style="margin:0">{{ alert.body }}</p>
           <div class="list-card-actions">
-            <router-link v-if="alert.url && listingHref(alert.url)" class="btn secondary compact" :to="alert.url">{{ linkLabel(alert) }}</router-link>
+            <router-link
+              v-if="alert.url && listingHref(alert.url)"
+              class="btn secondary compact"
+              :to="alert.url"
+              :target="opensInNewTab(alert) ? '_blank' : undefined"
+              :rel="opensInNewTab(alert) ? 'noopener noreferrer' : undefined"
+            >{{ linkLabel(alert) }}</router-link>
             <a v-else-if="alert.url" class="btn secondary compact" :href="alert.url" target="_blank" rel="noopener noreferrer">{{ linkLabel(alert) }}</a>
             <button v-if="!alert.read" class="btn secondary compact" type="button" @click="read(alert.id)">Mark read</button>
             <button v-else class="btn secondary compact" type="button" @click="unread(alert.id)">Mark unread</button>

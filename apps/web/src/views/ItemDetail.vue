@@ -956,7 +956,7 @@ const remove = async () => {
     <div class="card grid">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap">
         <h3 style="margin:0">Market prices <span class="muted" style="font-size:1rem;font-weight:400">{{ marketScanLabel }}</span></h3>
-        <router-link class="btn secondary compact" :to="`/market/${item.catalog.id}`">Open market</router-link>
+        <router-link class="btn secondary compact" :to="`/market/${item.catalog.id}`" target="_blank" rel="noopener noreferrer">Open market</router-link>
       </div>
       <div v-if="hasMarketStats" class="grid two">
         <label>Median
