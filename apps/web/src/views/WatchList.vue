@@ -364,7 +364,7 @@ onMounted(async () => {
             <span>BrickLink {{ scanFrequency(watch.bricklinkScanIntervalMinutes) }}</span>
           </div>
           <div class="list-card-actions">
-            <router-link class="btn secondary compact" :to="`/market/${watch.catalogId}`">Open market</router-link>
+            <router-link class="btn secondary compact" :to="`/market/${watch.catalogId}`" target="_blank" rel="noopener noreferrer">Open market</router-link>
             <router-link class="btn secondary compact" :to="`/watches/${watch.id}`">Filters</router-link>
             <button class="btn danger compact" type="button" @click="remove(watch)">Delete</button>
           </div>

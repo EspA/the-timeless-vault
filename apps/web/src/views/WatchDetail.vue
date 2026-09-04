@@ -134,7 +134,7 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
         <h1>{{ watch.name }}</h1>
         <p v-if="setSummary" class="muted">{{ setSummary }}</p>
       </div>
-      <router-link class="btn secondary" :to="`/market/${watch.catalogId}`">Open market dashboard</router-link>
+      <router-link class="btn secondary" :to="`/market/${watch.catalogId}`" target="_blank" rel="noopener noreferrer">Open market dashboard</router-link>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
 
