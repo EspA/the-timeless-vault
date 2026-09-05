@@ -1,0 +1,2 @@
+ALTER TABLE set_watch
+    ADD COLUMN ebay_item_location VARCHAR(32) NOT NULL DEFAULT 'NORTH_AMERICA';

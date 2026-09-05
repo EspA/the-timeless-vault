@@ -255,6 +255,9 @@ public class OrderService {
         }
         boolean cancelled = incoming.status() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.CANCELLED;
         InventoryItem item = resolveItem(incoming);
+        if (incoming.platform() == Platform.EBAY && alreadyOnEbayOrder(order, incoming, item)) {
+            return false;
+        }
         boolean created = false;
         if (item == null && !cancelled) {
             CreatedItem createdItem = createSoldItem(incoming);
@@ -271,6 +274,13 @@ public class OrderService {
             opportunities.recordNewSale(order, item);
         }
         return true;
+    }
+
+    private static boolean alreadyOnEbayOrder(Order order, ChannelOrder incoming, InventoryItem item) {
+        if (item != null && order.hasInventoryItem(item.getId())) {
+            return true;
+        }
+        return incoming.sku() != null && order.hasSku(incoming.sku());
     }
 
     private void refreshCalculatedFee(Order order) {

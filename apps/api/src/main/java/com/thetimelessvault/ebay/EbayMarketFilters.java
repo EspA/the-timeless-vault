@@ -14,6 +14,10 @@ public final class EbayMarketFilters {
 
     public static final String DEFAULT_EXCLUDE_WORDS =
             "-custom -moc -replica -case -kit -led -minifigure -no -minifigures -figures -bricks -blocks -minifig -minifigs -figure -sticker -stickers -display -copy -creative -bag -compatible -only -generic -manuals -manual -displaycase -brick -toys -unofficial -kids -gift -fake -adults -mini-figures -mock";
+    public static final String LOCATION_NORTH_AMERICA = "NORTH_AMERICA";
+    public static final String LOCATION_UNITED_STATES = "UNITED_STATES";
+    public static final String LOCATION_WORLDWIDE = "WORLDWIDE";
+    private static final Set<String> UNITED_STATES = Set.of("US", "USA");
 
     private static final Set<String> NORTH_AMERICA = Set.of("US", "USA", "CA", "CAN", "MX", "MEX");
     private static final Set<String> NORTH_AMERICA_MARKETPLACES = Set.of("EBAY_US", "EBAY_CA", "EBAY_MOTORS");
@@ -25,6 +29,31 @@ public final class EbayMarketFilters {
     private EbayMarketFilters() {
     }
 
+    public static String normalizeItemLocation(String location) {
+        if (location == null || location.isBlank()) {
+            return LOCATION_NORTH_AMERICA;
+        }
+        String value = location.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+        if (value.equals("US") || value.equals("USA") || value.equals(LOCATION_UNITED_STATES)) {
+            return LOCATION_UNITED_STATES;
+        }
+        if (value.equals(LOCATION_WORLDWIDE) || value.equals("ANYWHERE") || value.equals("ALL")) {
+            return LOCATION_WORLDWIDE;
+        }
+        return LOCATION_NORTH_AMERICA;
+    }
+
+    public static boolean locatedIn(JsonNode item, String location) {
+        String normalized = normalizeItemLocation(location);
+        if (LOCATION_WORLDWIDE.equals(normalized)) {
+            return true;
+        }
+        if (LOCATION_UNITED_STATES.equals(normalized)) {
+            return locatedInUnitedStates(item);
+        }
+        return locatedInNorthAmerica(item);
+    }
+
     public static boolean locatedInNorthAmerica(JsonNode item) {
         String country = item.path("itemLocation").path("country").asText("");
         if (!country.isBlank()) {
@@ -33,6 +62,18 @@ public final class EbayMarketFilters {
         String marketplace = item.path("listingMarketplaceId").asText("");
         if (!marketplace.isBlank()) {
             return NORTH_AMERICA_MARKETPLACES.contains(marketplace.trim().toUpperCase(Locale.ROOT));
+        }
+        return true;
+    }
+
+    public static boolean locatedInUnitedStates(JsonNode item) {
+        String country = item.path("itemLocation").path("country").asText("");
+        if (!country.isBlank()) {
+            return UNITED_STATES.contains(country.trim().toUpperCase(Locale.ROOT));
+        }
+        String marketplace = item.path("listingMarketplaceId").asText("");
+        if (!marketplace.isBlank()) {
+            return "EBAY_US".equals(marketplace.trim().toUpperCase(Locale.ROOT));
         }
         return true;
     }
@@ -155,12 +196,22 @@ public final class EbayMarketFilters {
     }
 
     public static boolean matchesWatch(JsonNode item, int feedbackMin, String excludeWords) {
-        return matchesWatch(item, feedbackMin, null, excludeWords);
+        return matchesWatch(item, feedbackMin, null, excludeWords, LOCATION_NORTH_AMERICA);
     }
 
     public static boolean matchesWatch(JsonNode item, int feedbackMin, String searchQuery, String excludeWords) {
+        return matchesWatch(item, feedbackMin, searchQuery, excludeWords, LOCATION_NORTH_AMERICA);
+    }
+
+    public static boolean matchesWatch(
+            JsonNode item,
+            int feedbackMin,
+            String searchQuery,
+            String excludeWords,
+            String itemLocation
+    ) {
         String title = item.path("title").asText("");
-        return locatedInNorthAmerica(item)
+        return locatedIn(item, itemLocation)
                 && feedbackAtLeast(item, feedbackMin)
                 && titleMatchesSearch(title, searchQuery)
                 && titleExcludes(title, excludeWords);

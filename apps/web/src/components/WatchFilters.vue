@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { SCAN_INTERVALS } from "../api";
+import { EBAY_ITEM_LOCATIONS, SCAN_INTERVALS } from "../api";
 import ChannelLogo from "./ChannelLogo.vue";
 
 defineProps<{
@@ -11,6 +11,7 @@ const enabled = defineModel<boolean>("enabled", { required: true });
 const ebaySearchQuery = defineModel<string>("ebaySearchQuery", { required: true });
 const ebayExcludeWords = defineModel<string>("ebayExcludeWords", { required: true });
 const ebayFeedbackMin = defineModel<number>("ebayFeedbackMin", { required: true });
+const ebayItemLocation = defineModel<string>("ebayItemLocation", { required: true });
 const ebayScanIntervalMinutes = defineModel<number>("ebayScanIntervalMinutes", { required: true });
 const bricklinkScanIntervalMinutes = defineModel<number>("bricklinkScanIntervalMinutes", { required: true });
 const minPrice = defineModel<number | null>("minPrice", { required: true });
@@ -79,7 +80,13 @@ const parsePrice = (raw: string) => {
         </label>
         <label>Item condition <input value="New" disabled /></label>
         <label>Feedback count min <input v-model.number="ebayFeedbackMin" type="number" min="0" /></label>
-        <label>Items located <input value="North America" disabled /></label>
+        <label>Items located
+          <select v-model="ebayItemLocation">
+            <option v-for="option in EBAY_ITEM_LOCATIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
         <label>Listing type <input value="All Item Types" disabled /></label>
       </div>
       <div class="card grid">

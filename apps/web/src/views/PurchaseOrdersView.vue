@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { api, extraTrackingCount, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, trackingEntries, type PurchaseOrder, type PurchaseOrderPage } from "../api";
+import { api, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, trackingEntries, type PurchaseOrder, type PurchaseOrderPage } from "../api";
 import { askConfirm } from "../confirm";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
-import TrackingNumber from "../components/TrackingNumber.vue";
+import TrackingNumbers from "../components/TrackingNumbers.vue";
 
 const router = useRouter();
 const PAGE_SIZE = 10;
@@ -247,8 +247,7 @@ onMounted(() => {
               <td>{{ dayLabel(row.expectedArrival) }}</td>
               <td>{{ carrierLabel(row.carrier) }}</td>
               <td>
-                <TrackingNumber :tracking="row.trackingNumber" :provider="row.carrier" />
-                <span v-if="extraTrackingCount(row)" class="muted"> +{{ extraTrackingCount(row) }}</span>
+                <TrackingNumbers :row="row" />
               </td>
               <td>{{ whenLabel(row.createdAt) }}</td>
             </tr>
@@ -274,8 +273,7 @@ onMounted(() => {
           <p class="muted" style="margin:0">Carrier {{ carrierLabel(row.carrier) }}</p>
           <p class="muted" style="margin:0">
             Tracking
-            <TrackingNumber :tracking="row.trackingNumber" :provider="row.carrier" />
-            <span v-if="extraTrackingCount(row)"> +{{ extraTrackingCount(row) }}</span>
+            <TrackingNumbers :row="row" />
           </p>
         </article>
         <p v-if="!visible.length" class="muted">{{ loading ? "Loading…" : "No purchase orders yet." }}</p>

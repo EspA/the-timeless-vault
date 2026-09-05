@@ -5,6 +5,7 @@ import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.catalog.CatalogService;
 import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.common.ThemeMapper;
+import com.thetimelessvault.ebay.EbayMarketFilters;
 import com.thetimelessvault.market.ScanLogRepository;
 import com.thetimelessvault.settings.WatchDefaults;
 import org.springframework.stereotype.Service;
@@ -60,6 +61,7 @@ public class SetWatchService {
             String ebaySearchQuery,
             Integer ebayFeedbackMin,
             String ebayExcludeWords,
+            String ebayItemLocation,
             Integer ebayScanIntervalMinutes,
             Integer bricklinkScanIntervalMinutes,
             BigDecimal minPrice,
@@ -70,7 +72,7 @@ public class SetWatchService {
             throw ApiException.conflict("This set is already on the watch list.");
         }
         SetWatch watch = SetWatch.create(catalog);
-        applyFilters(watch, catalog, enabled == null || enabled, ebaySearchQuery, ebayFeedbackMin, ebayExcludeWords, ebayScanIntervalMinutes, bricklinkScanIntervalMinutes, minPrice, maxPrice, true);
+        applyFilters(watch, catalog, enabled == null || enabled, ebaySearchQuery, ebayFeedbackMin, ebayExcludeWords, ebayItemLocation, ebayScanIntervalMinutes, bricklinkScanIntervalMinutes, minPrice, maxPrice, true);
         return get(watches.saveAndFlush(watch).getId());
     }
 
@@ -87,7 +89,7 @@ public class SetWatchService {
             return false;
         }
         SetWatch watch = SetWatch.create(catalog);
-        applyFilters(watch, catalog, enabled, null, null, null, null, null, null, null, true);
+        applyFilters(watch, catalog, enabled, null, null, null, null, null, null, null, null, true);
         watches.saveAndFlush(watch);
         return true;
     }
@@ -99,13 +101,14 @@ public class SetWatchService {
             String ebaySearchQuery,
             Integer ebayFeedbackMin,
             String ebayExcludeWords,
+            String ebayItemLocation,
             Integer ebayScanIntervalMinutes,
             Integer bricklinkScanIntervalMinutes,
             BigDecimal minPrice,
             BigDecimal maxPrice
     ) {
         SetWatch watch = get(id);
-        applyFilters(watch, watch.getCatalogItem(), enabled, ebaySearchQuery, ebayFeedbackMin, ebayExcludeWords, ebayScanIntervalMinutes, bricklinkScanIntervalMinutes, minPrice, maxPrice, false);
+        applyFilters(watch, watch.getCatalogItem(), enabled, ebaySearchQuery, ebayFeedbackMin, ebayExcludeWords, ebayItemLocation, ebayScanIntervalMinutes, bricklinkScanIntervalMinutes, minPrice, maxPrice, false);
         watch.touch();
         return get(watches.saveAndFlush(watch).getId());
     }
@@ -138,6 +141,7 @@ public class SetWatchService {
             String ebaySearchQuery,
             Integer ebayFeedbackMin,
             String ebayExcludeWords,
+            String ebayItemLocation,
             Integer ebayScanIntervalMinutes,
             Integer bricklinkScanIntervalMinutes,
             BigDecimal minPrice,
@@ -155,6 +159,11 @@ public class SetWatchService {
         }
         if (ebayFeedbackMin != null) {
             watch.setEbayFeedbackMin(ebayFeedbackMin);
+        }
+        if (ebayItemLocation != null && !ebayItemLocation.isBlank()) {
+            watch.setEbayItemLocation(ebayItemLocation);
+        } else if (creating && (watch.getEbayItemLocation() == null || watch.getEbayItemLocation().isBlank())) {
+            watch.setEbayItemLocation(EbayMarketFilters.LOCATION_NORTH_AMERICA);
         }
         watch.setEbayExcludeWords(resolveExcludeWords(
                 ebayExcludeWords,

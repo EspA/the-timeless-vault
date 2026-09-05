@@ -189,6 +189,20 @@ public class Order {
         return findLine(externalLineId) != null;
     }
 
+    public boolean hasInventoryItem(UUID itemId) {
+        if (itemId == null) {
+            return false;
+        }
+        return lines.stream().anyMatch(line -> itemId.equals(line.getInventoryItemId()));
+    }
+
+    public boolean hasSku(String sku) {
+        if (sku == null || sku.isBlank()) {
+            return false;
+        }
+        return lines.stream().anyMatch(line -> sku.equalsIgnoreCase(line.getSku()));
+    }
+
     public OrderLine primaryLine() {
         return lines.isEmpty() ? null : lines.getFirst();
     }

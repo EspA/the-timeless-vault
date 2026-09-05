@@ -308,6 +308,12 @@ button, .btn {
   font-size: 0.8rem;
   white-space: nowrap;
 }
+.tracking-numbers {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
 .po-tracking-field {
   grid-column: 1 / -1;
 }

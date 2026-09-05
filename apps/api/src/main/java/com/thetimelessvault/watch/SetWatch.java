@@ -1,6 +1,7 @@
 package com.thetimelessvault.watch;
 
 import com.thetimelessvault.catalog.CatalogItem;
+import com.thetimelessvault.ebay.EbayMarketFilters;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -81,6 +82,9 @@ public class SetWatch {
 
     @Column(name = "ebay_feedback_min", nullable = false)
     private int ebayFeedbackMin = 1;
+
+    @Column(name = "ebay_item_location", nullable = false)
+    private String ebayItemLocation = "NORTH_AMERICA";
 
     @Column(name = "ebay_scan_interval_minutes", nullable = false)
     private int ebayScanIntervalMinutes = 360;
@@ -303,6 +307,14 @@ public class SetWatch {
 
     public void setEbayFeedbackMin(int ebayFeedbackMin) {
         this.ebayFeedbackMin = Math.max(0, ebayFeedbackMin);
+    }
+
+    public String getEbayItemLocation() {
+        return ebayItemLocation;
+    }
+
+    public void setEbayItemLocation(String ebayItemLocation) {
+        this.ebayItemLocation = EbayMarketFilters.normalizeItemLocation(ebayItemLocation);
     }
 
     public int getEbayScanIntervalMinutes() {

@@ -772,6 +772,7 @@ export type SetWatch = {
   ebaySearchQuery?: string;
   ebayFeedbackMin: number;
   ebayExcludeWords?: string;
+  ebayItemLocation?: string;
   ebayScanIntervalMinutes: number;
   bricklinkScanIntervalMinutes: number;
   minPrice?: number | null;
@@ -782,6 +783,12 @@ export type SetWatch = {
 
 export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 360;
 export const DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES = 360;
+export const DEFAULT_EBAY_ITEM_LOCATION = "NORTH_AMERICA";
+export const EBAY_ITEM_LOCATIONS = [
+  { value: "NORTH_AMERICA", label: "North America" },
+  { value: "UNITED_STATES", label: "United States" },
+  { value: "WORLDWIDE", label: "Worldwide" },
+] as const;
 
 export type Supplier = {
   id: string;

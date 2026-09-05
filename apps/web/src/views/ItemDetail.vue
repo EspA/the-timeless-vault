@@ -925,6 +925,15 @@ const remove = async () => {
         >
           {{ refreshingCatalog ? "Reloading…" : "Reload Item Info" }}
         </button>
+        <button
+          class="btn secondary"
+          :class="{ saved: justSaved }"
+          type="button"
+          :disabled="saving"
+          @click="saveChanges"
+        >
+          {{ saving ? "Saving…" : justSaved ? "Saved" : "Save" }}
+        </button>
       </div>
       <label>Title
         <input v-model="item.title" :maxlength="LISTING_TITLE_MAX" />
