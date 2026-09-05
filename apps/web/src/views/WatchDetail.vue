@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, DEFAULT_EBAY_SCAN_INTERVAL_MINUTES, DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES, type SetWatch } from "../api";
+import { api, DEFAULT_EBAY_ITEM_LOCATION, DEFAULT_EBAY_SCAN_INTERVAL_MINUTES, DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES, type SetWatch } from "../api";
 import { askConfirm } from "../confirm";
 import WatchFilters from "../components/WatchFilters.vue";
 
@@ -12,6 +12,7 @@ const enabled = ref(true);
 const ebaySearchQuery = ref("");
 const ebayExcludeWords = ref("");
 const ebayFeedbackMin = ref(1);
+const ebayItemLocation = ref(DEFAULT_EBAY_ITEM_LOCATION);
 const ebayScanIntervalMinutes = ref(DEFAULT_EBAY_SCAN_INTERVAL_MINUTES);
 const bricklinkScanIntervalMinutes = ref(DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES);
 const minPrice = ref<number | null>(null);
@@ -56,6 +57,7 @@ const apply = (loaded: SetWatch) => {
   ebaySearchQuery.value = loaded.ebaySearchQuery || "";
   ebayExcludeWords.value = loaded.ebayExcludeWords ?? "";
   ebayFeedbackMin.value = loaded.ebayFeedbackMin ?? 1;
+  ebayItemLocation.value = loaded.ebayItemLocation || DEFAULT_EBAY_ITEM_LOCATION;
   ebayScanIntervalMinutes.value = loaded.ebayScanIntervalMinutes ?? DEFAULT_EBAY_SCAN_INTERVAL_MINUTES;
   bricklinkScanIntervalMinutes.value = loaded.bricklinkScanIntervalMinutes ?? DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES;
   minPrice.value = loaded.minPrice ?? null;
@@ -77,6 +79,7 @@ const save = async () => {
       ebaySearchQuery: ebaySearchQuery.value,
       ebayExcludeWords: ebayExcludeWords.value ?? "",
       ebayFeedbackMin: ebayFeedbackMin.value,
+      ebayItemLocation: ebayItemLocation.value,
       ebayScanIntervalMinutes: ebayScanIntervalMinutes.value,
       bricklinkScanIntervalMinutes: bricklinkScanIntervalMinutes.value,
       minPrice: minPrice.value,
@@ -134,7 +137,7 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
         <h1>{{ watch.name }}</h1>
         <p v-if="setSummary" class="muted">{{ setSummary }}</p>
       </div>
-      <router-link class="btn secondary" :to="`/market/${watch.catalogId}`" target="_blank" rel="noopener noreferrer">Open market dashboard</router-link>
+      <router-link class="btn secondary" :to="`/market/${watch.catalogId}`">Open market dashboard</router-link>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -145,6 +148,7 @@ onBeforeUnmount(() => clearTimeout(savedTimer));
         v-model:ebay-search-query="ebaySearchQuery"
         v-model:ebay-exclude-words="ebayExcludeWords"
         v-model:ebay-feedback-min="ebayFeedbackMin"
+        v-model:ebay-item-location="ebayItemLocation"
         v-model:ebay-scan-interval-minutes="ebayScanIntervalMinutes"
         v-model:bricklink-scan-interval-minutes="bricklinkScanIntervalMinutes"
         v-model:min-price="minPrice"

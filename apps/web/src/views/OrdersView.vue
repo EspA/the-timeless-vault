@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, extraTrackingCount, ORDER_STATUSES, trackingEntries, type Order, type OrderStatus, type OrdersPage } from "../api";
+import { api, ORDER_STATUSES, trackingEntries, type Order, type OrderStatus, type OrdersPage } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import OrderNewModal from "../components/OrderNewModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
-import TrackingNumber from "../components/TrackingNumber.vue";
+import TrackingNumbers from "../components/TrackingNumbers.vue";
 import { askConfirm } from "../confirm";
 
 const PAGE_SIZE = 10;
@@ -334,8 +334,7 @@ onUnmounted(() => {
               <td>{{ money(row.shippingCost ?? 0, row.currency) }}</td>
               <td>{{ money(row.platformFee ?? 0, row.currency) }}</td>
               <td>
-                <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
-                <span v-if="extraTrackingCount(row)" class="muted"> +{{ extraTrackingCount(row) }}</span>
+                <TrackingNumbers :row="row" />
               </td>
               <td>{{ row.shippingProvider || "—" }}</td>
               <td>
@@ -391,8 +390,7 @@ onUnmounted(() => {
           />
           <p class="muted" style="margin:0">
             Tracking
-            <TrackingNumber :tracking="row.trackingNumber" :provider="row.shippingProvider" />
-            <span v-if="extraTrackingCount(row)"> +{{ extraTrackingCount(row) }}</span>
+            <TrackingNumbers :row="row" />
             · {{ row.shippingProvider || "—" }}
           </p>
           <div class="list-card-actions">

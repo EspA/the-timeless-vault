@@ -246,6 +246,7 @@ public class MarketScanService {
         Set<String> previous = previousFingerprints(catalog.getId(), Platform.EBAY);
         String query = ebayQuery(catalog, watch);
         int feedbackMin = watch == null ? 1 : watch.getEbayFeedbackMin();
+        String itemLocation = watch == null ? EbayMarketFilters.LOCATION_NORTH_AMERICA : watch.getEbayItemLocation();
         String excludeWords = watch != null && watch.getEbayExcludeWords() != null
                 ? watch.getEbayExcludeWords()
                 : watchDefaults.excludeWords();
@@ -267,7 +268,7 @@ public class MarketScanService {
         List<MarketListing> newListings = new ArrayList<>();
         snapshots.save(snapshot);
         for (JsonNode item : root.path("itemSummaries")) {
-            if (!EbayMarketFilters.matchesWatch(item, feedbackMin, query, excludeWords)) {
+            if (!EbayMarketFilters.matchesWatch(item, feedbackMin, query, excludeWords, itemLocation)) {
                 continue;
             }
             BigDecimal price = decimal(item.path("price").path("value").asText(null));
@@ -308,7 +309,7 @@ public class MarketScanService {
             setWatches.save(watch);
         }
         if (count == 0 && returned > 0) {
-            return PlatformScanResult.ok(count, "eBay returned " + returned + " listings, but none matched North America, feedback min "
+            return PlatformScanResult.ok(count, "eBay returned " + returned + " listings, but none matched your item location, feedback min "
                     + feedbackMin + ", or your title search/exclude words.");
         }
         if (count == 0) {

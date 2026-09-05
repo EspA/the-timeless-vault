@@ -29,6 +29,25 @@ class EbayMarketFiltersTest {
     }
 
     @Test
+    void worldwideLocationKeepsOverseasListings() throws Exception {
+        var germany = mapper.readTree("""
+                {
+                  "itemLocation": { "country": "DE" },
+                  "seller": { "feedbackScore": 99 }
+                }
+                """);
+        assertTrue(EbayMarketFilters.matchesWatch(germany, 1, null, null, "WORLDWIDE"));
+        assertFalse(EbayMarketFilters.matchesWatch(germany, 1, null, null, "NORTH_AMERICA"));
+        assertFalse(EbayMarketFilters.matchesWatch(germany, 1, null, null, "UNITED_STATES"));
+        assertTrue(EbayMarketFilters.locatedIn(mapper.readTree(
+                "{ \"itemLocation\": { \"country\": \"CA\" } }"), "NORTH_AMERICA"));
+        assertFalse(EbayMarketFilters.locatedIn(mapper.readTree(
+                "{ \"itemLocation\": { \"country\": \"CA\" } }"), "UNITED_STATES"));
+        assertEquals("UNITED_STATES", EbayMarketFilters.normalizeItemLocation("United States"));
+        assertEquals("NORTH_AMERICA", EbayMarketFilters.normalizeItemLocation(null));
+    }
+
+    @Test
     void rejectsOverseasOrLowFeedback() throws Exception {
         assertFalse(EbayMarketFilters.matchesWatch(mapper.readTree("""
                 {

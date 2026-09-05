@@ -349,6 +349,73 @@ class OrderServiceTest {
     }
 
     @Test
+    void ebayFeedbackUpdateDoesNotCreateAnotherSaleForSameSku() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", "333", OrderStatus.OPEN), false);
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
+
+        ChannelOrder feedbackUpdate = new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-feedback",
+                "TTV-75192-1-AAAA",
+                "333",
+                "LEGO 75192 Millennium Falcon",
+                "75192-1",
+                1,
+                new BigDecimal("899.99"),
+                "USD",
+                Instant.parse("2026-08-20T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
+        );
+
+        assertFalse(service.importOrder(feedbackUpdate));
+        assertEquals(1, existingOrder.getLines().size());
+        verify(opportunities, never()).recordNewSale(any(), any());
+        verify(items, never()).save(any());
+    }
+
+    @Test
+    void ebayFeedbackUpdateDoesNotCreateAnotherSaleWhenLineIdIsMissing() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", "333", OrderStatus.OPEN), false);
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(items.findWithCatalogBySkuIgnoreCase("TTV-75192-1-AAAA")).thenReturn(Optional.of(existing));
+
+        ChannelOrder feedbackUpdate = new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                null,
+                "TTV-75192-1-AAAA",
+                "333",
+                "LEGO 75192 Millennium Falcon",
+                "75192-1",
+                1,
+                new BigDecimal("899.99"),
+                "USD",
+                Instant.parse("2026-08-20T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.OPEN,
+                null,
+                null
+        );
+
+        assertFalse(service.importOrder(feedbackUpdate));
+        assertEquals(1, existingOrder.getLines().size());
+        verify(opportunities, never()).recordNewSale(any(), any());
+    }
+
+    @Test
     void skipsDuplicateChannelOrderLines() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
         when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
