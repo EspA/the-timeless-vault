@@ -2,7 +2,6 @@ package com.thetimelessvault.market;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.thetimelessvault.alerts.ListingAdjustmentService;
-import com.thetimelessvault.alerts.PriceGuard;
 import com.thetimelessvault.alerts.PriceGuardRepository;
 import com.thetimelessvault.bricklink.BrickLinkClient;
 import com.thetimelessvault.bricklink.BrickLinkForSale;
@@ -394,9 +393,16 @@ public class MarketScanService {
     private void evaluatePriceGuards() {
         BigDecimal highPercent = priceGuardDefaults.highPercent();
         BigDecimal lowPercent = priceGuardDefaults.lowPercent();
-        for (PriceGuard guard : priceGuards.findEnabledWithListing()) {
-            ChannelListing listing = guard.getChannelListing();
-            if (listing.getStatus() != ListingStatus.PUBLISHED || listing.getLastPublishedPrice() == null) {
+        Set<UUID> disabled = new HashSet<>(priceGuards.findDisabledListingIds());
+        for (ChannelListing listing : channelListings.findAllByStatusWithItem(ListingStatus.PUBLISHED)) {
+            if (listing.getPlatform() != Platform.EBAY && listing.getPlatform() != Platform.BRICKLINK) {
+                continue;
+            }
+            if (disabled.contains(listing.getId())) {
+                listingAdjustments.resolveInRange(listing);
+                continue;
+            }
+            if (listing.getLastPublishedPrice() == null) {
                 listingAdjustments.resolveInRange(listing);
                 continue;
             }
