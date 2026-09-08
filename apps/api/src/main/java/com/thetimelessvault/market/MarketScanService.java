@@ -45,6 +45,8 @@ public class MarketScanService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketScanService.class);
     static final Duration SCAN_LOG_RETENTION = Duration.ofDays(7);
+    static final int SNAPSHOT_PURGE_BATCH = 500;
+    static final int SNAPSHOT_PURGE_MAX_BATCHES = 200;
 
     private final SetWatchRepository setWatches;
     private final CatalogItemRepository catalogItems;
@@ -216,6 +218,20 @@ public class MarketScanService {
         long deleted = scanLogs.deleteByScannedAtBefore(cutoff);
         log.info("Purged {} scan log entries older than {}", deleted, cutoff);
         return deleted;
+    }
+
+    public long purgeOldSnapshots() {
+        Instant cutoff = Instant.now().minus(SCAN_LOG_RETENTION);
+        long total = 0;
+        int deleted;
+        int batches = 0;
+        do {
+            deleted = snapshots.deleteStaleBefore(cutoff);
+            total += deleted;
+            batches++;
+        } while (deleted == SNAPSHOT_PURGE_BATCH && batches < SNAPSHOT_PURGE_MAX_BATCHES);
+        log.info("Purged {} stale market snapshots older than {} (listings cascade)", total, cutoff);
+        return total;
     }
 
     public MarketDashboard dashboard(UUID catalogId) {

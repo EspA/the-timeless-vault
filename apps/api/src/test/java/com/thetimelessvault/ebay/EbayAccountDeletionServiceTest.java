@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,7 +37,7 @@ class EbayAccountDeletionServiceTest {
         when(settings.findById(EbayAccountDeletionService.CONNECTED_USER_ID_KEY))
                 .thenReturn(Optional.of(new AppSetting(EbayAccountDeletionService.CONNECTED_USER_ID_KEY, "user-1")));
         when(marketListings.deleteByPlatformAndSellerIgnoreCase(eq(Platform.EBAY), eq("seller_one")))
-                .thenReturn(2L);
+                .thenReturn(2);
 
         service.process(new EbayAccountDeletionNotification(
                 new EbayAccountDeletionNotification.Metadata(
@@ -59,5 +60,37 @@ class EbayAccountDeletionServiceTest {
 
         verify(marketListings).deleteByPlatformAndSellerIgnoreCase(Platform.EBAY, "seller_one");
         verify(tokens).clearStoredCredentials();
+    }
+
+    @Test
+    void stillRemovesListingsWhenDeletedUserIsNotTheConnectedAccount() {
+        when(settings.findById(EbayAccountDeletionService.CONNECTED_USER_ID_KEY))
+                .thenReturn(Optional.empty());
+        when(settings.findById(EbayAccountDeletionService.CONNECTED_USERNAME_KEY))
+                .thenReturn(Optional.empty());
+        when(marketListings.deleteByPlatformAndSellerIgnoreCase(eq(Platform.EBAY), eq("other_seller")))
+                .thenReturn(1);
+
+        service.process(new EbayAccountDeletionNotification(
+                new EbayAccountDeletionNotification.Metadata(
+                        "MARKETPLACE_ACCOUNT_DELETION",
+                        "1.0",
+                        false
+                ),
+                new EbayAccountDeletionNotification.Notification(
+                        "notification-2",
+                        "2026-08-21T12:00:00Z",
+                        "2026-08-21T12:00:01Z",
+                        1,
+                        new EbayAccountDeletionNotification.AccountDeletionData(
+                                "other_seller",
+                                "user-2",
+                                "legacy-token"
+                        )
+                )
+        ));
+
+        verify(marketListings).deleteByPlatformAndSellerIgnoreCase(Platform.EBAY, "other_seller");
+        verify(tokens, never()).clearStoredCredentials();
     }
 }

@@ -245,7 +245,7 @@ if [ -n "$SERVICE_URL" ] && [ -n "$JOB_TOKEN" ] && [ "$JOB_TOKEN" != "change-me-
       --uri="${SERVICE_URL}/internal/jobs/scan-log-purge" \
       --http-method=POST \
       --update-headers="X-Internal-Token=${JOB_TOKEN}" \
-      --attempt-deadline=180s \
+      --attempt-deadline=320s \
       --quiet
     echo "Updated Cloud Scheduler job ttv-scan-log-purge."
   else
@@ -256,7 +256,7 @@ if [ -n "$SERVICE_URL" ] && [ -n "$JOB_TOKEN" ] && [ "$JOB_TOKEN" != "change-me-
       --uri="${SERVICE_URL}/internal/jobs/scan-log-purge" \
       --http-method=POST \
       --headers="X-Internal-Token=${JOB_TOKEN}" \
-      --attempt-deadline=180s \
+      --attempt-deadline=320s \
       --quiet
     echo "Created Cloud Scheduler job ttv-scan-log-purge."
   fi

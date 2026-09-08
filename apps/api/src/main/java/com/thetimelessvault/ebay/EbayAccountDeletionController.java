@@ -68,12 +68,18 @@ public class EbayAccountDeletionController {
             log.warn("Rejected eBay account deletion notification with invalid signature");
             return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).build();
         }
+        EbayAccountDeletionNotification notification;
         try {
-            EbayAccountDeletionNotification notification = mapper.readValue(rawBody, EbayAccountDeletionNotification.class);
-            deletionService.process(notification);
+            notification = mapper.readValue(rawBody, EbayAccountDeletionNotification.class);
         } catch (Exception e) {
             log.error("Failed to parse eBay account deletion notification", e);
             return ResponseEntity.badRequest().build();
+        }
+        try {
+            deletionService.process(notification);
+        } catch (Exception e) {
+            log.error("Failed to process eBay account deletion notification", e);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         return ResponseEntity.noContent().build();
     }

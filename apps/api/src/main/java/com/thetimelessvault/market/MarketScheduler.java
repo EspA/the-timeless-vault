@@ -25,5 +25,6 @@ public class MarketScheduler {
     @Scheduled(cron = "0 0 0 * * *", zone = "America/New_York")
     public void purgeScanLogs() {
         marketScanService.purgeOldScanLogs();
+        marketScanService.purgeOldSnapshots();
     }
 }

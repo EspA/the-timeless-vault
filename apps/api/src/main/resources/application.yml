@@ -5,6 +5,13 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/timeless_vault}
     username: ${POSTGRES_USER:vault}
     password: ${POSTGRES_PASSWORD:vault}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      max-lifetime: 1800000
+      keepalive-time: 120000
+      leak-detection-threshold: 30000
   jpa:
     hibernate:
       ddl-auto: validate
