@@ -14,6 +14,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.when;
 class MarketScanServicePurgeTest {
 
     @Mock ScanLogRepository scanLogs;
+    @Mock MarketSnapshotRepository snapshots;
     @Mock ListingAdjustmentService listingAdjustments;
     @Mock ObjectProvider<MarketScanService> self;
     @InjectMocks MarketScanService service;
@@ -36,5 +38,28 @@ class MarketScanServicePurgeTest {
         verify(scanLogs).deleteByScannedAtBefore(cutoff.capture());
         Instant after = Instant.now().minus(MarketScanService.SCAN_LOG_RETENTION).plusSeconds(2);
         assertTrue(!cutoff.getValue().isBefore(before) && !cutoff.getValue().isAfter(after));
+    }
+
+    @Test
+    void snapshotPurgeKeepsLatestAndRemovesOlderThanSevenDays() {
+        Instant before = Instant.now().minus(MarketScanService.SCAN_LOG_RETENTION).minusSeconds(2);
+        when(snapshots.deleteStaleBefore(any())).thenReturn(3);
+
+        assertEquals(3L, service.purgeOldSnapshots());
+
+        ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
+        verify(snapshots).deleteStaleBefore(cutoff.capture());
+        Instant after = Instant.now().minus(MarketScanService.SCAN_LOG_RETENTION).plusSeconds(2);
+        assertTrue(!cutoff.getValue().isBefore(before) && !cutoff.getValue().isAfter(after));
+    }
+
+    @Test
+    void snapshotPurgeStopsAfterAPartialBatch() {
+        when(snapshots.deleteStaleBefore(any()))
+                .thenReturn(MarketScanService.SNAPSHOT_PURGE_BATCH)
+                .thenReturn(12);
+
+        assertEquals(MarketScanService.SNAPSHOT_PURGE_BATCH + 12L, service.purgeOldSnapshots());
+        verify(snapshots, times(2)).deleteStaleBefore(any());
     }
 }

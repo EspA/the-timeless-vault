@@ -2,6 +2,9 @@ package com.thetimelessvault.market;
 
 import com.thetimelessvault.common.Platform;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -18,6 +21,8 @@ public interface MarketListingRepository extends JpaRepository<MarketListing, UU
             ScanTrigger scanTrigger
     );
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
-    long deleteByPlatformAndSellerIgnoreCase(Platform platform, String seller);
+    @Query("delete from MarketListing m where m.platform = :platform and lower(m.seller) = lower(:seller)")
+    int deleteByPlatformAndSellerIgnoreCase(@Param("platform") Platform platform, @Param("seller") String seller);
 }
