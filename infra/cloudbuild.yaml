@@ -24,6 +24,7 @@ steps:
       - --allow-unauthenticated
       - --memory=1Gi
       - --cpu=1
+      - --cpu-boost
       - --timeout=300
       - --session-affinity
       - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
