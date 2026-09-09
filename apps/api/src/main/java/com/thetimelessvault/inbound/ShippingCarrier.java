@@ -28,6 +28,15 @@ public enum ShippingCarrier {
         if (value.equals("UPS") || value.startsWith("UPS ") || value.contains("UNITED PARCEL")) {
             return UPS;
         }
+        if (value.contains("DHL")) {
+            return DHL;
+        }
+        if (value.contains("COLISSIMO") || value.contains("LA POSTE") || value.contains("LAPOSTE")) {
+            return COLISSIMO;
+        }
+        if (value.contains("POSTNL") || value.contains("POST NL")) {
+            return POSTNL;
+        }
         return null;
     }
 

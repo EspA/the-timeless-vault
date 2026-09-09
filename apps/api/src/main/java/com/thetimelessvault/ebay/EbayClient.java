@@ -767,8 +767,12 @@ public class EbayClient {
     }
 
     public JsonNode searchBrowse(String query, String excludeWords) {
+        return searchBrowse(query, excludeWords, EbayMarketFilters.LISTING_TYPE_ALL);
+    }
+
+    public JsonNode searchBrowse(String query, String excludeWords, String listingType) {
         String q = EbayMarketFilters.browseQuery(query);
-        String filter = "conditionIds:{1000},buyingOptions:{AUCTION|FIXED_PRICE|BEST_OFFER}";
+        String filter = "conditionIds:{1000}," + EbayMarketFilters.buyingOptionsFilter(listingType);
         String path = "/buy/browse/v1/item_summary/search?q="
                 + URLEncoder.encode(q, StandardCharsets.UTF_8)
                 + "&limit=200"

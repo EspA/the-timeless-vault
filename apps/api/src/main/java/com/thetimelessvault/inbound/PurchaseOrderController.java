@@ -28,9 +28,19 @@ public class PurchaseOrderController {
     @GetMapping
     public PurchaseOrderDtos.PurchaseOrderPage list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String number,
+            @RequestParam(required = false) String supplier,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String total,
+            @RequestParam(required = false) String qty,
+            @RequestParam(required = false) String arrival,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String tracking
     ) {
-        return orders.page(page, size);
+        return orders.page(page, size, new PurchaseOrderSpecifications.Query(
+                number, supplier, status, total, qty, arrival, carrier, tracking
+        ));
     }
 
     @GetMapping("/{id}")

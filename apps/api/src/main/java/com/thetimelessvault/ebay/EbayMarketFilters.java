@@ -17,6 +17,9 @@ public final class EbayMarketFilters {
     public static final String LOCATION_NORTH_AMERICA = "NORTH_AMERICA";
     public static final String LOCATION_UNITED_STATES = "UNITED_STATES";
     public static final String LOCATION_WORLDWIDE = "WORLDWIDE";
+    public static final String LISTING_TYPE_ALL = "ALL";
+    public static final String LISTING_TYPE_AUCTION = "AUCTION";
+    public static final String LISTING_TYPE_FIXED_PRICE = "FIXED_PRICE";
     private static final Set<String> UNITED_STATES = Set.of("US", "USA");
 
     private static final Set<String> NORTH_AMERICA = Set.of("US", "USA", "CA", "CAN", "MX", "MEX");
@@ -41,6 +44,52 @@ public final class EbayMarketFilters {
             return LOCATION_WORLDWIDE;
         }
         return LOCATION_NORTH_AMERICA;
+    }
+
+    public static String normalizeListingType(String listingType) {
+        if (listingType == null || listingType.isBlank()) {
+            return LISTING_TYPE_ALL;
+        }
+        String value = listingType.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+        if (value.equals("BIN") || value.equals("BUY_IT_NOW") || value.equals("FIXED")) {
+            return LISTING_TYPE_FIXED_PRICE;
+        }
+        if (value.equals(LISTING_TYPE_AUCTION) || value.equals(LISTING_TYPE_FIXED_PRICE)) {
+            return value;
+        }
+        return LISTING_TYPE_ALL;
+    }
+
+    public static String buyingOptionsFilter(String listingType) {
+        return switch (normalizeListingType(listingType)) {
+            case LISTING_TYPE_AUCTION -> "buyingOptions:{AUCTION}";
+            case LISTING_TYPE_FIXED_PRICE -> "buyingOptions:{FIXED_PRICE|BEST_OFFER}";
+            default -> "buyingOptions:{AUCTION|FIXED_PRICE|BEST_OFFER}";
+        };
+    }
+
+    public static boolean matchesListingType(JsonNode item, String listingType) {
+        String normalized = normalizeListingType(listingType);
+        if (LISTING_TYPE_ALL.equals(normalized)) {
+            return true;
+        }
+        boolean auction = false;
+        boolean fixedPrice = false;
+        boolean bestOffer = false;
+        for (JsonNode option : item.path("buyingOptions")) {
+            String value = option.asText("");
+            if ("AUCTION".equalsIgnoreCase(value)) {
+                auction = true;
+            } else if ("FIXED_PRICE".equalsIgnoreCase(value)) {
+                fixedPrice = true;
+            } else if ("BEST_OFFER".equalsIgnoreCase(value)) {
+                bestOffer = true;
+            }
+        }
+        if (LISTING_TYPE_AUCTION.equals(normalized)) {
+            return auction;
+        }
+        return fixedPrice || bestOffer || !auction;
     }
 
     public static boolean locatedIn(JsonNode item, String location) {
@@ -210,9 +259,21 @@ public final class EbayMarketFilters {
             String excludeWords,
             String itemLocation
     ) {
+        return matchesWatch(item, feedbackMin, searchQuery, excludeWords, itemLocation, LISTING_TYPE_ALL);
+    }
+
+    public static boolean matchesWatch(
+            JsonNode item,
+            int feedbackMin,
+            String searchQuery,
+            String excludeWords,
+            String itemLocation,
+            String listingType
+    ) {
         String title = item.path("title").asText("");
         return locatedIn(item, itemLocation)
                 && feedbackAtLeast(item, feedbackMin)
+                && matchesListingType(item, listingType)
                 && titleMatchesSearch(title, searchQuery)
                 && titleExcludes(title, excludeWords);
     }

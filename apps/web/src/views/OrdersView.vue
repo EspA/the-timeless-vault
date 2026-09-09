@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, ORDER_STATUSES, trackingEntries, type Order, type OrderStatus, type OrdersPage } from "../api";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { api, ORDER_STATUSES, type Order, type OrderStatus, type OrdersPage } from "../api";
 import ChannelLogo from "../components/ChannelLogo.vue";
 import OrderNewModal from "../components/OrderNewModal.vue";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
@@ -58,37 +58,24 @@ const itemLabel = (row: Order) => {
   return `${sku || set || "—"}${extra}`;
 };
 
-const lineHaystack = (row: Order) =>
-  (row.lines ?? []).map((line) => [line.sku, line.setNumber, line.itemTitle].filter(Boolean).join(" ")).join(" ");
-
 const priceAmount = (row: Order) =>
   row.merchandiseTotal != null ? row.merchandiseTotal : row.unitPrice;
 
 const orderLabel = (row: Order) => row.externalOrderId || "—";
 
-const contains = (value: string | number | null | undefined, needle: string) => {
-  if (!needle.trim()) return true;
-  const haystack = value == null ? "" : String(value);
-  return haystack.toLowerCase().includes(needle.trim().toLowerCase());
-};
-
-const visible = computed(() =>
-  items.value.filter((row) =>
-    contains(whenLabel(row.soldAt), filters.value.when)
-    && (!filters.value.platform || row.platform === filters.value.platform)
-    && (contains(itemLabel(row), filters.value.item) || contains(lineHaystack(row), filters.value.item))
-    && contains(row.quantity, filters.value.qty)
-    && contains(money(priceAmount(row), row.currency), filters.value.price)
-    && contains(money(row.shippingCost ?? 0, row.currency), filters.value.shipping)
-    && contains(money(row.platformFee ?? 0, row.currency), filters.value.fee)
-    && contains(orderLabel(row), filters.value.order)
-    && (!filters.value.status || row.status === filters.value.status)
-    && (!filters.value.tracking.trim() || trackingEntries(row).some((tracking) => contains(tracking.trackingNumber, filters.value.tracking)))
-    && contains(row.shippingProvider, filters.value.provider)
-  )
-);
-
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
+
+const queryPath = (pageIndex: number) => {
+  const params = new URLSearchParams({
+    page: String(pageIndex),
+    size: String(PAGE_SIZE),
+  });
+  const entries = Object.entries(filters.value) as Array<[keyof typeof filters.value, string]>;
+  for (const [key, value] of entries) {
+    if (value.trim()) params.set(key, value.trim());
+  }
+  return `/api/orders?${params.toString()}`;
+};
 
 const rangeLabel = computed(() => {
   if (!total.value) return "0 orders";
@@ -103,12 +90,14 @@ const syncedLabel = computed(() => {
   return `Last synced ${whenLabel(lastSyncedAt.value)}`;
 });
 
+let requestId = 0;
 const load = async (pageIndex = page.value) => {
-  if (loading.value) return;
+  const current = ++requestId;
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<OrdersPage>(`/api/orders?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const result = await api.get<OrdersPage>(queryPath(pageIndex));
+    if (current !== requestId) return;
     const pages = Math.max(1, result.totalPages);
     const nextPage = Math.min(pageIndex, pages - 1);
     items.value = result.items;
@@ -122,9 +111,10 @@ const load = async (pageIndex = page.value) => {
       return;
     }
   } catch (e) {
+    if (current !== requestId) return;
     error.value = (e as Error).message;
   } finally {
-    loading.value = false;
+    if (current === requestId) loading.value = false;
   }
 };
 
@@ -198,6 +188,14 @@ const clearFilters = () => {
   filters.value = emptyFilters();
 };
 
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+watch(filters, () => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    void load(0);
+  }, 250);
+}, { deep: true });
+
 onMounted(() => {
   void load(0);
   timer = setInterval(() => {
@@ -226,7 +224,7 @@ onUnmounted(() => {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">
-      <div v-if="total" class="pager" style="margin:0 0 0.85rem">
+      <div v-if="total || filterCount" class="pager" style="margin:0 0 0.85rem">
         <span class="muted">{{ rangeLabel }}</span>
         <div class="pager-actions">
           <button v-if="filterCount" class="btn secondary compact" type="button" @click="clearFilters">
@@ -306,7 +304,7 @@ onUnmounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in visible" :key="row.id">
+            <tr v-for="row in items" :key="row.id">
               <td>{{ whenLabel(row.soldAt) }}</td>
               <td>
                 <a v-if="row.orderUrl" :href="row.orderUrl" target="_blank" rel="noopener noreferrer">
@@ -346,11 +344,11 @@ onUnmounted(() => {
                 >Delete</button>
               </td>
             </tr>
-            <tr v-if="!visible.length">
+            <tr v-if="!items.length">
               <td colspan="12" class="muted">
                 {{ loading
                   ? "Loading orders…"
-                  : items.length
+                  : filterCount
                     ? "No orders match those filters."
                     : "No orders recorded yet. Orders are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
               </td>
@@ -359,7 +357,7 @@ onUnmounted(() => {
         </table>
       </div>
       <div class="list-cards mobile-only">
-        <article v-for="row in visible" :key="row.id" class="list-card">
+        <article v-for="row in items" :key="row.id" class="list-card">
           <div class="list-card-row">
             <ChannelLogo :platform="row.platform" :height="16" />
             <span class="muted">{{ whenLabel(row.soldAt) }}</span>
@@ -402,10 +400,10 @@ onUnmounted(() => {
             >Delete</button>
           </div>
         </article>
-        <p v-if="!visible.length" class="muted">
+        <p v-if="!items.length" class="muted">
           {{ loading
             ? "Loading orders…"
-            : items.length
+            : filterCount
               ? "No orders match those filters."
               : "No orders recorded yet. Orders are pulled from eBay, BrickLink, and Shopify every 5 minutes." }}
         </p>

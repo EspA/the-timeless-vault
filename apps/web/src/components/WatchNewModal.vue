@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { api, ApiError, defaultEbayExcludeWords, defaultEbaySearchQuery, DEFAULT_EBAY_ITEM_LOCATION, DEFAULT_EBAY_SCAN_INTERVAL_MINUTES, DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES, type Catalog, type SetWatch } from "../api";
+import { api, ApiError, defaultEbayExcludeWords, defaultEbaySearchQuery, DEFAULT_EBAY_ITEM_LOCATION, DEFAULT_EBAY_LISTING_TYPE, DEFAULT_EBAY_SCAN_INTERVAL_MINUTES, DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES, type Catalog, type SetWatch } from "../api";
 import { askAlert } from "../confirm";
 import WatchFilters from "./WatchFilters.vue";
 
@@ -16,6 +16,7 @@ const ebaySearchQuery = ref("");
 const ebayExcludeWords = ref(defaultEbayExcludeWords);
 const ebayFeedbackMin = ref(1);
 const ebayItemLocation = ref(DEFAULT_EBAY_ITEM_LOCATION);
+const ebayListingType = ref(DEFAULT_EBAY_LISTING_TYPE);
 const ebayScanIntervalMinutes = ref(DEFAULT_EBAY_SCAN_INTERVAL_MINUTES);
 const bricklinkScanIntervalMinutes = ref(DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES);
 const minPrice = ref<number | null>(null);
@@ -69,6 +70,7 @@ const save = async () => {
       ebayExcludeWords: ebayExcludeWords.value,
       ebayFeedbackMin: ebayFeedbackMin.value,
       ebayItemLocation: ebayItemLocation.value,
+      ebayListingType: ebayListingType.value,
       ebayScanIntervalMinutes: ebayScanIntervalMinutes.value,
       bricklinkScanIntervalMinutes: bricklinkScanIntervalMinutes.value,
       minPrice: minPrice.value,
@@ -161,6 +163,7 @@ const onKey = (event: KeyboardEvent) => {
             v-model:ebay-exclude-words="ebayExcludeWords"
             v-model:ebay-feedback-min="ebayFeedbackMin"
             v-model:ebay-item-location="ebayItemLocation"
+            v-model:ebay-listing-type="ebayListingType"
             v-model:ebay-scan-interval-minutes="ebayScanIntervalMinutes"
             v-model:bricklink-scan-interval-minutes="bricklinkScanIntervalMinutes"
             v-model:min-price="minPrice"

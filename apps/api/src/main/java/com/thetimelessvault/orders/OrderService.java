@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,10 +74,21 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<Order> list(int page, int size) {
+        return list(page, size, OrderSpecifications.Query.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Order> list(int page, int size, OrderSpecifications.Query query) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
-        Page<Order> result = orders.findAllByOrderByCreatedAtDesc(PageRequest.of(pageIndex, pageSize));
-        result.getContent().forEach(OrderService::loadTrackings);
+        Page<Order> result = orders.findAll(
+                OrderSpecifications.matching(query),
+                PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+        result.getContent().forEach(order -> {
+            order.getLines().size();
+            loadTrackings(order);
+        });
         return result;
     }
 
@@ -280,7 +292,16 @@ public class OrderService {
         if (item != null && order.hasInventoryItem(item.getId())) {
             return true;
         }
-        return incoming.sku() != null && order.hasSku(incoming.sku());
+        if (incoming.sku() != null && order.hasSku(incoming.sku())) {
+            return true;
+        }
+        if (incoming.sku() != null) {
+            return false;
+        }
+        if (incoming.title() != null && order.hasTitle(incoming.title())) {
+            return true;
+        }
+        return item == null && !order.getLines().isEmpty();
     }
 
     private void refreshCalculatedFee(Order order) {

@@ -179,6 +179,7 @@ const toggleEnabled = async (watch: SetWatch) => {
       ebayExcludeWords: watch.ebayExcludeWords ?? "",
       ebayFeedbackMin: watch.ebayFeedbackMin,
       ebayItemLocation: watch.ebayItemLocation,
+      ebayListingType: watch.ebayListingType,
       ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
       bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
       minPrice: watch.minPrice ?? null,

@@ -74,10 +74,21 @@ public class PurchaseOrderService {
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrder> list(int page, int size) {
+        return list(page, size, PurchaseOrderSpecifications.Query.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrder> list(int page, int size, PurchaseOrderSpecifications.Query query) {
         int pageSize = Math.min(10_000, Math.max(1, size));
         int pageIndex = Math.max(0, page);
-        Page<PurchaseOrder> result = orders.findAll(PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt")));
-        result.getContent().forEach(PurchaseOrderService::loadTrackings);
+        Page<PurchaseOrder> result = orders.findAll(
+                PurchaseOrderSpecifications.matching(query),
+                PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+        result.getContent().forEach(order -> {
+            order.getLines().size();
+            loadTrackings(order);
+        });
         return result;
     }
 
@@ -186,7 +197,12 @@ public class PurchaseOrderService {
 
     @Transactional(readOnly = true)
     public PurchaseOrderDtos.PurchaseOrderPage page(int page, int size) {
-        var result = list(page, size);
+        return page(page, size, PurchaseOrderSpecifications.Query.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public PurchaseOrderDtos.PurchaseOrderPage page(int page, int size, PurchaseOrderSpecifications.Query query) {
+        var result = list(page, size, query);
         return new PurchaseOrderDtos.PurchaseOrderPage(
                 result.getContent().stream().map(this::toView).toList(),
                 result.getNumber(),
@@ -264,6 +280,7 @@ public class PurchaseOrderService {
                 order.getTrackings().stream().map(PurchaseOrderDtos.TrackingView::from).toList(),
                 order.getNote(),
                 lines,
+                lines.size(),
                 order.getCreatedAt(),
                 order.getUpdatedAt()
         );

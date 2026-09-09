@@ -502,6 +502,7 @@ const persistWatch = (watch: SetWatch, enabled: boolean, minPrice?: number | nul
     ebayExcludeWords: watch.ebayExcludeWords ?? "",
     ebayFeedbackMin: watch.ebayFeedbackMin,
     ebayItemLocation: watch.ebayItemLocation,
+    ebayListingType: watch.ebayListingType,
     ebayScanIntervalMinutes: watch.ebayScanIntervalMinutes,
     bricklinkScanIntervalMinutes: watch.bricklinkScanIntervalMinutes,
     minPrice: minPrice !== undefined ? minPrice : watch.minPrice ?? null,

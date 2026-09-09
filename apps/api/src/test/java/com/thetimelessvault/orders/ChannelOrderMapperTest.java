@@ -289,6 +289,29 @@ class ChannelOrderMapperTest {
     }
 
     @Test
+    void mapsDhlPostnlAndColissimoProviders() throws Exception {
+        var items = mapper.readTree("""
+                [[{ "inventory_id": 1, "quantity": 1, "unit_price": "10.00", "item": { "no": "1", "name": "X" } }]]
+                """);
+        var dhl = mapper.readTree("""
+                { "order_id": 92, "date_ordered": "2026-08-19T15:00:00.000Z", "status": "SHIPPED",
+                  "shipping": { "tracking_no": "1234567890", "method": "DHL Express" } }
+                """);
+        var postnl = mapper.readTree("""
+                { "order_id": 93, "date_ordered": "2026-08-19T15:00:00.000Z", "status": "SHIPPED",
+                  "shipping": { "tracking_no": "3SABCD1234567", "method": "PostNL" } }
+                """);
+        var colissimo = mapper.readTree("""
+                { "order_id": 94, "date_ordered": "2026-08-19T15:00:00.000Z", "status": "SHIPPED",
+                  "shipping": { "tracking_no": "6A12345678901", "method": "Colissimo" } }
+                """);
+
+        assertEquals("DHL", ChannelOrderMapper.fromBrickLinkOrder(dhl, items).getFirst().shippingProvider());
+        assertEquals("POSTNL", ChannelOrderMapper.fromBrickLinkOrder(postnl, items).getFirst().shippingProvider());
+        assertEquals("COLISSIMO", ChannelOrderMapper.fromBrickLinkOrder(colissimo, items).getFirst().shippingProvider());
+    }
+
+    @Test
     void mapsShopifyPaidCancelledAndDeliveredOrders() throws Exception {
         var connection = mapper.readTree("""
                 {

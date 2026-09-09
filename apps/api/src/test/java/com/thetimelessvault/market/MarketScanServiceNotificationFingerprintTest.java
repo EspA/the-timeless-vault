@@ -84,7 +84,7 @@ class MarketScanServiceNotificationFingerprintTest {
         when(watchDefaults.excludeWords()).thenReturn("");
         when(ebayClient.browseConfigured()).thenReturn(true);
         when(channelListings.findAllByStatusWithItem(any())).thenReturn(List.of());
-        when(ebayClient.searchBrowse(anyString())).thenReturn(new ObjectMapper().readTree("""
+        when(ebayClient.searchBrowse(anyString(), any(), any())).thenReturn(new ObjectMapper().readTree("""
                 {
                   "itemSummaries": [{
                     "itemId": "v1|999|0",

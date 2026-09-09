@@ -155,15 +155,28 @@ class OrderServiceTest {
 
     @Test
     void channelDeliveredStatusCreatesNotification() {
-        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
-        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+        Order existingOrder = Order.create(existing, shopifyOrder(OrderStatus.SHIPPED), false);
+        when(orders.findByPlatformAndExternalOrderId(Platform.SHOPIFY, "12-345"))
                 .thenReturn(Optional.of(existingOrder));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(items.findById(existing.getId())).thenReturn(Optional.of(existing));
 
-        assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS")));
+        assertFalse(service.importOrder(shopifyOrder(OrderStatus.COMPLETED)));
         assertEquals(OrderStatus.COMPLETED, existingOrder.getStatus());
         verify(opportunities).recordOrderDelivered(existingOrder, existing);
+        verify(opportunities, never()).recordNewSale(any(), any());
+    }
+
+    @Test
+    void ebayChannelCompletedDoesNotNotifyDelivered() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.SHIPPED), false);
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertFalse(service.importOrder(order("TTV-75192-1-AAAA", null, OrderStatus.COMPLETED, "9400111", "USPS")));
+        assertEquals(OrderStatus.SHIPPED, existingOrder.getStatus());
+        verify(opportunities, never()).recordOrderDelivered(any(), any());
         verify(opportunities, never()).recordNewSale(any(), any());
     }
 
@@ -416,6 +429,42 @@ class OrderServiceTest {
     }
 
     @Test
+    void ebayFeedbackUpdateWithoutSkuDoesNotCreateSaleOrDelivered() {
+        Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", "333", OrderStatus.SHIPPED), false);
+        when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
+                .thenReturn(Optional.of(existingOrder));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ChannelOrder feedbackUpdate = new ChannelOrder(
+                Platform.EBAY,
+                "12-345",
+                "li-feedback",
+                null,
+                null,
+                "LEGO 75192 Millennium Falcon",
+                "75192-1",
+                1,
+                new BigDecimal("899.99"),
+                "USD",
+                Instant.parse("2026-08-20T12:00:00Z"),
+                "https://www.ebay.com/sh/ord/details?orderid=12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderStatus.COMPLETED,
+                "9400111",
+                "USPS"
+        );
+
+        assertFalse(service.importOrder(feedbackUpdate));
+        assertEquals(1, existingOrder.getLines().size());
+        assertEquals(OrderStatus.SHIPPED, existingOrder.getStatus());
+        verify(opportunities, never()).recordNewSale(any(), any());
+        verify(opportunities, never()).recordOrderDelivered(any(), any());
+        verify(items, never()).save(any());
+        verify(catalogService, never()).lookupOrStub(any(), any());
+    }
+
+    @Test
     void skipsDuplicateChannelOrderLines() {
         Order existingOrder = Order.create(existing, order("TTV-75192-1-AAAA", null, OrderStatus.OPEN), false);
         when(orders.findByPlatformAndExternalOrderId(Platform.EBAY, "12-345"))
@@ -624,7 +673,7 @@ class OrderServiceTest {
                 com.thetimelessvault.common.ApiException.class,
                 () -> service.delete(id)
         );
-        verify(orders, never()).delete(any());
+        verify(orders, never()).delete(any(Order.class));
         verify(ignores, never()).save(any());
     }
 
@@ -686,6 +735,28 @@ class OrderServiceTest {
         assertNull(captor.getValue().getInventoryItemId());
         verify(catalogService, never()).lookupOrStub(any(), any());
         verify(opportunities, never()).recordNewSale(any(), any());
+    }
+
+    private static ChannelOrder shopifyOrder(OrderStatus status) {
+        return new ChannelOrder(
+                Platform.SHOPIFY,
+                "12-345",
+                "li-1",
+                "TTV-75192-1-AAAA",
+                null,
+                "LEGO 75192 Millennium Falcon",
+                "75192-1",
+                1,
+                new BigDecimal("899.99"),
+                "USD",
+                Instant.parse("2026-08-20T12:00:00Z"),
+                "https://shop.example/orders/12-345",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                status,
+                null,
+                null
+        );
     }
 
     private static ChannelOrder order(String sku, String listingId, OrderStatus status) {

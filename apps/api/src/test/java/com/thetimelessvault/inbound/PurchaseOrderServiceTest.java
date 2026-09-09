@@ -26,6 +26,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -299,12 +300,12 @@ class PurchaseOrderServiceTest {
 
     @Test
     void listIsNewestCreatedFirst() {
-        when(orders.findAll(any(Pageable.class))).thenReturn(Page.empty());
+        when(orders.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
 
         service.list(0, 10);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(orders).findAll(captor.capture());
+        verify(orders).findAll(any(Specification.class), captor.capture());
         assertEquals(Sort.by(Sort.Direction.DESC, "createdAt"), captor.getValue().getSort());
     }
 

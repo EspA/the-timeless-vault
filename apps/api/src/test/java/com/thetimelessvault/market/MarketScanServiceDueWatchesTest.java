@@ -84,7 +84,7 @@ class MarketScanServiceDueWatchesTest {
         when(scanLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(watchDefaults.excludeWords()).thenReturn("");
         when(ebayClient.browseConfigured()).thenReturn(true);
-        when(ebayClient.searchBrowse(anyString())).thenReturn(
+        when(ebayClient.searchBrowse(anyString(), any(), any())).thenReturn(
                 new ObjectMapper().readTree("{\"itemSummaries\":[]}")
         );
         when(brickLinkClient.forSaleNewSealedShipsToUsa(anyString())).thenReturn(List.of());
@@ -94,7 +94,7 @@ class MarketScanServiceDueWatchesTest {
     void scansBothPlatformsSeparatelyWhenNeitherHasBeenScanned() {
         service.scanDueWatches();
 
-        verify(ebayClient).searchBrowse(anyString());
+        verify(ebayClient).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
         verify(opportunities, never()).recordScanFailure(any(), any(), any(), any());
     }
@@ -107,7 +107,7 @@ class MarketScanServiceDueWatchesTest {
 
         service.scanDueWatches();
 
-        verify(ebayClient).searchBrowse(anyString());
+        verify(ebayClient).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient, never()).forSaleNewSealedShipsToUsa(anyString());
     }
 
@@ -119,7 +119,7 @@ class MarketScanServiceDueWatchesTest {
 
         service.scanDueWatches();
 
-        verify(ebayClient, never()).searchBrowse(anyString());
+        verify(ebayClient, never()).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
     }
 
@@ -131,7 +131,7 @@ class MarketScanServiceDueWatchesTest {
 
         service.scanDueWatches();
 
-        verify(ebayClient, never()).searchBrowse(anyString());
+        verify(ebayClient, never()).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient, never()).forSaleNewSealedShipsToUsa(anyString());
     }
 
@@ -141,18 +141,18 @@ class MarketScanServiceDueWatchesTest {
 
         service.scanDueWatches();
 
-        verify(ebayClient, never()).searchBrowse(anyString());
+        verify(ebayClient, never()).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
     }
 
     @Test
     void failedScanConsumesTheInterval() {
-        when(ebayClient.searchBrowse(anyString())).thenThrow(new RuntimeException("eBay down"));
+        when(ebayClient.searchBrowse(anyString(), any(), any())).thenThrow(new RuntimeException("eBay down"));
 
         service.scanDueWatches();
         service.scanDueWatches();
 
-        verify(ebayClient).searchBrowse(anyString());
+        verify(ebayClient).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient).forSaleNewSealedShipsToUsa("79015");
         verify(opportunities).recordScanFailure(
                 catalog, Platform.EBAY, "eBay down", ScanTrigger.AUTOMATIC);
@@ -162,7 +162,7 @@ class MarketScanServiceDueWatchesTest {
     void rejectsCombinedScan() {
         assertThrows(ApiException.class, () -> service.scan(catalog.getId(), null));
         assertThrows(ApiException.class, () -> service.scan(catalog.getId(), Platform.SHOPIFY));
-        verify(ebayClient, never()).searchBrowse(anyString());
+        verify(ebayClient, never()).searchBrowse(anyString(), any(), any());
         verify(brickLinkClient, never()).forSaleNewSealedShipsToUsa(anyString());
     }
 }

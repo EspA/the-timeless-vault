@@ -128,9 +128,22 @@ public class OrderController {
     @GetMapping
     public OrdersPageView list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String when,
+            @RequestParam(required = false) String platform,
+            @RequestParam(required = false) String item,
+            @RequestParam(required = false) String qty,
+            @RequestParam(required = false) String price,
+            @RequestParam(required = false) String shipping,
+            @RequestParam(required = false) String fee,
+            @RequestParam(required = false) String order,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String tracking,
+            @RequestParam(required = false) String provider
     ) {
-        var result = orders.list(page, size);
+        var result = orders.list(page, size, new OrderSpecifications.Query(
+                when, platform, item, qty, price, shipping, fee, order, status, tracking, provider
+        ));
         return new OrdersPageView(
                 result.getContent().stream().map(OrderView::from).toList(),
                 result.getNumber(),

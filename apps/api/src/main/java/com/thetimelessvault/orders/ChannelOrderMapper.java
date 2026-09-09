@@ -309,7 +309,7 @@ public final class ChannelOrderMapper {
             method = firstText(nested, "method", "carrier");
         }
         ShippingCarrier carrier = ShippingCarrier.resolve(method, tracking);
-        String provider = carrier != null && carrier.trackable() ? carrier.name() : method;
+        String provider = carrier != null ? carrier.name() : method;
         return new Tracking(tracking, provider, false);
     }
 
@@ -395,7 +395,7 @@ public final class ChannelOrderMapper {
                 }
             }
         }
-        return new Tracking(tracking, provider, false);
+        return resolvedTracking(tracking, provider);
     }
 
     static Tracking fromEbayShippingFulfillments(JsonNode root) {
@@ -424,7 +424,7 @@ public final class ChannelOrderMapper {
         if (provider == null) {
             provider = firstText(root, "shippingCarrierCode", "shippingCarrier");
         }
-        return new Tracking(tracking, provider, false);
+        return resolvedTracking(tracking, provider);
     }
 
     static Tracking brickLinkTracking(JsonNode order) {
@@ -432,7 +432,7 @@ public final class ChannelOrderMapper {
         String tracking = firstText(shipping, "tracking_no", "tracking_number");
         String method = firstText(shipping, "method");
         ShippingCarrier carrier = ShippingCarrier.resolve(method, tracking);
-        String provider = carrier != null && carrier.trackable() ? carrier.name() : null;
+        String provider = carrier != null ? carrier.name() : method;
         return new Tracking(tracking, provider, false);
     }
 
@@ -710,6 +710,11 @@ public final class ChannelOrderMapper {
             return host.substring(0, host.length() - ".myshopify.com".length());
         }
         return host;
+    }
+
+    private static Tracking resolvedTracking(String tracking, String provider) {
+        ShippingCarrier carrier = ShippingCarrier.resolve(provider, tracking);
+        return new Tracking(tracking, carrier != null ? carrier.name() : provider, false);
     }
 
     record Tracking(String tracking, String provider, boolean delivered) {

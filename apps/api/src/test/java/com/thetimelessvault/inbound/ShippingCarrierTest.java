@@ -17,7 +17,12 @@ class ShippingCarrierTest {
         assertEquals(ShippingCarrier.UPS, ShippingCarrier.fromProvider("UPS Ground"));
         assertEquals(ShippingCarrier.FEDEX, ShippingCarrier.fromProvider("FedEx"));
         assertEquals(ShippingCarrier.FEDEX, ShippingCarrier.fromProvider("FedEx Home Delivery"));
-        assertNull(ShippingCarrier.fromProvider("DHL"));
+        assertEquals(ShippingCarrier.DHL, ShippingCarrier.fromProvider("DHL"));
+        assertEquals(ShippingCarrier.DHL, ShippingCarrier.fromProvider("DHL Express"));
+        assertEquals(ShippingCarrier.COLISSIMO, ShippingCarrier.fromProvider("Colissimo"));
+        assertEquals(ShippingCarrier.COLISSIMO, ShippingCarrier.fromProvider("La Poste"));
+        assertEquals(ShippingCarrier.POSTNL, ShippingCarrier.fromProvider("PostNL"));
+        assertEquals(ShippingCarrier.POSTNL, ShippingCarrier.fromProvider("Post NL Standard"));
         assertNull(ShippingCarrier.fromProvider(""));
     }
 

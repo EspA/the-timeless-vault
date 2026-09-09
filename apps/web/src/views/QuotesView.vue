@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { api, QUOTE_STATUSES, type Quote, type QuoteMarginTone, type QuotePage } from "../api";
+import { askConfirm } from "../confirm";
 
 const router = useRouter();
 const PAGE_SIZE = 10;
@@ -11,6 +12,7 @@ const total = ref(0);
 const totalPages = ref(1);
 const error = ref("");
 const loading = ref(false);
+const deletingId = ref("");
 const emptyFilters = () => ({
   number: "",
   lines: "",
@@ -78,6 +80,28 @@ const load = async (pageIndex = page.value) => {
   }
 };
 
+const canDelete = (row: Quote) => row.status !== "CONVERTED" && !row.purchaseOrderId;
+
+const remove = async (row: Quote) => {
+  if (!canDelete(row) || deletingId.value) return;
+  const confirmed = await askConfirm(`Delete ${row.number}? This cannot be undone.`, {
+    title: "Delete quote",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
+  if (!confirmed) return;
+  deletingId.value = row.id;
+  error.value = "";
+  try {
+    await api.del(`/api/quotes/${row.id}`);
+    await load(page.value);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Could not delete quote";
+  } finally {
+    deletingId.value = "";
+  }
+};
+
 onMounted(() => {
   void load(0);
 });
@@ -115,6 +139,7 @@ onMounted(() => {
               <th>Margin %</th>
               <th>Status</th>
               <th>Updated</th>
+              <th></th>
             </tr>
             <tr>
               <th><input v-model="filters.number" class="column-filter" type="search" placeholder="Filter" /></th>
@@ -130,6 +155,7 @@ onMounted(() => {
                 </select>
               </th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -142,9 +168,18 @@ onMounted(() => {
               <td :class="toneClass(row.averageMarginTone)">{{ percent(row.averageMarginPercent) }}</td>
               <td>{{ statusLabel(row.status) }}</td>
               <td>{{ whenLabel(row.updatedAt) }}</td>
+              <td>
+                <button
+                  v-if="canDelete(row)"
+                  class="btn danger compact"
+                  type="button"
+                  :disabled="deletingId === row.id"
+                  @click="remove(row)"
+                >Delete</button>
+              </td>
             </tr>
             <tr v-if="!visible.length">
-              <td colspan="8" class="muted">{{ loading ? "Loading…" : "No quotes yet." }}</td>
+              <td colspan="9" class="muted">{{ loading ? "Loading…" : "No quotes yet." }}</td>
             </tr>
           </tbody>
         </table>
@@ -155,6 +190,14 @@ onMounted(() => {
           <p class="muted">{{ row.lineCount }} line{{ row.lineCount === 1 ? "" : "s" }} · {{ statusLabel(row.status) }}</p>
           <p>{{ money(row.totalCostWithShipping) }} with shipping</p>
           <p :class="toneClass(row.averageMarginTone)">Margin {{ percent(row.averageMarginPercent) }}</p>
+          <div v-if="canDelete(row)" class="list-card-actions">
+            <button
+              class="btn danger compact"
+              type="button"
+              :disabled="deletingId === row.id"
+              @click="remove(row)"
+            >Delete</button>
+          </div>
         </article>
         <p v-if="!visible.length" class="muted">{{ loading ? "Loading…" : "No quotes yet." }}</p>
       </div>

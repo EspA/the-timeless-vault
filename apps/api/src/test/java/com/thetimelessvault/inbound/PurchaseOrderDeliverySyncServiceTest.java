@@ -143,6 +143,7 @@ class PurchaseOrderDeliverySyncServiceTest {
                 List.of(),
                 null,
                 List.of(),
+                0,
                 now,
                 now
         );

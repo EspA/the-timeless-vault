@@ -203,6 +203,13 @@ public class Order {
         return lines.stream().anyMatch(line -> sku.equalsIgnoreCase(line.getSku()));
     }
 
+    public boolean hasTitle(String title) {
+        if (title == null || title.isBlank()) {
+            return false;
+        }
+        return lines.stream().anyMatch(line -> title.equalsIgnoreCase(line.getItemTitle()));
+    }
+
     public OrderLine primaryLine() {
         return lines.isEmpty() ? null : lines.getFirst();
     }
@@ -270,6 +277,9 @@ public class Order {
         }
         if (statusSource == OrderStatusSource.MANUAL) {
             return incoming == OrderStatus.CANCELLED || status == OrderStatus.CANCELLED;
+        }
+        if (platform == Platform.EBAY && incoming == OrderStatus.COMPLETED) {
+            return false;
         }
         return OrderStatus.shouldApplyChannelStatus(status, incoming);
     }

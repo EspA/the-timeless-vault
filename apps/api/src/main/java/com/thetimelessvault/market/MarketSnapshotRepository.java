@@ -19,15 +19,29 @@ public interface MarketSnapshotRepository extends JpaRepository<MarketSnapshot, 
 
     List<MarketSnapshot> findByCatalogItemIdOrderByScannedAtDesc(UUID catalogItemId);
 
-    @Query("""
-            select s from MarketSnapshot s
-            join fetch s.catalogItem c
-            where c.id in :catalogIds
-              and s.scannedAt = (
-                  select max(s2.scannedAt) from MarketSnapshot s2
-                  where s2.catalogItem.id = c.id and s2.platform = s.platform
-              )
-            """)
+    @Query(value = """
+            SELECT s.*
+            FROM catalog_item c
+            CROSS JOIN LATERAL (
+                SELECT ms.*
+                FROM market_snapshot ms
+                WHERE ms.catalog_item_id = c.id AND ms.platform = 'EBAY'
+                ORDER BY ms.scanned_at DESC
+                LIMIT 1
+            ) s
+            WHERE c.id IN (:catalogIds)
+            UNION ALL
+            SELECT s.*
+            FROM catalog_item c
+            CROSS JOIN LATERAL (
+                SELECT ms.*
+                FROM market_snapshot ms
+                WHERE ms.catalog_item_id = c.id AND ms.platform = 'BRICKLINK'
+                ORDER BY ms.scanned_at DESC
+                LIMIT 1
+            ) s
+            WHERE c.id IN (:catalogIds)
+            """, nativeQuery = true)
     List<MarketSnapshot> findLatestByCatalogItemIdIn(@Param("catalogIds") Collection<UUID> catalogIds);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

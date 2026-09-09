@@ -262,13 +262,18 @@ public class MarketScanService {
         String query = ebayQuery(catalog, watch);
         int feedbackMin = watch == null ? 1 : watch.getEbayFeedbackMin();
         String itemLocation = watch == null ? EbayMarketFilters.LOCATION_NORTH_AMERICA : watch.getEbayItemLocation();
+        String listingType = watch == null ? EbayMarketFilters.LISTING_TYPE_ALL : watch.getEbayListingType();
         String excludeWords = watch != null && watch.getEbayExcludeWords() != null
                 ? watch.getEbayExcludeWords()
                 : watchDefaults.excludeWords();
         JsonNode root;
         try {
             String setNumber = ThemeMapper.displaySetNumber(catalog.getSetNumber());
-            root = ebayClient.searchBrowse(setNumber.isBlank() ? query : "LEGO " + setNumber);
+            root = ebayClient.searchBrowse(
+                    setNumber.isBlank() ? query : "LEGO " + setNumber,
+                    excludeWords,
+                    listingType
+            );
         } catch (Exception e) {
             log.warn("eBay market scan failed for {}", catalog.getSetNumber(), e);
             return PlatformScanResult.fail(e.getMessage() == null ? "eBay search failed." : e.getMessage());
@@ -283,7 +288,7 @@ public class MarketScanService {
         List<MarketListing> newListings = new ArrayList<>();
         snapshots.save(snapshot);
         for (JsonNode item : root.path("itemSummaries")) {
-            if (!EbayMarketFilters.matchesWatch(item, feedbackMin, query, excludeWords, itemLocation)) {
+            if (!EbayMarketFilters.matchesWatch(item, feedbackMin, query, excludeWords, itemLocation, listingType)) {
                 continue;
             }
             BigDecimal price = decimal(item.path("price").path("value").asText(null));

@@ -86,6 +86,9 @@ public class SetWatch {
     @Column(name = "ebay_item_location", nullable = false)
     private String ebayItemLocation = "NORTH_AMERICA";
 
+    @Column(name = "ebay_listing_type", nullable = false)
+    private String ebayListingType = EbayMarketFilters.LISTING_TYPE_ALL;
+
     @Column(name = "ebay_scan_interval_minutes", nullable = false)
     private int ebayScanIntervalMinutes = 360;
 
@@ -315,6 +318,14 @@ public class SetWatch {
 
     public void setEbayItemLocation(String ebayItemLocation) {
         this.ebayItemLocation = EbayMarketFilters.normalizeItemLocation(ebayItemLocation);
+    }
+
+    public String getEbayListingType() {
+        return ebayListingType;
+    }
+
+    public void setEbayListingType(String ebayListingType) {
+        this.ebayListingType = EbayMarketFilters.normalizeListingType(ebayListingType);
     }
 
     public int getEbayScanIntervalMinutes() {

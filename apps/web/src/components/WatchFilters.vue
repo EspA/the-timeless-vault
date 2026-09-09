@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { EBAY_ITEM_LOCATIONS, SCAN_INTERVALS } from "../api";
+import { EBAY_ITEM_LOCATIONS, EBAY_LISTING_TYPES, SCAN_INTERVALS } from "../api";
 import ChannelLogo from "./ChannelLogo.vue";
 
 defineProps<{
@@ -12,6 +12,7 @@ const ebaySearchQuery = defineModel<string>("ebaySearchQuery", { required: true 
 const ebayExcludeWords = defineModel<string>("ebayExcludeWords", { required: true });
 const ebayFeedbackMin = defineModel<number>("ebayFeedbackMin", { required: true });
 const ebayItemLocation = defineModel<string>("ebayItemLocation", { required: true });
+const ebayListingType = defineModel<string>("ebayListingType", { required: true });
 const ebayScanIntervalMinutes = defineModel<number>("ebayScanIntervalMinutes", { required: true });
 const bricklinkScanIntervalMinutes = defineModel<number>("bricklinkScanIntervalMinutes", { required: true });
 const minPrice = defineModel<number | null>("minPrice", { required: true });
@@ -87,7 +88,13 @@ const parsePrice = (raw: string) => {
             </option>
           </select>
         </label>
-        <label>Listing type <input value="All Item Types" disabled /></label>
+        <label>Listing type
+          <select v-model="ebayListingType">
+            <option v-for="option in EBAY_LISTING_TYPES" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
       </div>
       <div class="card grid">
         <h3 class="channel-heading"><ChannelLogo platform="BRICKLINK" :height="22" /></h3>

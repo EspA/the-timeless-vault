@@ -72,6 +72,7 @@ public class PurchaseOrderDtos {
             List<TrackingView> trackings,
             String note,
             List<LineView> lines,
+            int lineCount,
             Instant createdAt,
             Instant updatedAt
     ) {

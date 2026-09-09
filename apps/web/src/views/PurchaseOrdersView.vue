@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { api, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, trackingEntries, type PurchaseOrder, type PurchaseOrderPage } from "../api";
+import { api, PURCHASE_ORDER_STATUSES, SHIPPING_CARRIERS, type PurchaseOrder, type PurchaseOrderPage } from "../api";
 import { askConfirm } from "../confirm";
 import StockStatusButtons from "../components/StockStatusButtons.vue";
 import TrackingNumbers from "../components/TrackingNumbers.vue";
@@ -20,6 +20,7 @@ const emptyFilters = () => ({
   supplier: "",
   status: "",
   total: "",
+  qty: "",
   arrival: "",
   carrier: "",
   tracking: "",
@@ -44,6 +45,8 @@ const dayLabel = (value?: string) => {
 
 const carrierLabel = (value?: string | null) =>
   SHIPPING_CARRIERS.find((row) => row.value === value)?.label || value || "—";
+
+const lineCount = (row: PurchaseOrder) => row.lineCount ?? row.lines?.length ?? 0;
 
 const busyId = ref("");
 
@@ -108,24 +111,19 @@ const setStatus = async (row: PurchaseOrder, next: string) => {
   }
 };
 
-const contains = (value: string | number | null | undefined, needle: string) => {
-  if (!needle.trim()) return true;
-  return String(value ?? "").toLowerCase().includes(needle.trim().toLowerCase());
-};
-
-const visible = computed(() =>
-  items.value.filter((row) =>
-    contains(row.number, filters.value.number)
-    && contains(row.supplierName, filters.value.supplier)
-    && (!filters.value.status || row.status === filters.value.status)
-    && contains(money(row.totalValue), filters.value.total)
-    && contains(dayLabel(row.expectedArrival), filters.value.arrival)
-    && (!filters.value.carrier || trackingEntries(row).some((tracking) => tracking.carrier === filters.value.carrier) || row.carrier === filters.value.carrier)
-    && (!filters.value.tracking.trim() || trackingEntries(row).some((tracking) => contains(tracking.trackingNumber, filters.value.tracking)))
-  )
-);
-
 const filterCount = computed(() => Object.values(filters.value).filter((value) => value.trim()).length);
+
+const queryPath = (pageIndex: number) => {
+  const params = new URLSearchParams({
+    page: String(pageIndex),
+    size: String(PAGE_SIZE),
+  });
+  const entries = Object.entries(filters.value) as Array<[keyof typeof filters.value, string]>;
+  for (const [key, value] of entries) {
+    if (value.trim()) params.set(key, value.trim());
+  }
+  return `/api/purchase-orders?${params.toString()}`;
+};
 
 const rangeLabel = computed(() => {
   if (!total.value) return "0 purchase orders";
@@ -135,21 +133,38 @@ const rangeLabel = computed(() => {
   return `${start}–${end} of ${total.value}${pages}`;
 });
 
+let requestId = 0;
 const load = async (pageIndex = page.value) => {
+  const current = ++requestId;
   loading.value = true;
   error.value = "";
   try {
-    const result = await api.get<PurchaseOrderPage>(`/api/purchase-orders?page=${pageIndex}&size=${PAGE_SIZE}`);
+    const result = await api.get<PurchaseOrderPage>(queryPath(pageIndex));
+    if (current !== requestId) return;
+    const pages = Math.max(1, result.totalPages);
+    const nextPage = Math.min(pageIndex, pages - 1);
     items.value = result.items;
-    page.value = result.page;
     total.value = result.total;
-    totalPages.value = result.totalPages;
+    totalPages.value = pages;
+    page.value = nextPage;
+    if (nextPage !== pageIndex && result.total > 0) {
+      await load(nextPage);
+    }
   } catch (e) {
+    if (current !== requestId) return;
     error.value = e instanceof Error ? e.message : "Could not load purchase orders";
   } finally {
-    loading.value = false;
+    if (current === requestId) loading.value = false;
   }
 };
+
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+watch(filters, () => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    void load(0);
+  }, 250);
+}, { deep: true });
 
 const syncNow = async () => {
   if (syncing.value) return;
@@ -203,6 +218,7 @@ onMounted(() => {
               <th>Supplier</th>
               <th>Status</th>
               <th>Total</th>
+              <th>Qty</th>
               <th>Expected arrival</th>
               <th>Carrier</th>
               <th>Tracking</th>
@@ -218,6 +234,7 @@ onMounted(() => {
                 </select>
               </th>
               <th><input v-model="filters.total" class="column-filter" type="search" placeholder="Filter" /></th>
+              <th><input v-model="filters.qty" class="column-filter" type="search" placeholder="Filter" /></th>
               <th><input v-model="filters.arrival" class="column-filter" type="search" placeholder="Filter" /></th>
               <th>
                 <select v-model="filters.carrier" class="column-filter">
@@ -230,7 +247,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in visible" :key="row.id">
+            <tr v-for="row in items" :key="row.id">
               <td><router-link :to="`/purchase-orders/${row.id}`">{{ row.number }}</router-link></td>
               <td>{{ row.supplierName }}</td>
               <td>
@@ -244,6 +261,7 @@ onMounted(() => {
                 />
               </td>
               <td>{{ money(row.totalValue) }}</td>
+              <td>{{ lineCount(row) }}</td>
               <td>{{ dayLabel(row.expectedArrival) }}</td>
               <td>{{ carrierLabel(row.carrier) }}</td>
               <td>
@@ -251,16 +269,16 @@ onMounted(() => {
               </td>
               <td>{{ whenLabel(row.createdAt) }}</td>
             </tr>
-            <tr v-if="!visible.length">
-              <td colspan="8" class="muted">{{ loading ? "Loading…" : "No purchase orders yet." }}</td>
+            <tr v-if="!items.length">
+              <td colspan="9" class="muted">{{ loading ? "Loading…" : filterCount ? "No purchase orders match those filters." : "No purchase orders yet." }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="list-cards mobile-only">
-        <article v-for="row in visible" :key="row.id" class="list-card">
+        <article v-for="row in items" :key="row.id" class="list-card">
           <h3><router-link :to="`/purchase-orders/${row.id}`">{{ row.number }}</router-link></h3>
-          <p class="muted">{{ row.supplierName }} · {{ money(row.totalValue) }}</p>
+          <p class="muted">{{ row.supplierName }} · {{ money(row.totalValue) }} · {{ lineCount(row) }} line{{ lineCount(row) === 1 ? "" : "s" }}</p>
           <StockStatusButtons
             compact
             aria-label="Purchase order status"
@@ -276,7 +294,7 @@ onMounted(() => {
             <TrackingNumbers :row="row" />
           </p>
         </article>
-        <p v-if="!visible.length" class="muted">{{ loading ? "Loading…" : "No purchase orders yet." }}</p>
+        <p v-if="!items.length" class="muted">{{ loading ? "Loading…" : filterCount ? "No purchase orders match those filters." : "No purchase orders yet." }}</p>
       </div>
     </div>
   </div>

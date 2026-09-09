@@ -287,6 +287,15 @@ export const canonicalizeShippingProvider = (value?: string | null) => {
   if (normalized === "UPS" || normalized.startsWith("UPS ") || normalized.includes("UNITED PARCEL")) {
     return "UPS";
   }
+  if (normalized.includes("DHL")) {
+    return "DHL";
+  }
+  if (normalized.includes("COLISSIMO") || normalized.includes("LA POSTE") || normalized.includes("LAPOSTE")) {
+    return "COLISSIMO";
+  }
+  if (normalized.includes("POSTNL") || normalized.includes("POST NL")) {
+    return "POSTNL";
+  }
   return value.trim();
 };
 
@@ -320,7 +329,7 @@ export const trackingUrl = (tracking?: string | null, provider?: string | null) 
     return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encoded}`;
   }
   if (carrier === "DHL") {
-    return `https://www.dhl.com/en/express/tracking.html?AWB=${encoded}`;
+    return `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${encoded}`;
   }
   if (carrier === "FEDEX") {
     return `https://www.fedex.com/fedextrack/?trknbr=${encoded}`;
@@ -329,7 +338,7 @@ export const trackingUrl = (tracking?: string | null, provider?: string | null) 
     return `https://www.laposte.fr/outils/suivre-vos-envois?code=${encoded}`;
   }
   if (carrier === "POSTNL") {
-    return `https://jouw.postnl.nl/track-and-trace/${encoded}`;
+    return `https://jouw.postnl.nl/track-and-trace/${encoded}-NL-en`;
   }
   return "";
 };
@@ -773,6 +782,7 @@ export type SetWatch = {
   ebayFeedbackMin: number;
   ebayExcludeWords?: string;
   ebayItemLocation?: string;
+  ebayListingType?: string;
   ebayScanIntervalMinutes: number;
   bricklinkScanIntervalMinutes: number;
   minPrice?: number | null;
@@ -784,6 +794,12 @@ export type SetWatch = {
 export const DEFAULT_EBAY_SCAN_INTERVAL_MINUTES = 360;
 export const DEFAULT_BRICKLINK_SCAN_INTERVAL_MINUTES = 360;
 export const DEFAULT_EBAY_ITEM_LOCATION = "NORTH_AMERICA";
+export const DEFAULT_EBAY_LISTING_TYPE = "ALL";
+export const EBAY_LISTING_TYPES = [
+  { value: "ALL", label: "All listings" },
+  { value: "AUCTION", label: "Auction" },
+  { value: "FIXED_PRICE", label: "Buy It Now" },
+];
 export const EBAY_ITEM_LOCATIONS = [
   { value: "NORTH_AMERICA", label: "North America" },
   { value: "UNITED_STATES", label: "United States" },
@@ -848,6 +864,7 @@ export type PurchaseOrder = {
   trackings?: ShipmentTracking[];
   note?: string;
   lines: PurchaseOrderLine[];
+  lineCount: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -174,6 +174,34 @@ class EbayMarketFiltersTest {
     }
 
     @Test
+    void listingTypeFiltersAuctionVersusBuyItNow() throws Exception {
+        var auction = mapper.readTree("""
+                {
+                  "title": "LEGO 75192",
+                  "itemLocation": { "country": "US" },
+                  "seller": { "feedbackScore": 12 },
+                  "buyingOptions": ["AUCTION"]
+                }
+                """);
+        var buyItNow = mapper.readTree("""
+                {
+                  "title": "LEGO 75192",
+                  "itemLocation": { "country": "US" },
+                  "seller": { "feedbackScore": 12 },
+                  "buyingOptions": ["FIXED_PRICE"]
+                }
+                """);
+        assertEquals("ALL", EbayMarketFilters.normalizeListingType(null));
+        assertEquals("FIXED_PRICE", EbayMarketFilters.normalizeListingType("Buy It Now"));
+        assertEquals("buyingOptions:{AUCTION}", EbayMarketFilters.buyingOptionsFilter("AUCTION"));
+        assertTrue(EbayMarketFilters.matchesWatch(auction, 1, null, null, "NORTH_AMERICA", "AUCTION"));
+        assertFalse(EbayMarketFilters.matchesWatch(auction, 1, null, null, "NORTH_AMERICA", "FIXED_PRICE"));
+        assertTrue(EbayMarketFilters.matchesWatch(buyItNow, 1, null, null, "NORTH_AMERICA", "FIXED_PRICE"));
+        assertFalse(EbayMarketFilters.matchesWatch(buyItNow, 1, null, null, "NORTH_AMERICA", "AUCTION"));
+        assertTrue(EbayMarketFilters.matchesWatch(auction, 1, null, null, "NORTH_AMERICA", "ALL"));
+    }
+
+    @Test
     void usesDefaultExcludeWordsOnlyWhenUnset() {
         assertEquals(EbayMarketFilters.DEFAULT_EXCLUDE_WORDS, EbayMarketFilters.effectiveExcludeWords(null));
         assertEquals("", EbayMarketFilters.effectiveExcludeWords(""));
