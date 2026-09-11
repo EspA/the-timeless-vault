@@ -7,6 +7,7 @@ import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.catalog.CatalogItemRepository;
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.ebay.EbayClient;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.opportunities.BuyingOpportunity;
@@ -60,13 +61,15 @@ class MarketScanServicePriceGuardsTest {
     MarketScanService service;
 
     private ChannelListing listing;
+    private InventoryItem item;
     private MarketSnapshot snapshot;
 
     @BeforeEach
     void setUp() {
         CatalogItem catalog = CatalogItem.create("75192-1");
         catalog.setName("Millennium Falcon");
-        InventoryItem item = InventoryItem.create(catalog, "TTV-75192-7C79");
+        item = InventoryItem.create(catalog, "TTV-75192-7C79");
+        item.applyStockAndQuantity(StockStatus.IN_STOCK, 1);
         listing = ChannelListing.create(item, Platform.EBAY);
         listing.markPublished("227222227698", "https://www.ebay.com/itm/227222227698", new BigDecimal("1239.00"));
 
@@ -102,6 +105,26 @@ class MarketScanServicePriceGuardsTest {
     @Test
     void skipsDisabledPriceGuard() {
         when(priceGuards.findDisabledListingIds()).thenReturn(List.of(listing.getId()));
+
+        service.scanDueWatches();
+
+        verify(listingAdjustments).resolveInRange(listing);
+        verify(listingAdjustments, never()).recordOutOfRange(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void skipsSoldInventory() {
+        item.applyStockAndQuantity(StockStatus.SOLD, 0);
+
+        service.scanDueWatches();
+
+        verify(listingAdjustments).resolveInRange(listing);
+        verify(listingAdjustments, never()).recordOutOfRange(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void skipsUnlistedListing() {
+        listing.setEbayStatus("UNLISTED");
 
         service.scanDueWatches();
 

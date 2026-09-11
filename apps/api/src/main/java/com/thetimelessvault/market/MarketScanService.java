@@ -419,7 +419,7 @@ public class MarketScanService {
             if (listing.getPlatform() != Platform.EBAY && listing.getPlatform() != Platform.BRICKLINK) {
                 continue;
             }
-            if (disabled.contains(listing.getId())) {
+            if (disabled.contains(listing.getId()) || !listing.shouldEvaluatePriceGuard()) {
                 listingAdjustments.resolveInRange(listing);
                 continue;
             }

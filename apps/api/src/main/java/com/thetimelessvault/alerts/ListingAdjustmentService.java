@@ -29,7 +29,9 @@ public class ListingAdjustmentService {
     }
 
     public List<ListingAdjustment> listActive() {
-        return adjustments.findActiveWithListing();
+        return adjustments.findActiveWithListing().stream()
+                .filter(row -> row.getChannelListing() == null || row.getChannelListing().shouldEvaluatePriceGuard())
+                .toList();
     }
 
     @Transactional

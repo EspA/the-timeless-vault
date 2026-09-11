@@ -2,6 +2,7 @@ package com.thetimelessvault.alerts;
 
 import com.thetimelessvault.catalog.CatalogItem;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.opportunities.BuyingOpportunity;
 import com.thetimelessvault.opportunities.BuyingOpportunityService;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -218,6 +220,23 @@ class ListingAdjustmentServiceTest {
         assertTrue(view.inventoryLabel().contains("10195-1"));
         assertEquals(0, new BigDecimal("200").compareTo(view.currentListingPrice()));
         assertEquals(0, new BigDecimal("150").compareTo(view.marketPrice()));
+    }
+
+    @Test
+    void listActiveOmitsSoldInventory() {
+        listing.getInventoryItem().applyStockAndQuantity(StockStatus.SOLD, 0);
+        ListingAdjustment sold = ListingAdjustment.create(
+                listing, BuyingOpportunity.TYPE_PRICE_HIGH,
+                new BigDecimal("200"), new BigDecimal("150"), scannedAt);
+        ChannelListing live = listing(Platform.EBAY);
+        live.markPublished("456", "https://www.ebay.com/itm/456", new BigDecimal("180"));
+        live.getInventoryItem().applyStockAndQuantity(StockStatus.IN_STOCK, 1);
+        ListingAdjustment open = ListingAdjustment.create(
+                live, BuyingOpportunity.TYPE_PRICE_LOW,
+                new BigDecimal("120"), new BigDecimal("150"), scannedAt);
+        when(adjustments.findActiveWithListing()).thenReturn(List.of(sold, open));
+
+        assertEquals(List.of(open), service.listActive());
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.thetimelessvault.publish;
 
 import com.thetimelessvault.common.ListingStatus;
 import com.thetimelessvault.common.Platform;
+import com.thetimelessvault.common.StockStatus;
 import com.thetimelessvault.inventory.InventoryItem;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -187,6 +188,14 @@ public class ChannelListing {
             case BRICKOWL -> brickowlStatus;
             case LOCAL -> null;
         };
+    }
+
+    public boolean shouldEvaluatePriceGuard() {
+        if (inventoryItem != null && inventoryItem.getStockStatus() == StockStatus.SOLD) {
+            return false;
+        }
+        String visibility = visibilityStatus();
+        return visibility == null || visibility.isBlank() || !"UNLISTED".equalsIgnoreCase(visibility);
     }
 
     public void setBrickowlStatus(String brickowlStatus) {
