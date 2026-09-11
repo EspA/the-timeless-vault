@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,15 +40,18 @@ class InventoryCsvTest {
         missingGrade.setStockStatus(StockStatus.IN_TRANSIT);
         missingGrade.setQuantity(0);
 
-        String csv = InventoryCsv.render(List.of(item, missingGrade));
+        String csv = InventoryCsv.render(List.of(item, missingGrade), Map.of(
+                item.getId(), "https://thetimelessvault.shop/products/lego-10134"
+        ));
 
-        assertEquals(19, InventoryCsv.COLUMNS.size());
+        assertEquals(20, InventoryCsv.COLUMNS.size());
         assertTrue(csv.startsWith("\uFEFF" + InventoryCsv.HEADER + "\n"));
         assertTrue(csv.contains("Id,SKU,Set id,Set number,Title,"));
-        assertTrue(csv.contains("BrickOwl price,Minimum offer"));
+        assertTrue(csv.contains("Minimum offer,Shopify URL"));
         assertFalse(csv.contains("Catalog name"));
         assertFalse(csv.contains("Shopify status"));
         assertFalse(csv.contains("Photo count"));
+        assertTrue(csv.contains("https://thetimelessvault.shop/products/lego-10134"));
         assertTrue(csv.contains("\"LEGO 10134 VERY RARE Star Wars UCS Y-Wing, New Sealed\""));
         assertTrue(csv.contains("TTV-10134-ABCD"));
         assertTrue(csv.contains("10134-1"));

@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 final class InventoryCsv {
@@ -30,7 +32,8 @@ final class InventoryCsv {
             "Shopify price",
             "BrickLink price",
             "BrickOwl price",
-            "Minimum offer"
+            "Minimum offer",
+            "Shopify URL"
     );
 
     static final String HEADER = String.join(",", COLUMNS);
@@ -39,11 +42,16 @@ final class InventoryCsv {
     }
 
     static String render(List<InventoryItem> items) {
+        return render(items, Map.of());
+    }
+
+    static String render(List<InventoryItem> items, Map<UUID, String> shopifyUrls) {
         StringBuilder out = new StringBuilder();
         out.append('\uFEFF');
         out.append(HEADER).append('\n');
+        Map<UUID, String> urls = shopifyUrls == null ? Map.of() : shopifyUrls;
         for (InventoryItem item : items) {
-            List<String> values = cells(item);
+            List<String> values = cells(item, urls.get(item.getId()));
             if (values.size() != COLUMNS.size()) {
                 throw new IllegalStateException("CSV column count mismatch");
             }
@@ -52,7 +60,7 @@ final class InventoryCsv {
         return out.toString();
     }
 
-    private static List<String> cells(InventoryItem item) {
+    private static List<String> cells(InventoryItem item, String shopifyUrl) {
         CatalogItem catalog = item.getCatalogItem();
         Integer boxGrade = DescriptionHtml.inferBoxGradeScore(item.getDescription());
         List<String> values = new ArrayList<>();
@@ -75,6 +83,7 @@ final class InventoryCsv {
         values.add(money(item.getBricklinkPrice()));
         values.add(money(item.getBrickowlPrice()));
         values.add(money(item.getMinimumOffer()));
+        values.add(shopifyUrl);
         return values;
     }
 

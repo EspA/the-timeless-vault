@@ -230,7 +230,27 @@ public class InventoryService {
     }
 
     public String exportCsv(InventorySpecifications.Query query) {
-        return InventoryCsv.render(items.findAll(InventorySpecifications.matching(query)));
+        List<InventoryItem> found = items.findAll(InventorySpecifications.matching(query));
+        return InventoryCsv.render(found, shopifyUrlsFor(found));
+    }
+
+    private Map<UUID, String> shopifyUrlsFor(List<InventoryItem> found) {
+        if (found.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> ids = found.stream().map(InventoryItem::getId).toList();
+        Map<UUID, String> urls = new HashMap<>();
+        for (ChannelListing listing : listings.findByInventoryItemIdInAndPlatform(ids, Platform.SHOPIFY)) {
+            if (listing.getStatus() != ListingStatus.PUBLISHED) {
+                continue;
+            }
+            String url = listing.getLiveUrl();
+            if (url == null || url.isBlank()) {
+                continue;
+            }
+            urls.put(listing.getInventoryItem().getId(), url);
+        }
+        return urls;
     }
 
     @Transactional

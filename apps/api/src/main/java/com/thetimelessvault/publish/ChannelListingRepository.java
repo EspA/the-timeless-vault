@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,8 @@ public interface ChannelListingRepository extends JpaRepository<ChannelListing, 
     List<ChannelListing> findByInventoryItemId(UUID inventoryItemId);
 
     Optional<ChannelListing> findByInventoryItemIdAndPlatform(UUID inventoryItemId, Platform platform);
+
+    List<ChannelListing> findByInventoryItemIdInAndPlatform(Collection<UUID> inventoryItemIds, Platform platform);
 
     @Query("select l from ChannelListing l join fetch l.inventoryItem i join fetch i.catalogItem "
             + "where l.platform = :platform and l.externalId = :externalId")
