@@ -22,6 +22,7 @@ const totalPages = ref(1);
 const loading = ref(false);
 const error = ref("");
 const stockBusyId = ref("");
+const exporting = ref(false);
 const search = ref("");
 const sort = ref<Sort>({ key: "updated", dir: "desc" });
 const filters = ref({
@@ -51,19 +52,39 @@ const rangeLabel = computed(() => {
   return `${start}–${end} of ${total.value}${pages}`;
 });
 
-const queryPath = (pageIndex: number) => {
-  const params = new URLSearchParams({
-    page: String(pageIndex),
-    size: String(PAGE_SIZE),
-    sort: sort.value.key,
-    dir: sort.value.dir,
-  });
+const filterParams = () => {
+  const params = new URLSearchParams();
   if (search.value.trim()) params.set("q", search.value.trim());
   const entries = Object.entries(filters.value) as Array<[keyof typeof filters.value, string]>;
   for (const [key, value] of entries) {
     if (value.trim()) params.set(key, value.trim());
   }
+  return params;
+};
+
+const queryPath = (pageIndex: number) => {
+  const params = filterParams();
+  params.set("page", String(pageIndex));
+  params.set("size", String(PAGE_SIZE));
+  params.set("sort", sort.value.key);
+  params.set("dir", sort.value.dir);
   return `/api/inventory?${params.toString()}`;
+};
+
+const exportCsv = async () => {
+  if (exporting.value) return;
+  exporting.value = true;
+  error.value = "";
+  try {
+    const params = filterParams();
+    params.set("sort", sort.value.key);
+    params.set("dir", sort.value.dir);
+    await api.download(`/api/inventory/export.csv?${params.toString()}`, "inventory.csv");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    exporting.value = false;
+  }
 };
 
 const sortBy = (key: Column) => {
@@ -202,7 +223,12 @@ onMounted(async () => {
   <div class="grid">
     <div class="page-head">
       <h1>Inventory</h1>
-      <button class="btn gold" type="button" @click="adding = true">Add item</button>
+      <div class="pager-actions">
+        <button class="btn" type="button" :disabled="exporting" @click="exportCsv">
+          {{ exporting ? "Exporting…" : "Export CSV" }}
+        </button>
+        <button class="btn gold" type="button" @click="adding = true">Add item</button>
+      </div>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="card">

@@ -83,4 +83,13 @@ class DescriptionHtmlTest {
         assertTrue(shortDescription.length() <= 255);
         assertNotEquals(DescriptionHtml.forBrickLink(html), shortDescription);
     }
+
+    @Test
+    void inferBoxGradeScoreReadsListingCopy() {
+        CatalogItem catalog = CatalogItem.create("75192-1");
+        String html = DefaultListingCopy.description(catalog, ItemCondition.NEW_SEALED, BoxGrade.GRADE_8);
+        assertEquals(8, DescriptionHtml.inferBoxGradeScore(html));
+        assertEquals(null, DescriptionHtml.inferBoxGradeScore(""));
+        assertEquals(null, DescriptionHtml.inferBoxGradeScore("<p>No grade here</p>"));
+    }
 }

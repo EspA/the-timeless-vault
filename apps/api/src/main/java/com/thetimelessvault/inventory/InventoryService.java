@@ -229,6 +229,10 @@ public class InventoryService {
         return items.findAll(InventorySpecifications.matching(query), PageRequest.of(pageIndex, pageSize));
     }
 
+    public String exportCsv(InventorySpecifications.Query query) {
+        return InventoryCsv.render(items.findAll(InventorySpecifications.matching(query)));
+    }
+
     @Transactional
     public Photo addPhoto(UUID itemId, MultipartFile file) {
         if (file.isEmpty()) {

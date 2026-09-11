@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,7 +69,7 @@ public class InventoryController {
             @RequestParam(defaultValue = "updated") String sort,
             @RequestParam(defaultValue = "desc") String dir
     ) {
-        var result = inventoryService.list(page, size, new InventorySpecifications.Query(
+        var result = inventoryService.list(page, size, query(
                 q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, brickowlPrice, cost,
                 stockStatus, quantity, condition, shopify, bricklink, ebay, brickowl, sort, dir
         ));
@@ -79,6 +80,39 @@ public class InventoryController {
                 result.getTotalElements(),
                 Math.max(1, result.getTotalPages())
         );
+    }
+
+    @GetMapping(value = "/inventory/export.csv", produces = "text/csv")
+    public ResponseEntity<String> exportCsv(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) String set,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String created,
+            @RequestParam(required = false) String updated,
+            @RequestParam(required = false) String ebayPrice,
+            @RequestParam(required = false) String bricklinkPrice,
+            @RequestParam(required = false) String shopifyPrice,
+            @RequestParam(required = false) String brickowlPrice,
+            @RequestParam(required = false) String cost,
+            @RequestParam(required = false) String stockStatus,
+            @RequestParam(required = false) String quantity,
+            @RequestParam(required = false) String condition,
+            @RequestParam(required = false) String shopify,
+            @RequestParam(required = false) String bricklink,
+            @RequestParam(required = false) String ebay,
+            @RequestParam(required = false) String brickowl,
+            @RequestParam(defaultValue = "updated") String sort,
+            @RequestParam(defaultValue = "desc") String dir
+    ) {
+        String csv = inventoryService.exportCsv(query(
+                q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, brickowlPrice, cost,
+                stockStatus, quantity, condition, shopify, bricklink, ebay, brickowl, sort, dir
+        ));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"inventory.csv\"")
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .body(csv);
     }
 
     @PostMapping("/inventory")
@@ -157,5 +191,33 @@ public class InventoryController {
                 .header(HttpHeaders.CACHE_CONTROL, "max-age=86400")
                 .contentType(MediaType.parseMediaType(contentType))
                 .body(new InputStreamResource(storage.read(key.startsWith("/") ? key.substring(1) : key)));
+    }
+
+    private static InventorySpecifications.Query query(
+            String q,
+            String sku,
+            String set,
+            String title,
+            String created,
+            String updated,
+            String ebayPrice,
+            String bricklinkPrice,
+            String shopifyPrice,
+            String brickowlPrice,
+            String cost,
+            String stockStatus,
+            String quantity,
+            String condition,
+            String shopify,
+            String bricklink,
+            String ebay,
+            String brickowl,
+            String sort,
+            String dir
+    ) {
+        return new InventorySpecifications.Query(
+                q, sku, set, title, created, updated, ebayPrice, bricklinkPrice, shopifyPrice, brickowlPrice, cost,
+                stockStatus, quantity, condition, shopify, bricklink, ebay, brickowl, sort, dir
+        );
     }
 }

@@ -6,8 +6,12 @@ import org.jsoup.nodes.Element;
 import org.jsoup.safety.Safelist;
 
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class DescriptionHtml {
+
+    private static final Pattern BOX_GRADE_SCORE = Pattern.compile("(?i)box\\s*grade\\s*:?\\s*(\\d+)");
 
     private static final Safelist SAFELIST = Safelist.none()
             .addTags("p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "h2", "h3", "a", "span")
@@ -93,6 +97,31 @@ public final class DescriptionHtml {
         String remainder = condition.replaceFirst("(?i)^condition:\\s*new sealed in box\\s*", "").trim();
         String text = (remainder + " " + boxGrade + " Ask for more photos!").replaceAll("\\s+", " ").trim();
         return text.length() <= 255 ? text : text.substring(0, 255);
+    }
+
+    /**
+     * Score from a listing description ("Box Grade: 8/10 …"), or null when none is present.
+     */
+    public static Integer inferBoxGradeScore(String html) {
+        if (html == null || html.isBlank()) {
+            return null;
+        }
+        Document doc = Jsoup.parseBodyFragment(html);
+        for (Element paragraph : doc.select("p")) {
+            String text = paragraph.text().replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+            if (text.regionMatches(true, 0, "box grade:", 0, "box grade:".length())) {
+                return scoreIn(text);
+            }
+        }
+        return scoreIn(toPlainText(html));
+    }
+
+    private static Integer scoreIn(String text) {
+        Matcher matcher = BOX_GRADE_SCORE.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        return Integer.parseInt(matcher.group(1));
     }
 
     private static boolean isConditionParagraph(String text) {

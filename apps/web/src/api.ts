@@ -44,6 +44,26 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     }).then(json<T>),
   del: <T = void>(path: string) => fetch(path, { method: "DELETE", credentials: "include" }).then(json<T>),
+  download: async (path: string, fallbackName: string) => {
+    const res = await fetch(path, { credentials: "include" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      const err = body as { error?: string; message?: string };
+      throw new ApiError(err.message || err.error || res.statusText, res.status);
+    }
+    const blob = await res.blob();
+    const header = res.headers.get("content-disposition") || "";
+    const match = header.match(/filename="?([^"]+)"?/i);
+    const name = match?.[1] || fallbackName;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 export type Catalog = {
