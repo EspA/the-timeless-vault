@@ -398,6 +398,7 @@ public class AppProperties {
         private String browseClientSecret = "";
         private String verificationToken = "";
         private String accountDeletionEndpointUrl = "";
+        private final WaitSeeBuy waitseebuy = new WaitSeeBuy();
 
         public boolean accountDeletionConfigured() {
             return notBlank(verificationToken)
@@ -409,8 +410,20 @@ public class AppProperties {
             return notBlank(clientId) && notBlank(clientSecret);
         }
 
-        public boolean browseConfigured() {
+        public boolean partnerBrowseConfigured() {
+            return waitseebuy.tokenConfigured();
+        }
+
+        public String partnerBrowseToken() {
+            return waitseebuy.getBrowseToken();
+        }
+
+        public boolean ebayBrowseCredentialsConfigured() {
             return notBlank(browseClientId()) && notBlank(browseClientSecret());
+        }
+
+        public boolean browseConfigured() {
+            return partnerBrowseConfigured() || ebayBrowseCredentialsConfigured();
         }
 
         public String browseClientId() {
@@ -421,8 +434,19 @@ public class AppProperties {
             return notBlank(browseClientSecret) ? browseClientSecret : clientSecret;
         }
 
-        public String browseApiHost() {
+        public String partnerBrowseHost() {
+            return waitseebuy.browseHost();
+        }
+
+        public String ebayBrowseApiHost() {
             return "https://api.ebay.com";
+        }
+
+        public String browseApiHost() {
+            if (partnerBrowseConfigured()) {
+                return partnerBrowseHost();
+            }
+            return ebayBrowseApiHost();
         }
 
         public boolean sellReady() {
@@ -559,6 +583,43 @@ public class AppProperties {
 
         public void setAccountDeletionEndpointUrl(String accountDeletionEndpointUrl) {
             this.accountDeletionEndpointUrl = accountDeletionEndpointUrl;
+        }
+
+        public WaitSeeBuy getWaitseebuy() {
+            return waitseebuy;
+        }
+    }
+
+    public static class WaitSeeBuy {
+        private String browseHost = "https://waitseebuy.com";
+        private String browseToken = "";
+
+        public boolean tokenConfigured() {
+            return notBlank(browseToken);
+        }
+
+        public String browseHost() {
+            String url = browseHost == null ? "" : browseHost.trim();
+            while (url.endsWith("/")) {
+                url = url.substring(0, url.length() - 1);
+            }
+            return url.isBlank() ? "https://waitseebuy.com" : url;
+        }
+
+        public String getBrowseHost() {
+            return browseHost;
+        }
+
+        public void setBrowseHost(String browseHost) {
+            this.browseHost = browseHost;
+        }
+
+        public String getBrowseToken() {
+            return browseToken;
+        }
+
+        public void setBrowseToken(String browseToken) {
+            this.browseToken = browseToken;
         }
     }
 

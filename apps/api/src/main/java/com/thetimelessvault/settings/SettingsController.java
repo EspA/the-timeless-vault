@@ -44,6 +44,7 @@ public class SettingsController {
     private final ChannelFeeRates channelFeeRates;
     private final EbayStoreCategorySettings storeCategorySettings;
     private final ApiCallStatsService apiCallStats;
+    private final EbayBrowseProviderSettings browseProviderSettings;
 
     public SettingsController(
             AppProperties properties,
@@ -59,7 +60,8 @@ public class SettingsController {
             PriceGuardDefaults priceGuardDefaults,
             ChannelFeeRates channelFeeRates,
             EbayStoreCategorySettings storeCategorySettings,
-            ApiCallStatsService apiCallStats
+            ApiCallStatsService apiCallStats,
+            EbayBrowseProviderSettings browseProviderSettings
     ) {
         this.properties = properties;
         this.shopifyClient = shopifyClient;
@@ -75,6 +77,7 @@ public class SettingsController {
         this.channelFeeRates = channelFeeRates;
         this.storeCategorySettings = storeCategorySettings;
         this.apiCallStats = apiCallStats;
+        this.browseProviderSettings = browseProviderSettings;
     }
 
     @GetMapping("/settings/health")
@@ -98,6 +101,9 @@ public class SettingsController {
         health.put("brickowl", brickOwlClient.healthy());
         health.put("ebay", ebayClient.configured());
         health.put("ebayBrowseReady", ebayClient.browseConfigured());
+        health.put("ebayBrowseProvider", ebayClient.browseProvider());
+        health.put("ebayBrowseHost", ebayClient.browseApiHost());
+        health.put("waitseebuyBrowseConfigured", ebayClient.waitseebuyBrowseConfigured());
         health.put("ebaySellReady", ebayClient.sellReady());
         health.put("ebayOAuth", ebayTokens.hasRefreshToken());
         health.put("ebayLocation", ebayLocation);
@@ -133,6 +139,18 @@ public class SettingsController {
     public Map<String, String> sendTestNotificationEmail() {
         notificationMailer.sendTest();
         return Map.of("status", "sent", "email", notificationMailer.recipient());
+    }
+
+    @PutMapping("/settings/ebay-browse-provider")
+    public Map<String, Object> saveEbayBrowseProvider(@RequestBody(required = false) Map<String, String> body) {
+        String provider = browseProviderSettings.save(body == null ? "" : body.get("provider"));
+        return Map.of(
+                "provider", provider,
+                "ebayBrowseProvider", ebayClient.browseProvider(),
+                "ebayBrowseHost", ebayClient.browseApiHost(),
+                "ebayBrowseReady", ebayClient.browseConfigured(),
+                "waitseebuyBrowseConfigured", ebayClient.waitseebuyBrowseConfigured()
+        );
     }
 
     @PutMapping("/settings/ebay-buyer-postal-code")

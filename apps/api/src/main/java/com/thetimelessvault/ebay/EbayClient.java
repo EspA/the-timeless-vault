@@ -14,6 +14,7 @@ import com.thetimelessvault.identity.AppSettingRepository;
 import com.thetimelessvault.inventory.ChannelPrice;
 import com.thetimelessvault.inventory.InventoryItem;
 import com.thetimelessvault.settings.ApiCallStatsService;
+import com.thetimelessvault.settings.EbayBrowseProviderSettings;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -50,6 +51,7 @@ public class EbayClient {
     private final AppSettingRepository settings;
     private final RestClient restClient = RestClient.builder().build();
     private ApiCallStatsService apiCalls;
+    private EbayBrowseProviderSettings browseProvider;
 
     private volatile EbaySellDefaults cachedSellDefaults;
 
@@ -75,6 +77,11 @@ public class EbayClient {
         this.apiCalls = apiCalls;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setBrowseProvider(EbayBrowseProviderSettings browseProvider) {
+        this.browseProvider = browseProvider;
+    }
+
     private void recordApiCall() {
         if (apiCalls != null) {
             apiCalls.record(ApiCallStatsService.EBAY);
@@ -86,7 +93,23 @@ public class EbayClient {
     }
 
     public boolean browseConfigured() {
-        return config.browseConfigured();
+        return browseProvider != null ? browseProvider.browseConfigured() : config.browseConfigured();
+    }
+
+    public String browseApiHost() {
+        return browseProvider != null ? browseProvider.browseApiHost() : config.browseApiHost();
+    }
+
+    public String browseProvider() {
+        return browseProvider != null ? browseProvider.activeProvider() : (
+                config.partnerBrowseConfigured()
+                        ? EbayBrowseProviderSettings.WAITSEEBUY
+                        : EbayBrowseProviderSettings.EBAY
+        );
+    }
+
+    public boolean waitseebuyBrowseConfigured() {
+        return config.partnerBrowseConfigured();
     }
 
     public boolean sellReady() {
@@ -256,7 +279,7 @@ public class EbayClient {
 
     EbayCatalogTemplate resolveCatalogTemplate(InventoryItem item) {
         EbayCatalogTemplate fallback = EbayCatalogTemplate.fromCatalog(item);
-        if (tokens == null || !config.browseConfigured()) {
+        if (tokens == null || !browseConfigured()) {
             return fallback;
         }
         try {
@@ -814,7 +837,7 @@ public class EbayClient {
         String href = summary.path("itemHref").asText("");
         if (!href.isBlank()) {
             try {
-                return browseUri(URI.create(href));
+                return browseUri(resolveBrowseUri(browseApiHost(), href));
             } catch (Exception e) {
                 log.warn("Could not load eBay listing {}", href);
             }
@@ -827,7 +850,7 @@ public class EbayClient {
             return mapper.createObjectNode();
         }
         try {
-            return browseUri(URI.create(config.browseApiHost() + "/buy/browse/v1/item/"
+            return browseUri(resolveBrowseUri(browseApiHost(), "/buy/browse/v1/item/"
                     + URLEncoder.encode(itemId, StandardCharsets.UTF_8)));
         } catch (Exception e) {
             log.warn("Could not load eBay listing {}", itemId);
@@ -868,7 +891,14 @@ public class EbayClient {
     }
 
     private JsonNode browseGet(String pathAndQuery) {
-        return browseUri(URI.create(config.browseApiHost() + pathAndQuery));
+        return browseUri(resolveBrowseUri(browseApiHost(), pathAndQuery));
+    }
+
+    static URI resolveBrowseUri(String host, String pathOrHref) {
+        if (pathOrHref.startsWith("https://") || pathOrHref.startsWith("http://")) {
+            return URI.create(pathOrHref);
+        }
+        return URI.create(host + pathOrHref);
     }
 
     private JsonNode browseUri(URI uri) {

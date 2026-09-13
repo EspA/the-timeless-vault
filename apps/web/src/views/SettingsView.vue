@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { api, defaultEbayExcludeWords } from "../api";
 import { askConfirm } from "../confirm";
 import { applyTheme, theme } from "../theme";
@@ -46,6 +46,13 @@ const newStoreCategory = ref("");
 const storeCategoryBusy = ref(false);
 const storeCategoryMessage = ref("");
 const storeCategoryError = ref("");
+const browseProvider = ref("ebay");
+const browseBusy = ref(false);
+const browseMessage = ref("");
+const browseError = ref("");
+const browseHostLabel = computed(() =>
+  String(health.value?.ebayBrowseHost || "").replace(/^https?:\/\//, "")
+);
 
 const loadHealth = async () => {
   health.value = await api.get("/api/settings/health");
@@ -59,6 +66,7 @@ const loadStoreCategories = async () => {
 onMounted(async () => {
   await loadHealth();
   buyerPostalCode.value = String(health.value?.ebayBuyerPostalCode || "");
+  browseProvider.value = String(health.value?.ebayBrowseProvider || "ebay");
   alertTo.value = String(health.value?.notificationTo || health.value?.alertTo || "");
   highPercent.value = String(health.value?.priceGuardHighPercent ?? "15");
   lowPercent.value = String(health.value?.priceGuardLowPercent ?? "15");
@@ -105,6 +113,30 @@ const completeEbay = async () => {
     ebayError.value = e instanceof Error ? e.message : "Could not complete eBay OAuth";
   } finally {
     ebayBusy.value = false;
+  }
+};
+
+const saveBrowseProvider = async (provider: string) => {
+  if (browseBusy.value || browseProvider.value === provider) return;
+  if (provider === "waitseebuy" && !health.value?.waitseebuyBrowseConfigured) return;
+  const previous = browseProvider.value;
+  browseProvider.value = provider;
+  browseBusy.value = true;
+  browseMessage.value = "";
+  browseError.value = "";
+  try {
+    const saved = await api.put<{ ebayBrowseProvider: string; ebayBrowseHost: string }>(
+      "/api/settings/ebay-browse-provider",
+      { provider }
+    );
+    browseProvider.value = saved.ebayBrowseProvider;
+    browseMessage.value = `Browse now uses ${saved.ebayBrowseHost}.`;
+    await loadHealth();
+  } catch (e) {
+    browseProvider.value = previous;
+    browseError.value = e instanceof Error ? e.message : "Could not save Browse source";
+  } finally {
+    browseBusy.value = false;
   }
 };
 
@@ -286,7 +318,7 @@ const onThemeToggle = (event: Event) => {
 </script>
 
 <template>
-  <div class="grid">
+  <div class="grid settings-page">
     <div class="page-head">
       <h1>Settings</h1>
     </div>
@@ -303,29 +335,107 @@ const onThemeToggle = (event: Event) => {
       </label>
     </div>
     <div v-if="health" class="card grid">
-      <p>BrickEconomy <span class="badge" :class="pill(health.brickeconomy)">{{ health.brickeconomy ? "configured" : "missing" }}</span></p>
-      <p>Shopify <span class="badge" :class="pill(health.shopify)">{{ health.shopify ? "configured" : "missing" }}</span></p>
-      <p>BrickLink <span class="badge" :class="pill(health.bricklink)">{{ health.bricklink ? "configured" : "missing" }}</span></p>
-      <p>Brick Owl <span class="badge" :class="pill(health.brickowl)">{{ health.brickowl ? "configured" : "missing" }}</span></p>
-      <p>eBay app <span class="badge" :class="pill(health.ebay)">{{ health.ebay ? "configured" : "missing" }}</span></p>
-      <p>eBay OAuth <span class="badge" :class="pill(health.ebayOAuth)">{{ health.ebayOAuth ? "refresh token stored" : "needs consent" }}</span></p>
-      <p>eBay sell-ready <span class="badge" :class="pill(health.ebaySellReady && health.ebayPoliciesReady)">{{ health.ebayPoliciesReady ? "location and policies found" : (health.ebaySellReady ? "OAuth ok, policies/location missing" : "needs OAuth") }}</span></p>
+      <h3>Connections</h3>
+      <div class="settings-health">
+        <div class="settings-health-row">
+          <span>BrickEconomy</span>
+          <span class="badge" :class="pill(health.brickeconomy)">{{ health.brickeconomy ? "configured" : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>Shopify</span>
+          <span class="badge" :class="pill(health.shopify)">{{ health.shopify ? "configured" : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>BrickLink</span>
+          <span class="badge" :class="pill(health.bricklink)">{{ health.bricklink ? "configured" : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>Brick Owl</span>
+          <span class="badge" :class="pill(health.brickowl)">{{ health.brickowl ? "configured" : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>eBay app</span>
+          <span class="badge" :class="pill(health.ebay)">{{ health.ebay ? "configured" : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>eBay OAuth</span>
+          <span class="badge" :class="pill(health.ebayOAuth)">{{ health.ebayOAuth ? "refresh token stored" : "needs consent" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>eBay sell-ready</span>
+          <span class="badge" :class="pill(health.ebaySellReady && health.ebayPoliciesReady)">{{ health.ebayPoliciesReady ? "location and policies found" : (health.ebaySellReady ? "OAuth ok, policies/location missing" : "needs OAuth") }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>eBay Browse</span>
+          <span class="badge" :class="pill(health.ebayBrowseReady)">{{ health.ebayBrowseReady ? (browseHostLabel || "ready") : "missing" }}</span>
+        </div>
+        <div class="settings-health-row">
+          <span>Photo storage</span>
+          <span class="badge">{{ health.storage }}</span>
+        </div>
+      </div>
       <p v-if="health.ebayLocation" class="muted">eBay location: {{ health.ebayLocation }}</p>
       <p v-if="health.ebaySellError" class="error">{{ health.ebaySellError }}</p>
-      <p>Photo storage <span class="badge">{{ health.storage }}</span></p>
-      <button class="btn gold" type="button" @click="connectEbay">Connect eBay account</button>
+    </div>
+    <div v-if="health" class="card grid">
+      <div class="appearance-row">
+        <div class="appearance-copy">
+          <h3>eBay Browse</h3>
+          <p class="muted">
+            Market watch and catalog search. Switching takes effect immediately. Sell stays on api.ebay.com.
+          </p>
+        </div>
+        <div class="settings-segment" role="radiogroup" aria-label="Browse source">
+          <button
+            type="button"
+            class="settings-segment-btn"
+            role="radio"
+            :aria-checked="browseProvider === 'waitseebuy'"
+            :class="{ active: browseProvider === 'waitseebuy' }"
+            :disabled="!health.waitseebuyBrowseConfigured || browseBusy"
+            @click="saveBrowseProvider('waitseebuy')"
+          >
+            WaitSeeBuy
+          </button>
+          <button
+            type="button"
+            class="settings-segment-btn"
+            role="radio"
+            :aria-checked="browseProvider === 'ebay'"
+            :class="{ active: browseProvider === 'ebay' }"
+            :disabled="browseBusy"
+            @click="saveBrowseProvider('ebay')"
+          >
+            eBay
+          </button>
+        </div>
+      </div>
+      <p v-if="browseHostLabel" class="muted">Using {{ browseHostLabel }}</p>
+      <p v-if="!health.waitseebuyBrowseConfigured" class="muted">
+        WaitSeeBuy needs WAITSEEBUY_BROWSE_TOKEN in the environment.
+      </p>
+      <p v-if="browseMessage" class="muted">{{ browseMessage }}</p>
+      <p v-if="browseError" class="error">{{ browseError }}</p>
+    </div>
+    <div v-if="health" class="card grid">
+      <h3>eBay account</h3>
       <p class="muted">
         eBay requires HTTPS for Auth accepted URLs, so leave those fields blank on the developer site.
         Click Connect, agree, then paste the eBay success-page URL here (it contains <code>code=</code>).
         The code expires in about five minutes. Do not paste a token from Get a User Token Here.
       </p>
+      <div class="settings-actions">
+        <button class="btn gold" type="button" @click="connectEbay">Connect eBay account</button>
+      </div>
       <label>
         eBay success URL or code
         <textarea v-model="ebayCode" rows="3" placeholder="https://signin.ebay.com/...&code=..." />
       </label>
-      <button class="btn" type="button" :disabled="ebayBusy || !ebayCode.trim()" @click="completeEbay">
-        {{ ebayBusy ? "Saving…" : "Save eBay code" }}
-      </button>
+      <div class="settings-actions">
+        <button class="btn" type="button" :disabled="ebayBusy || !ebayCode.trim()" @click="completeEbay">
+          {{ ebayBusy ? "Saving…" : "Save eBay code" }}
+        </button>
+      </div>
       <label>eBay shipping ZIP
         <input v-model="buyerPostalCode" maxlength="10" placeholder="19406" />
       </label>
@@ -333,9 +443,11 @@ const onThemeToggle = (event: Event) => {
         Used on market scans so eBay can calculate shipping to this destination. This is not the warehouse
         ship-from ZIP below.
       </p>
-      <button class="btn gold" type="button" :disabled="zipBusy" @click="saveBuyerPostalCode">
-        {{ zipBusy ? "Saving…" : "Save shipping ZIP" }}
-      </button>
+      <div class="settings-actions">
+        <button class="btn gold" type="button" :disabled="zipBusy" @click="saveBuyerPostalCode">
+          {{ zipBusy ? "Saving…" : "Save shipping ZIP" }}
+        </button>
+      </div>
       <p v-if="zipMessage" class="muted">{{ zipMessage }}</p>
     </div>
 
@@ -348,7 +460,7 @@ const onThemeToggle = (event: Event) => {
         Notifications are emailed here. Local SMTP is Mailpit at
         <a href="http://localhost:8025" target="_blank">localhost:8025</a>.
       </p>
-      <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <div class="settings-actions">
         <button class="btn gold" type="button" :disabled="alertBusy" @click="saveNotificationEmail">
           {{ alertBusy ? "Saving…" : "Save notification email" }}
         </button>
@@ -452,6 +564,7 @@ const onThemeToggle = (event: Event) => {
     </div>
 
     <div v-if="health" class="card grid">
+      <h3>eBay warehouse</h3>
       <p class="muted">
         Seller Hub does not expose inventory locations for API listings. Create a warehouse location here
         (ZIP is enough). Shopify’s ship-from address is used when available.

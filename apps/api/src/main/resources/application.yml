@@ -116,6 +116,9 @@ app:
     return-policy-id: ${EBAY_RETURN_POLICY_ID:}
     browse-client-id: ${EBAY_BROWSE_CLIENT_ID:}
     browse-client-secret: ${EBAY_BROWSE_CLIENT_SECRET:}
+    waitseebuy:
+      browse-host: ${WAITSEEBUY_BROWSE_HOST:https://waitseebuy.com}
+      browse-token: ${WAITSEEBUY_BROWSE_TOKEN:}
     verification-token: ${EBAY_VERIFICATION_TOKEN:}
     account-deletion-endpoint-url: ${EBAY_ACCOUNT_DELETION_ENDPOINT_URL:}
   ups:

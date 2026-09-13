@@ -1620,6 +1620,90 @@ th .sort-btn { width: 100%; }
   min-width: 12rem;
 }
 
+.settings-page .card > h3 {
+  margin: 0;
+}
+
+.settings-page .card.grid > .btn {
+  justify-self: start;
+  width: auto;
+}
+
+.settings-health {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.75rem;
+}
+
+.settings-health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.settings-health-row > span:first-child {
+  color: var(--slate);
+  font-size: 0.92rem;
+}
+
+.settings-health-row .badge {
+  flex: 0 1 auto;
+  text-align: center;
+}
+
+.settings-health-row:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.settings-segment {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 6%, var(--card));
+}
+
+.settings-segment-btn {
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.5rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-right: 1px solid var(--line);
+}
+
+.settings-segment-btn:last-child {
+  border-right: 0;
+}
+
+.settings-segment-btn:not(:disabled):hover:not(.active) {
+  background: var(--select-hover);
+}
+
+.settings-segment-btn.active {
+  background: var(--gold);
+  color: var(--gold-ink);
+}
+
+.settings-segment-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .switch {
   position: relative;
   display: inline-flex;
@@ -2637,6 +2721,19 @@ td.negative {
   .settings-add-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .settings-health {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-segment {
+    width: 100%;
+  }
+
+  .settings-segment-btn {
+    flex: 1;
+    text-align: center;
   }
 }
 

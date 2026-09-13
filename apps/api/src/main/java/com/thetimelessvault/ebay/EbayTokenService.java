@@ -6,6 +6,7 @@ import com.thetimelessvault.common.ApiException;
 import com.thetimelessvault.config.AppProperties;
 import com.thetimelessvault.identity.AppSetting;
 import com.thetimelessvault.identity.AppSettingRepository;
+import com.thetimelessvault.settings.EbayBrowseProviderSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -33,6 +34,7 @@ public class EbayTokenService {
     private final ObjectMapper mapper;
     private final RestClient restClient = RestClient.builder().build();
     private final ObjectProvider<EbayAccountDeletionService> accountDeletionService;
+    private EbayBrowseProviderSettings browseProvider;
 
     private volatile String userAccessToken;
     private volatile Instant userAccessExpiry = Instant.EPOCH;
@@ -51,6 +53,15 @@ public class EbayTokenService {
         this.settings = settings;
         this.mapper = mapper;
         this.accountDeletionService = accountDeletionService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setBrowseProvider(EbayBrowseProviderSettings browseProvider) {
+        this.browseProvider = browseProvider;
+    }
+
+    boolean usePartnerBrowse() {
+        return browseProvider != null ? browseProvider.usePartner() : config.partnerBrowseConfigured();
     }
 
     public String userAccessToken() {
@@ -78,13 +89,18 @@ public class EbayTokenService {
     }
 
     public String browseAccessToken() {
+        if (usePartnerBrowse()) {
+            return config.partnerBrowseToken();
+        }
         if (browseAccessToken != null && Instant.now().isBefore(browseAccessExpiry.minusSeconds(60))) {
             return browseAccessToken;
         }
-        if (!config.browseConfigured()) {
-            throw ApiException.unavailable("eBay client credentials are not configured");
+        if (!config.ebayBrowseCredentialsConfigured()) {
+            throw ApiException.unavailable(
+                    "eBay Browse is not configured. Set WAITSEEBUY_BROWSE_TOKEN or eBay Browse client credentials."
+            );
         }
-        JsonNode token = exchange(config.browseApiHost(), config.browseClientId(), config.browseClientSecret(),
+        JsonNode token = exchange(config.ebayBrowseApiHost(), config.browseClientId(), config.browseClientSecret(),
                 "client_credentials", null, "https://api.ebay.com/oauth/api_scope");
         browseAccessToken = token.path("access_token").asText();
         browseAccessExpiry = Instant.now().plusSeconds(token.path("expires_in").asLong(7200));
@@ -234,7 +250,7 @@ public class EbayTokenService {
             } else if (detail.toLowerCase().contains("invalid_scope")) {
                 hint = " Reconnect eBay on the Settings page so the token includes inventory, account, and store scopes.";
             } else if (host.contains("api.ebay.com") && "SANDBOX".equalsIgnoreCase(config.getEnv())) {
-                hint = " Market watch searches live eBay.com and needs production App ID keys (EBAY_BROWSE_CLIENT_ID / EBAY_BROWSE_CLIENT_SECRET). Sandbox has no live LEGO listings.";
+                hint = " Market watch searches live eBay.com and needs WAITSEEBUY_BROWSE_TOKEN or production App ID keys (EBAY_BROWSE_CLIENT_ID / EBAY_BROWSE_CLIENT_SECRET). Sandbox has no live LEGO listings.";
             }
             throw new ApiException(HttpStatus.BAD_GATEWAY, "eBay token request failed: " + detail + "." + hint);
         } catch (ApiException e) {
