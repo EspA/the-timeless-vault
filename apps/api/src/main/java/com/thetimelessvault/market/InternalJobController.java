@@ -6,6 +6,7 @@ import com.thetimelessvault.inventory.DescriptionBackfillService;
 import com.thetimelessvault.inventory.PriceBackfillService;
 import com.thetimelessvault.orders.OrderSyncService;
 import com.thetimelessvault.shopify.ShopifyListingImportService;
+import com.thetimelessvault.shopify.ShopifySkuBackfillService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,6 +25,7 @@ public class InternalJobController {
     private final ShopifyListingImportService shopifyListingImport;
     private final DescriptionBackfillService descriptionBackfill;
     private final PriceBackfillService priceBackfill;
+    private final ShopifySkuBackfillService shopifySkuBackfill;
 
     public InternalJobController(
             MarketScanService marketScanService,
@@ -32,7 +34,8 @@ public class InternalJobController {
             BrickLinkListingImportService brickLinkListingImport,
             ShopifyListingImportService shopifyListingImport,
             DescriptionBackfillService descriptionBackfill,
-            PriceBackfillService priceBackfill
+            PriceBackfillService priceBackfill,
+            ShopifySkuBackfillService shopifySkuBackfill
     ) {
         this.marketScanService = marketScanService;
         this.orderSyncService = orderSyncService;
@@ -41,6 +44,7 @@ public class InternalJobController {
         this.shopifyListingImport = shopifyListingImport;
         this.descriptionBackfill = descriptionBackfill;
         this.priceBackfill = priceBackfill;
+        this.shopifySkuBackfill = shopifySkuBackfill;
     }
 
     @PostMapping("/market-scan")
@@ -96,5 +100,12 @@ public class InternalJobController {
             @RequestParam(defaultValue = "true") boolean dryRun
     ) {
         return priceBackfill.run(dryRun);
+    }
+
+    @PostMapping("/shopify-sku-backfill")
+    public ShopifySkuBackfillService.Report shopifySkuBackfill(
+            @RequestParam(defaultValue = "true") boolean dryRun
+    ) {
+        return shopifySkuBackfill.run(dryRun);
     }
 }

@@ -558,6 +558,69 @@ public class ShopifyClient {
         }
     }
 
+    public String productSku(String productId, String handle) {
+        String sku = productVariantNode(productId, handle).path("variants").path("nodes").path(0).path("sku").asText("");
+        return sku.isBlank() ? null : sku.trim();
+    }
+
+    public void updateProductSku(String productId, String handle, String sku) {
+        if (sku == null || sku.isBlank()) {
+            throw ApiException.badRequest("SKU is missing");
+        }
+        JsonNode product = productVariantNode(productId, handle);
+        String variantId = firstVariantId(product);
+        if (variantId == null || variantId.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Shopify did not return a variant for the product");
+        }
+        ObjectNode variables = mapper.createObjectNode();
+        variables.put("productId", product.path("id").asText());
+        ArrayNode variants = variables.putArray("variants");
+        ObjectNode variant = variants.addObject();
+        variant.put("id", variantId);
+        variant.putObject("inventoryItem").put("sku", sku.trim());
+        JsonNode data = graphql("""
+                mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                  productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                    userErrors { field message }
+                  }
+                }
+                """, variables);
+        assertNoUserErrors(data.path("productVariantsBulkUpdate"));
+    }
+
+    private JsonNode productVariantNode(String productId, String handle) {
+        JsonNode product;
+        if (productId != null && !productId.isBlank()) {
+            ObjectNode variables = mapper.createObjectNode();
+            variables.put("id", ShopifyProducts.productGid(productId));
+            product = graphql("""
+                    query product($id: ID!) {
+                      product(id: $id) {
+                        id
+                        variants(first: 1) { nodes { id sku } }
+                      }
+                    }
+                    """, variables).path("product");
+        } else if (handle != null && !handle.isBlank()) {
+            ObjectNode variables = mapper.createObjectNode();
+            variables.put("query", "handle:" + handle.trim());
+            JsonNode nodes = graphql("""
+                    query ProductsByHandle($query: String!) {
+                      products(first: 1, query: $query) {
+                        nodes { id variants(first: 1) { nodes { id sku } } }
+                      }
+                    }
+                    """, variables).path("products").path("nodes");
+            product = !nodes.isArray() || nodes.isEmpty() ? mapper.missingNode() : nodes.path(0);
+        } else {
+            throw ApiException.badRequest("Shopify product id or handle is missing");
+        }
+        if (product.isMissingNode() || product.path("id").asText("").isBlank()) {
+            throw ApiException.notFound("Shopify product not found");
+        }
+        return product;
+    }
+
     private JsonNode productDescriptionNode(String productId) {
         ObjectNode variables = mapper.createObjectNode();
         variables.put("id", productId);

@@ -166,7 +166,7 @@ public class DescriptionBackfillService {
         return DescriptionHtml.toPlainText(value).isBlank();
     }
 
-    static String handleFrom(String liveUrl) {
+    public static String handleFrom(String liveUrl) {
         if (liveUrl == null || liveUrl.isBlank()) {
             return null;
         }
