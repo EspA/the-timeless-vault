@@ -1,7 +1,7 @@
 eBay Application Growth Check — Submission Draft
 ================================================
 Generated: 2026-08-21
-App ID: <ebay-app-id>
+App ID: (production App ID from the eBay developer portal; do not commit it)
 Application URL: https://admin.thetimelessvault.com
 Product: Browse API
 Purpose: Increase My Call Limit
@@ -45,7 +45,7 @@ OAuth 2.0 (client credentials for Browse, user token for Sell). Marketplace Acco
 
 Call Volume Estimate
 --------------------
-Browse API — projected daily volume (production app: <ebay-app-id>)
+Browse API — projected daily volume (production app)
 
 Call Name                              | Hourly Peak | Daily Est. | Notes
 ---------------------------------------|-------------|------------|------

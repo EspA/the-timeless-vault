@@ -10,6 +10,9 @@ node_modules/
 dist/
 data/
 *.log
+__pycache__/
+*.pyc
+exports/
 .mvn/wrapper/maven-wrapper.jar
 apps/web/dist/
 apps/api/src/main/resources/static/assets/

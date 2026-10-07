@@ -29,10 +29,7 @@ Recommended endpoint
 URL (must match exactly in portal and in challenge hash):
   https://admin.thetimelessvault.com/webhooks/ebay/account-deletion
 
-Alternative if admin subdomain routes to the same Cloud Run service:
-  https://YOUR_CLOUD_RUN_URL/webhooks/ebay/account-deletion
-
-Use whichever URL is publicly reachable and stable long-term.
+Use that admin URL. Do not record the raw Cloud Run hostname here.
 
 
 Environment variables to add
@@ -44,7 +41,7 @@ EBAY_ACCOUNT_DELETION_ENDPOINT_URL=<exact public HTTPS URL above>
 Portal subscription steps
 -------------------------
 1. Log in at https://developer.ebay.com/
-2. Go to Application Keys → select production keyset (the production keyset)
+2. Go to Application Keys → select the production keyset
 3. Find "Marketplace account deletion/closure notifications" (or Alerts and Notifications)
 4. Enter:
    - Notification endpoint URL (exact match to EBAY_ACCOUNT_DELETION_ENDPOINT_URL)

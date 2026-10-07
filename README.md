@@ -69,10 +69,6 @@ Connect eBay from **Settings** (one-time consent). The refresh token is stored i
 
 ## Production
 
-The live Cloud Run service is:
-
-https://YOUR_CLOUD_RUN_URL
-
 ```bash
 PROJECT_ID=the-timeless-vault bash infra/setup-gcp.sh
 gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_CLOUDSQL_INSTANCE=the-timeless-vault:us-east1:timeless-vault,_GCS_BUCKET=the-timeless-vault-photos
