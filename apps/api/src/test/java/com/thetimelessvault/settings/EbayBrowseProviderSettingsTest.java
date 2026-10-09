@@ -42,7 +42,7 @@ class EbayBrowseProviderSettingsTest {
 
         assertTrue(providers.usePartner());
         assertEquals(EbayBrowseProviderSettings.WAITSEEBUY, providers.activeProvider());
-        assertEquals("https://waitseebuy.com", providers.browseApiHost());
+        assertEquals("https://watchseebuy.com", providers.browseApiHost());
         assertTrue(providers.browseConfigured());
     }
 

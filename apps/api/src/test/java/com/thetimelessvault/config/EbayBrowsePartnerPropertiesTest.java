@@ -15,7 +15,7 @@ class EbayBrowsePartnerPropertiesTest {
 
         assertTrue(ebay.partnerBrowseConfigured());
         assertTrue(ebay.browseConfigured());
-        assertEquals("https://waitseebuy.com", ebay.browseApiHost());
+        assertEquals("https://watchseebuy.com", ebay.browseApiHost());
         assertEquals("partner-browse-token-32-chars-min", ebay.partnerBrowseToken());
     }
 
@@ -23,9 +23,9 @@ class EbayBrowsePartnerPropertiesTest {
     void partnerHostOverrideStripsTrailingSlash() {
         AppProperties.Ebay ebay = new AppProperties().getEbay();
         ebay.getWaitseebuy().setBrowseToken("partner-browse-token-32-chars-min");
-        ebay.getWaitseebuy().setBrowseHost("https://waitseebuy.com/");
+        ebay.getWaitseebuy().setBrowseHost("https://watchseebuy.com/");
 
-        assertEquals("https://waitseebuy.com", ebay.browseApiHost());
+        assertEquals("https://watchseebuy.com", ebay.browseApiHost());
     }
 
     @Test
@@ -34,7 +34,7 @@ class EbayBrowsePartnerPropertiesTest {
         ebay.getWaitseebuy().setBrowseToken("partner-browse-token-32-chars-min");
         ebay.getWaitseebuy().setBrowseHost("  ");
 
-        assertEquals("https://waitseebuy.com", ebay.browseApiHost());
+        assertEquals("https://watchseebuy.com", ebay.browseApiHost());
     }
 
     @Test

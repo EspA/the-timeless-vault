@@ -33,7 +33,7 @@ class EbayBrowsePartnerTokenTest {
         );
 
         assertEquals("partner-browse-token-32-chars-min", tokens.browseAccessToken());
-        assertEquals("https://waitseebuy.com", properties.getEbay().browseApiHost());
+        assertEquals("https://watchseebuy.com", properties.getEbay().browseApiHost());
     }
 
     @Test
@@ -81,17 +81,17 @@ class EbayBrowsePartnerTokenTest {
     @Test
     void resolveBrowseUriJoinsRelativePathsAndKeepsAbsoluteItemHref() {
         assertEquals(
-                URI.create("https://waitseebuy.com/buy/browse/v1/item_summary/search?q=LEGO"),
+                URI.create("https://watchseebuy.com/buy/browse/v1/item_summary/search?q=LEGO"),
                 EbayClient.resolveBrowseUri(
-                        "https://waitseebuy.com",
+                        "https://watchseebuy.com",
                         "/buy/browse/v1/item_summary/search?q=LEGO"
                 )
         );
         assertEquals(
-                URI.create("https://waitseebuy.com/buy/browse/v1/item/v1%7C123%7C0"),
+                URI.create("https://watchseebuy.com/buy/browse/v1/item/v1%7C123%7C0"),
                 EbayClient.resolveBrowseUri(
-                        "https://waitseebuy.com",
-                        "https://waitseebuy.com/buy/browse/v1/item/v1%7C123%7C0"
+                        "https://watchseebuy.com",
+                        "https://watchseebuy.com/buy/browse/v1/item/v1%7C123%7C0"
                 )
         );
         assertEquals(

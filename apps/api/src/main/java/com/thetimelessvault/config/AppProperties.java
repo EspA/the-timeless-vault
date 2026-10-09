@@ -591,7 +591,7 @@ public class AppProperties {
     }
 
     public static class WaitSeeBuy {
-        private String browseHost = "https://waitseebuy.com";
+        private String browseHost = "https://watchseebuy.com";
         private String browseToken = "";
 
         public boolean tokenConfigured() {
@@ -603,7 +603,7 @@ public class AppProperties {
             while (url.endsWith("/")) {
                 url = url.substring(0, url.length() - 1);
             }
-            return url.isBlank() ? "https://waitseebuy.com" : url;
+            return url.isBlank() ? "https://watchseebuy.com" : url;
         }
 
         public String getBrowseHost() {
